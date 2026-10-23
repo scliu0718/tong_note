@@ -1,7 +1,7 @@
 version: "Apple Swift version 6.1 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)"
 options: "8eb8a369ccbb8fdfac4be73f93395687d1365db221b06c90a387d8c8394ded8a"
-build_start_time: [1792756622, 210301000]
-build_end_time: [1792756626, 66269000]
+build_start_time: [1792764472, 768726000]
+build_end_time: [1792764476, 720163000]
 inputs:
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift": [1792749412, 326272576]
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift": [1792748247, 691973778]

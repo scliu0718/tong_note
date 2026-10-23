@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 BIN_NAME="WorkLog"          # SwiftPM 可执行目标名（保持不变，避免破坏模块/存储身份）
 APP_NAME="同笔记"           # 应用显示名 / .app 包名
 CONFIG="${1:-release}"
-BUNDLE_ID="com.worklog.app"
+BUNDLE_ID="com.tong.log.app"
 
 echo "▶ 编译 ($CONFIG)..."
 swift build --disable-sandbox -c "$CONFIG"
@@ -25,6 +25,13 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/$BIN_NAME"
 
+# 复制百度网盘凭证配置（已 .gitignore，不入库）
+if [ -f "baidupan.secret.json" ]; then
+  cp "baidupan.secret.json" "$APP/Contents/Resources/baidupan.secret.json"
+else
+  echo "⚠ 未找到 baidupan.secret.json，登录授权将不可用（见 百度网盘开放平台接入指南.md）"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -41,6 +48,16 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>com.tong.log.app.oauth</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>tongnote</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LoginView: View {
-    var onLogin: () -> Void
+    @EnvironmentObject private var auth: BaiduPanAuthService
 
     var body: some View {
         HStack(spacing: 0) {
@@ -104,21 +104,35 @@ struct LoginView: View {
                 .foregroundColor(Theme.textTertiary)
                 .padding(.top, -14)
 
-            Button(action: onLogin) {
+            Button(action: { auth.signIn() }) {
                 HStack(spacing: 10) {
-                    Image(systemName: "cloud.fill")
-                        .font(.system(size: 18))
-                    Text("使用百度网盘账号登录")
+                    if auth.isAuthorizing {
+                        ProgressView().controlSize(.small).tint(.white)
+                    } else {
+                        Image(systemName: "cloud.fill")
+                            .font(.system(size: 18))
+                    }
+                    Text(auth.isAuthorizing ? "正在授权…" : "使用百度网盘账号登录")
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: 340)
                 .frame(height: 48)
-                .background(Theme.baidu)
+                .background(Theme.baidu.opacity(auth.isAuthorizing ? 0.6 : 1))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .shadow(color: Theme.baidu.opacity(0.28), radius: 7, y: 3)
             }
             .buttonStyle(.plain)
+            .disabled(auth.isAuthorizing)
+
+            if let msg = auth.errorMessage {
+                Text(msg)
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.red)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 340)
+            }
 
             HStack(spacing: 12) {
                 Rectangle().fill(Theme.line).frame(height: 1)
@@ -146,7 +160,7 @@ struct LoginView: View {
                     .stroke(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
             )
 
-            Text("登录即代表你授权同笔记通过百度网盘开放平台读写\n/apps/WorkLog 目录。授权信息仅保存在本机密钥链中。")
+            Text("登录即代表你授权同笔记通过百度网盘开放平台读写\n/apps/tong_log 目录。授权信息仅保存在本机密钥链中。")
                 .font(.system(size: 11))
                 .foregroundColor(Theme.textQuaternary)
                 .multilineTextAlignment(.center)

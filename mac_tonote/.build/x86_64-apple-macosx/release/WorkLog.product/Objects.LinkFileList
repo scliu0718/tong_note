@@ -1,3 +1,5 @@
+/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService.swift.o
+/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o
@@ -8,6 +10,10 @@
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o
+/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanClient.swift.o
+/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanConfig.swift.o
+/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanModels.swift.o
+/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanTokenStore.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o
 /Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o

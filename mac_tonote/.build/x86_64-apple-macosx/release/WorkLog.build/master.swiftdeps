@@ -1,14 +1,16 @@
 version: "Apple Swift version 6.1 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)"
 options: "8bdbbf5c90dca112dfed47bb0dfe1630b78a2851fec7d254badfa0ec9a093f79"
-build_start_time: [1792756626, 254501000]
-build_end_time: [1792756635, 548554000]
+build_start_time: [1792764476, 910407000]
+build_end_time: [1792764487, 102863000]
 inputs:
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthService.swift": [1792760815, 323300594]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthSession.swift": [1792760961, 485436734]
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift": [1792746881, 590625799]
-  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift": [1792756508, 511945728]
-  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift": [1792745755, 6097546]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift": [1792764448, 43725478]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift": [1792760858, 568939906]
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteListView.swift": [1792736629, 648937192]
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteStore+Bindings.swift": [1792745669, 332161888]
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SidebarView.swift": [1792756508, 399073373]
-  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SyncView.swift": [1792756508, 436201379]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SyncView.swift": [1792764448, 82965035]
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/Theme.swift": [1792661622, 577579325]
-  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/WorkLogApp.swift": [1792756508, 397129704]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/WorkLogApp.swift": [1792760858, 471383030]

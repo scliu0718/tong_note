@@ -4,6 +4,16 @@
     "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLog.o",
     "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/master.swiftdeps"
   },
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthService.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService.swiftdeps"
+  },
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthSession.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession.swiftdeps"
+  },
   "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift": {
     "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o",
     "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView~partial.swiftmodule",

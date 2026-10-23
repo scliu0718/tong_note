@@ -1,4 +1,8 @@
 /Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift
+/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanClient.swift
+/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanConfig.swift
+/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanModels.swift
+/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanTokenStore.swift
 /Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift
 /Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift
 /Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift

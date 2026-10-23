@@ -28,6 +28,14 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthSession.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift"
         },
         {
@@ -83,6 +91,8 @@
       "moduleName" : "WorkLog",
       "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLog.swiftmodule",
       "objects" : [
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession.swift.o",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o",
@@ -143,6 +153,14 @@
       "outputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o"
         },
         {
@@ -184,6 +202,8 @@
       ],
       "prepareForIndexing" : false,
       "sources" : [
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthService.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthSession.swift",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift",
@@ -205,6 +225,22 @@
         {
           "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanConfig.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanTokenStore.swift"
         },
         {
           "kind" : "file",
@@ -244,6 +280,10 @@
       "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule",
       "objects" : [
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanClient.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanConfig.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanModels.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanTokenStore.swift.o",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o",
@@ -305,6 +345,22 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanConfig.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanModels.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanTokenStore.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
         },
         {
@@ -335,6 +391,10 @@
       "prepareForIndexing" : false,
       "sources" : [
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanClient.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanConfig.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanModels.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanTokenStore.swift",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift",
         "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift",
@@ -821,6 +881,8 @@
       "-num-threads",
       "12",
       "-c",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthService.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthSession.swift",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift",
@@ -890,6 +952,10 @@
       "12",
       "-c",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanClient.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanConfig.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanModels.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanTokenStore.swift",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift",
       "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift",
@@ -1253,6 +1319,14 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthService.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/BaiduPanAuthSession.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift"
         },
         {
@@ -1299,6 +1373,14 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthService.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/BaiduPanAuthSession.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o"
         },
         {
@@ -1336,6 +1418,22 @@
         {
           "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanConfig.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanModels.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanTokenStore.swift.o"
         },
         {
           "kind" : "file",
@@ -1394,6 +1492,22 @@
         {
           "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanConfig.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/BaiduPanTokenStore.swift"
         },
         {
           "kind" : "file",
@@ -1464,6 +1578,22 @@
         {
           "kind" : "file",
           "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanConfig.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanModels.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/BaiduPanTokenStore.swift.o"
         },
         {
           "kind" : "file",
