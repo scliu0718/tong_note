@@ -8,8 +8,6 @@ enum SortMode: String, CaseIterable {
 }
 
 struct MainView: View {
-    var onLogout: () -> Void
-
     @StateObject private var store = NoteStore()
     @State private var sidebarWidth: CGFloat = 112
     @State private var selectedID: UUID?
@@ -61,7 +59,7 @@ struct MainView: View {
             if selectedID == nil { selectedID = store.notes.first?.id }
         }
         .sheet(isPresented: $showSync) {
-            SyncView(onLogout: onLogout)
+            SyncView()
                 .frame(width: 900, height: 640)
         }
     }

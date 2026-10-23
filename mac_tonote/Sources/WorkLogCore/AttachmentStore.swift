@@ -2,7 +2,7 @@ import Foundation
 
 /// 图片附件仓库。
 ///
-/// 目录结构（固定，可直接映射到百度网盘 `/apps/WorkLog`）：
+/// 目录结构（固定，可直接映射到百度网盘 `/apps/tong_log`）：
 /// ```
 /// <root>/attachments/<note-uuid>/<image-uuid>.<ext>
 /// ```

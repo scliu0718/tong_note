@@ -8,6 +8,10 @@
 		<data>
 		CW0SlYSEurPwvzQJ2F4I/BLT0ng=
 		</data>
+		<key>Resources/baidupan.secret.json</key>
+		<data>
+		tdUBQIew7TxKaBvrKKFl53TORWI=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -16,6 +20,13 @@
 			<key>hash2</key>
 			<data>
 			2HIVofvE/5YqnaI7UVvaETcMxAGq2k4mBJ3IqDVoF+4=
+			</data>
+		</dict>
+		<key>Resources/baidupan.secret.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			3lDWst8b57IiU/J/dCwAMu/3Ry++Flr+D/g+lPiZHZM=
 			</data>
 		</dict>
 	</dict>

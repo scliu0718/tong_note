@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct SyncView: View {
-    var onLogout: () -> Void
-
+    @EnvironmentObject private var auth: BaiduPanAuthService
     @Environment(\.dismiss) private var dismiss
     @State private var autoSync = true
     @State private var frequency = "5 分钟"
@@ -13,6 +12,7 @@ struct SyncView: View {
             sidePanel
         }
         .background(Theme.windowBg)
+        .task { await auth.loadAccount() }
     }
 
     // MARK: 主区域
@@ -71,9 +71,9 @@ struct SyncView: View {
     }
 
     private var cloudTreeCard: some View {
-        card("云端目录结构（百度网盘 /apps/WorkLog）") {
+        card("云端目录结构（百度网盘 /apps/tong_log）") {
             VStack(alignment: .leading, spacing: 3) {
-                Text("/apps/WorkLog/").foregroundColor(Theme.baiduDeep).fontWeight(.semibold)
+                Text("/apps/tong_log/").foregroundColor(Theme.baiduDeep).fontWeight(.semibold)
                 Text("  ├─ manifest.json    # 全量索引：笔记本 / 笔记 / 标签 / 修订号")
                 Text("  ├─ notes/            # 笔记正文（一笔记一文件）")
                 Text("  │   ├─ 1729584921230.md")
@@ -97,7 +97,7 @@ struct SyncView: View {
         card("账号与安全") {
             VStack(spacing: 0) {
                 row("百度网盘账号") {
-                    Text("wang***@163.com").font(.system(size: 13, weight: .medium))
+                    Text(auth.userInfo?.displayName ?? "已授权").font(.system(size: 13, weight: .medium))
                 }
                 row("授权方式", subtitle: "百度网盘开放平台 OAuth 2.0") {
                     Button("重新授权") {}
@@ -111,7 +111,7 @@ struct SyncView: View {
                 row("退出登录") {
                     Button("退出") {
                         dismiss()
-                        onLogout()
+                        auth.signOut()
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 13, weight: .medium))
@@ -157,19 +157,19 @@ struct SyncView: View {
 
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            (Text("2.4 GB ").font(.system(size: 26, weight: .bold)) +
-             Text("/ 2 TB").font(.system(size: 12)).foregroundColor(Theme.textQuaternary))
+            (Text(formatBytes(auth.quota?.used)).font(.system(size: 26, weight: .bold)) +
+             Text(" / \(formatBytes(auth.quota?.total))").font(.system(size: 12)).foregroundColor(Theme.textQuaternary))
                 .foregroundColor(Theme.textPrimary)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3).fill(Color(hex: 0xE5E5E8))
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Theme.baidu)
-                        .frame(width: geo.size.width * 0.0012)
+                        .frame(width: geo.size.width * quotaRatio)
                 }
             }
             .frame(height: 6).padding(.vertical, 12)
-            Text("笔记 128 篇 · 附件 312 个\n以 Markdown 纯文本为主，占用极低。")
+            Text("已用空间 · 以百度网盘为准\n数据完全归你所有，可随时导出迁移。")
                 .font(.system(size: 11))
                 .foregroundColor(Theme.textQuaternary)
                 .lineSpacing(4)
@@ -178,6 +178,18 @@ struct SyncView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
+    }
+
+    private func formatBytes(_ bytes: Int64?) -> String {
+        guard let b = bytes, b >= 0 else { return "—" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: b)
+    }
+
+    private var quotaRatio: Double {
+        guard let total = auth.quota?.total, let used = auth.quota?.used, total > 0 else { return 0 }
+        return min(max(Double(used) / Double(total), 0), 1)
     }
 
     // MARK: 通用组件
