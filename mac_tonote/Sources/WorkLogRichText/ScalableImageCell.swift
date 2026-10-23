@@ -10,12 +10,12 @@ final class ScalableImageCell: NSTextAttachmentCell {
 
     /// 当前显示尺寸（pt）
     var displaySize: NSSize = .zero {
-        didSet { invalidateDisplay() }
+        didSet { controlView?.needsDisplay = true }
     }
 
     /// 是否显示缩放边框与手柄
     var showsResizeHandles: Bool = false {
-        didSet { invalidateDisplay() }
+        didSet { controlView?.needsDisplay = true }
     }
 
     /// 原图宽高比（用于拖拽时锁定比例）
@@ -27,7 +27,7 @@ final class ScalableImageCell: NSTextAttachmentCell {
             : super.cellSize
     }
 
-    override func draw(withFrame frame: NSRect, in view: NSView) {
+    override func draw(withFrame frame: NSRect, in view: NSView?) {
         super.draw(withFrame: frame, in: view)
 
         guard showsResizeHandles else { return }

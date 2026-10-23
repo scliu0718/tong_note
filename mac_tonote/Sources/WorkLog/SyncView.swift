@@ -23,7 +23,7 @@ struct SyncView: View {
                     Text("同步与存储")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(Theme.textPrimary)
-                    Text("笔记数据存放于你自己的百度网盘，WorkLog 仅做读写，不另建服务器。")
+                    Text("笔记数据存放于你自己的百度网盘，同笔记仅做读写，不另建服务器。")
                         .font(.system(size: 13))
                         .foregroundColor(Theme.textTertiary)
                 }
@@ -143,7 +143,7 @@ struct SyncView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
             Spacer()
-            Text("WorkLog · 数据属于你自己\n无需订阅 · 无服务器存储")
+            Text("同笔记 · 数据属于你自己\n无需订阅 · 无服务器存储")
                 .font(.system(size: 11))
                 .foregroundColor(Theme.textQuaternary)
                 .multilineTextAlignment(.center)
