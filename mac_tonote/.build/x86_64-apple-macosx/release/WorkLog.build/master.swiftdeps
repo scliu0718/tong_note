@@ -1,0 +1,14 @@
+version: "Apple Swift version 6.1 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)"
+options: "1078618bb5ba1fdc6bf85f30618604f5599d0c5b6692f9e31835b7aac461ebdb"
+build_start_time: [1792748530, 861436000]
+build_end_time: [1792748538, 178945000]
+inputs:
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/EditorView.swift": [1792746881, 590625799]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/LoginView.swift": [1792661686, 395196187]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/MainView.swift": [1792745755, 6097546]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteListView.swift": [1792736629, 648937192]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteStore+Bindings.swift": [1792745669, 332161888]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SidebarView.swift": [1792736629, 647525980]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SyncView.swift": [1792661977, 843067979]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/Theme.swift": [1792661622, 577579325]
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/WorkLogApp.swift": [1792661665, 578948873]

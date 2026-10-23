@@ -1,0 +1,27 @@
+{
+  "": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/WorkLogRichTextTests.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/WorkLogRichTextTests.o",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/master.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift": {
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift": {
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextTests.swift": {
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift": {
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swiftdeps"
+  }
+}

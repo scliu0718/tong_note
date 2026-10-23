@@ -1,0 +1,47 @@
+{
+  "": {
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/master.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/AttachmentStore.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/AttachmentStore.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/AttachmentStore.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/AttachmentStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/AttachmentStore.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/ImagePathScanner.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/ImagePathScanner.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/ImagePathScanner.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/ImagePathScanner~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/ImagePathScanner.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/MarkdownConverter.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/MarkdownConverter.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/MarkdownConverter.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/MarkdownConverter~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/MarkdownConverter.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/Models.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/Models.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/Models.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/Models~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/Models.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/NoteStore.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/NoteStore.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/NoteStore.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/NoteStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/NoteStore.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextDocument.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextDocument.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextDocument.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextDocument~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextDocument.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextHTMLCodec.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextHTMLCodec.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextHTMLCodec.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextHTMLCodec~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCore.build/RichTextHTMLCodec.swiftdeps"
+  }
+}

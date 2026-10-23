@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="wflv2zjLs49lBDyRvJJCOp">
+<head data-page-node-id="R2rQiaUBZihVorXMOoaGlc">
+<meta charset="UTF-8" data-page-node-id="R1GWNuOMWcNN55NDDUO9TL">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="QXg9xJWfQ9m87hAEuiS9VB">
+<title>WorkLog · Mac 端 UI 设计稿</title>
+<style>
+  :root{
+    --bg:#e9e9ec;
+    --window-bg:#f5f5f7;
+    --sidebar-bg:#ececef;
+    --panel-bg:#ffffff;
+    --editor-bg:#ffffff;
+    --text-1:#1d1d1f;
+    --text-2:#48484a;
+    --text-3:#86868b;
+    --text-4:#a1a1a6;
+    --line:#e0e0e4;
+    --line-soft:#ececef;
+    --accent:#1a9e5c;
+    --accent-hover:#147a46;
+    --accent-tint:#e6f4ec;
+    --accent-tint-2:#cfe9d9;
+    --baidu:#06a7ff;
+    --baidu-deep:#0084d6;
+    --baidu-tint:#e5f5ff;
+    --red:#e5484d;
+    --amber:#f5a623;
+    --shadow-sm:0 1px 2px rgba(20,20,22,.06),0 1px 6px rgba(20,20,22,.05);
+    --shadow-md:0 6px 24px rgba(20,20,22,.10),0 2px 6px rgba(20,20,22,.06);
+    --radius:10px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    --mono:"SF Mono",Menlo,Consolas,"PingFang SC",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);font-family:var(--font);color:var(--text-1);-webkit-font-smoothing:antialiased;height:100%}
+  body{padding:28px 32px;display:flex;flex-direction:column;align-items:center;gap:20px}
+
+  /* 顶部说明条 */
+  .doc-header{width:1120px;max-width:100%;display:flex;align-items:flex-end;justify-content:space-between}
+  .doc-header h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .doc-header .sub{font-size:13px;color:var(--text-3);margin-top:4px}
+  .doc-header .tag{font-size:11px;color:var(--accent);background:var(--accent-tint);padding:4px 10px;border-radius:999px;font-weight:600}
+
+  /* 切换标签 */
+  .tabs{display:flex;gap:6px;background:#e3e3e7;padding:5px;border-radius:12px}
+  .tab{border:none;background:transparent;padding:8px 18px;border-radius:9px;font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer;font-family:var(--font);transition:.15s}
+  .tab:hover{color:var(--text-1)}
+  .tab.active{background:#fff;color:var(--text-1);box-shadow:var(--shadow-sm)}
+
+  /* macOS 窗口 */
+  .window{width:1120px;max-width:100%;background:var(--window-bg);border-radius:12px;box-shadow:var(--shadow-md);overflow:hidden;border:1px solid #d9d9dd}
+  .titlebar{height:46px;background:linear-gradient(#fafafb,#f1f1f3);display:flex;align-items:center;padding:0 14px;border-bottom:1px solid var(--line);position:relative}
+  .traffic{display:flex;gap:8px;position:absolute;left:14px}
+  .dot{width:12px;height:12px;border-radius:50%;border:1px solid rgba(0,0,0,.08)}
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .titlebar .apptitle{position:absolute;left:50%;transform:translateX(-50%);font-size:13px;font-weight:600;color:var(--text-2)}
+  .screen{display:none}
+  .screen.active{display:block}
+
+  /* ============ 登录页 ============ */
+  .login-body{display:flex;min-height:640px}
+  .login-left{flex:1.05;background:linear-gradient(160deg,#17c26b 0%,#0f9d52 55%,#0c7a40 100%);color:#fff;padding:56px 52px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+  .login-left::before{content:"";position:absolute;right:-140px;top:-140px;width:420px;height:420px;border-radius:50%;background:rgba(255,255,255,.08)}
+  .login-left::after{content:"";position:absolute;right:-40px;bottom:-180px;width:380px;height:380px;border-radius:50%;background:rgba(255,255,255,.06)}
+  .brand-row{display:flex;align-items:center;gap:14px;position:relative;z-index:1}
+  .brand-icon{width:52px;height:52px;border-radius:13px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+  .brand-icon svg{width:30px;height:30px}
+  .brand-name{font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .brand-en{font-size:12px;opacity:.8;font-weight:500;letter-spacing:.06em}
+  .login-left .pitch{position:relative;z-index:1;max-width:400px}
+  .login-left .pitch h2{font-size:32px;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:16px}
+  .login-left .pitch p{font-size:14px;line-height:1.7;opacity:.9}
+  .feat-list{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px;margin-top:28px}
+  .feat{display:flex;align-items:center;gap:10px;font-size:13px;opacity:.92}
+  .feat .ck{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .feat .ck svg{width:11px;height:11px}
+  .login-foot{position:relative;z-index:1;font-size:11px;opacity:.65}
+
+  .login-right{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 60px;gap:22px}
+  .login-right .welcome{font-size:18px;font-weight:700;text-align:center}
+  .login-right .welcome-sub{font-size:13px;color:var(--text-3);text-align:center;margin-top:-14px}
+  .baidu-btn{width:100%;max-width:340px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--baidu);color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);transition:.15s;box-shadow:0 4px 14px rgba(6,167,255,.28)}
+  .baidu-btn:hover{background:var(--baidu-deep)}
+  .baidu-btn svg{width:20px;height:20px}
+  .divider{display:flex;align-items:center;gap:12px;width:100%;max-width:340px;color:var(--text-4);font-size:12px}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+  .scan-box{width:100%;max-width:340px;border:1px dashed var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--text-3);font-size:12px}
+  .scan-box .qr{width:92px;height:92px;background:
+    repeating-linear-gradient(0deg,#1d1d1f 0 6px,transparent 6px 12px),
+    repeating-linear-gradient(90deg,#1d1d1f 0 6px,transparent 6px 12px);
+    opacity:.8;border-radius:6px}
+  .privacy{width:100%;max-width:340px;font-size:11px;color:var(--text-4);text-align:center;line-height:1.6}
+
+  /* ============ 主界面 ============ */
+  .main-wrap{display:flex;height:660px}
+  .sidebar{width:112px;background:var(--sidebar-bg);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;position:relative;min-width:112px;max-width:320px}
+  .resizer{position:absolute;right:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:20}
+  .resizer::after{content:"";position:absolute;left:2px;top:0;bottom:0;width:2px;background:transparent;transition:background .15s}
+  .resizer:hover::after,.resizer.active::after{background:var(--accent)}
+  .account{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 10px}
+  .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#19b46a,#0e8a48);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .account .who{display:none}
+  .account .sync{display:none}
+  .new-note{margin:0 auto 14px;width:44px;height:44px;padding:0;background:var(--accent);color:#fff;border:none;border-radius:50%;font-size:0;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font);transition:.15s;box-shadow:0 3px 10px rgba(26,158,92,.28)}
+  .new-note:hover{background:var(--accent-hover)}
+  .new-note svg{width:20px;height:20px}
+  .side-scroll{flex:1;overflow:hidden;padding:0 10px}
+  .side-group{font-size:0;height:1px;background:var(--line);margin:10px 4px 8px;padding:0}
+  .side-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 0;border-radius:8px;font-size:10px;color:var(--text-3);cursor:pointer;transition:.12s;text-align:center;line-height:1.2}
+  .side-item svg{width:20px;height:20px;color:var(--text-3);flex-shrink:0}
+  .side-item .cnt{display:none}
+  .side-item:hover{background:rgba(0,0,0,.045);color:var(--text-2)}
+  .side-item.active{background:var(--accent-tint);color:var(--accent-hover);font-weight:600}
+  .side-item.active svg{color:var(--accent)}
+  .side-foot{padding:10px 0;border-top:1px solid var(--line)}
+  .storage-meter{padding:8px 10px 6px;font-size:0;color:var(--text-3)}
+  .storage-meter .bar{height:4px;border-radius:2px;background:#dcdce0;overflow:hidden}
+  .storage-meter .bar i{display:block;height:100%;width:42%;background:var(--baidu);border-radius:2px}
+  .storage-meter .num{display:none}
+  /* 宽栏模式（拖动展开后恢复完整布局） */
+  .sidebar.wide .account{flex-direction:row;align-items:center;gap:9px;padding:14px 14px 12px}
+  .sidebar.wide .account .who{display:block;font-size:12px;font-weight:600;line-height:1.3}
+  .sidebar.wide .account .sync{display:flex;font-size:11px;color:var(--text-3);align-items:center;gap:4px}
+  .sidebar.wide .account .sync .st{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+  .sidebar.wide .new-note{margin:0 12px 12px;width:auto;height:auto;padding:9px 12px;border-radius:8px;font-size:13px;box-shadow:none}
+  .sidebar.wide .new-note svg{width:14px;height:14px}
+  .sidebar.wide .side-scroll{padding:0 8px}
+  .sidebar.wide .side-group{font-size:11px;height:auto;background:none;margin:0;padding:14px 8px 6px;color:var(--text-4);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .sidebar.wide .side-item{flex-direction:row;align-items:center;gap:9px;padding:7px 8px;font-size:13px;color:var(--text-2);text-align:left;border-radius:7px;line-height:normal}
+  .sidebar.wide .side-item svg{width:16px;height:16px}
+  .sidebar.wide .side-item .cnt{display:block;margin-left:auto;font-size:11px;color:var(--text-4)}
+  .sidebar.wide .side-foot{padding:10px 8px}
+  .sidebar.wide .storage-meter{padding:8px 8px 6px;font-size:11px}
+  .sidebar.wide .storage-meter .num{display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--text-4)}
+
+  .note-list{width:292px;background:var(--panel-bg);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
+  .search-wrap{padding:12px 12px 8px}
+  .search{display:flex;align-items:center;gap:8px;background:#f2f2f4;border:1px solid transparent;border-radius:8px;padding:7px 10px;transition:.15s}
+  .search:focus-within{background:#fff;border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,158,92,.10)}
+  .search svg{width:14px;height:14px;color:var(--text-4);flex-shrink:0}
+  .search input{border:none;background:transparent;outline:none;font-size:13px;color:var(--text-1);width:100%;font-family:var(--font)}
+  .search input::placeholder{color:var(--text-4)}
+  .list-filter{display:flex;gap:14px;padding:4px 14px 8px;font-size:12px;color:var(--text-3);border-bottom:1px solid var(--line-soft)}
+  .list-filter span{cursor:pointer;padding-bottom:6px;border-bottom:2px solid transparent}
+  .list-filter span.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .notes-scroll{flex:1;overflow:hidden;padding:8px}
+  .note-card{padding:11px 12px;border-radius:8px;cursor:pointer;transition:.12s;border:1px solid transparent}
+  .note-card:hover{background:#f7f7f8}
+  .note-card.active{background:var(--accent-tint);border-color:var(--accent-tint-2)}
+  .note-card .t{font-size:13.5px;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+  .note-card .s{font-size:12px;color:var(--text-3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:7px}
+  .note-card .meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-4)}
+  .note-card .meta .tagchip{background:#efeff1;color:var(--text-3);padding:1px 7px;border-radius:999px;font-size:10px}
+  .note-card.active .meta .tagchip{background:#d5ecdd;color:var(--accent-hover)}
+  .note-card .pin{margin-left:auto;color:var(--amber)}
+
+  .editor{flex:1;background:var(--editor-bg);display:flex;flex-direction:column;min-width:0}
+  .editor-top{padding:16px 24px 6px}
+  .ed-title{font-size:22px;font-weight:700;letter-spacing:-.01em;border:none;outline:none;width:100%;color:var(--text-1);font-family:var(--font)}
+  .ed-sub{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-4);margin-top:6px}
+  .ed-sub .chip{background:#f2f2f4;padding:2px 8px;border-radius:5px;color:var(--text-3)}
+  .ed-sub .sync-dot{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-weight:500}
+  .ed-sub .sync-dot::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .toolbar{display:flex;align-items:center;gap:2px;padding:8px 20px;border-bottom:1px solid var(--line-soft)}
+  .tb-btn{width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-2);cursor:pointer;border:none;background:transparent;transition:.12s}
+  .tb-btn:hover{background:#f2f2f4}
+  .tb-btn svg{width:16px;height:16px}
+  .tb-sep{width:1px;height:18px;background:var(--line);margin:0 6px}
+  .tb-right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-3)}
+  .tb-share{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
+  .editor-body{flex:1;overflow:hidden;padding:22px 24px 30px}
+  .ed-content{max-width:680px;line-height:1.85;font-size:15px;color:var(--text-2)}
+  .ed-content h2{font-size:18px;font-weight:700;color:var(--text-1);margin:24px 0 10px}
+  .ed-content h3{font-size:15.5px;font-weight:600;color:var(--text-1);margin:18px 0 8px}
+  .ed-content p{margin-bottom:12px}
+  .ed-content ul{margin:0 0 12px 20px}
+  .ed-content li{margin-bottom:6px}
+  .ed-content .hl{background:#fff3d6;padding:1px 5px;border-radius:4px;color:#8a5a00}
+  .ed-content .tag-inline{color:var(--accent);font-weight:600}
+  .ed-content blockquote{border-left:3px solid var(--accent);padding:6px 14px;margin:12px 0;background:#f7faf8;color:var(--text-3);font-size:14px;border-radius:0 6px 6px 0}
+  .ed-content .kpi{display:flex;gap:12px;margin:14px 0}
+  .ed-content .kpi .box{flex:1;background:#fafafa;border:1px solid var(--line-soft);border-radius:8px;padding:12px 14px}
+  .ed-content .kpi .k{font-size:11px;color:var(--text-4)}
+  .ed-content .kpi .v{font-size:19px;font-weight:700;color:var(--text-1);margin-top:2px}
+  .ed-content .kpi .v.up{color:var(--red)}
+  .ed-content .kpi .v.down{color:var(--accent)}
+
+  /* ============ 同步设置页 ============ */
+  .sync-body{display:flex;height:640px}
+  .sync-main{flex:1;padding:28px 36px;overflow:hidden}
+  .sync-main h2{font-size:20px;font-weight:700;margin-bottom:4px}
+  .sync-main .lead{font-size:13px;color:var(--text-3);margin-bottom:24px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+  .card .ct{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card .ct svg{width:16px;height:16px;color:var(--accent)}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+  .row:last-child{border-bottom:none}
+  .row .l{font-size:13px;color:var(--text-2)}
+  .row .l small{display:block;font-size:11px;color:var(--text-4);margin-top:2px}
+  .row .r{font-size:13px;color:var(--text-1);font-weight:500;display:flex;align-items:center;gap:8px}
+  .toggle{width:40px;height:24px;border-radius:12px;background:#d1d1d6;position:relative;cursor:pointer;transition:.2s;border:none}
+  .toggle.on{background:var(--accent)}
+  .toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .toggle.on::after{left:18px}
+  .btn-sync{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px}
+  .btn-sync:hover{background:var(--accent-hover)}
+  .btn-sync svg{width:14px;height:14px}
+  .btn-outline{background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;font-family:var(--font)}
+  .btn-outline:hover{background:#f7f7f8}
+
+  /* 目录树 */
+  .tree{font-family:var(--mono);font-size:12.5px;line-height:1.9;background:#fafafb;border:1px solid var(--line-soft);border-radius:10px;padding:16px 18px;color:var(--text-2)}
+  .tree .d{color:var(--baidu-deep);font-weight:600}
+  .tree .f{color:var(--text-2)}
+  .tree .c{color:var(--text-4)}
+  .tree .hl2{background:#fff3d6;border-radius:3px;padding:0 3px;color:#8a5a00}
+
+  .sync-side{width:280px;background:var(--sidebar-bg);border-left:1px solid var(--line);padding:28px 20px;display:flex;flex-direction:column;gap:14px}
+  .sync-side .cap{font-size:11px;color:var(--text-4);font-weight:600;letter-spacing:.04em}
+  .usage-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}
+  .usage-card .big{font-size:26px;font-weight:700}
+  .usage-card .big small{font-size:12px;color:var(--text-4);font-weight:400}
+  .usage-card .bar{height:6px;border-radius:3px;background:#e5e5e8;margin:12px 0 8px;overflow:hidden}
+  .usage-card .bar i{display:block;height:100%;width:0.12%;background:var(--baidu);border-radius:3px}
+  .usage-card .tip{font-size:11px;color:var(--text-4);line-height:1.6}
+
+  .note{margin-top:auto;font-size:11px;color:var(--text-4);text-align:center;line-height:1.6}
+  @media (max-width:960px){
+    body{padding:16px 12px}
+    .window,.doc-header{width:100%}
+    .login-left{display:none}
+    .sidebar{width:190px}
+    .note-list{width:240px}
+    .sync-side{display:none}
+  }
+</style>
+</head>
+<body data-page-node-id="h0oc9F2rcR1lncXcRLZaQ2">
+
+<div class="doc-header" data-page-node-id="jfSXR7fbnzZvaQ5Z9iknTC">
+  <div data-page-node-id="k0fk8SpIUFujnksolfZ1Y8">
+    <h1 data-page-node-id="CrOxrv6ADEo5DZ6ukou6sF">WorkLog · Mac 端 UI 设计稿</h1>
+    <div class="sub" data-page-node-id="t9qmncVe34xBHkrN5yaSKk">类印象笔记的跨端笔记应用 · 数据存于百度网盘 <span style="font-family:var(--mono)" data-page-node-id="ZrI5Mr3Hd02S0Tden5JA1n">/apps/WorkLog</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px" data-page-node-id="0hBEX6LsQRICE3Rf0UMOhJ">
+    <span class="tag" data-page-node-id="XFxKWjb9V59SbAoAs6e1vJ">Mac · 浅色主题</span>
+    <div class="tabs" data-page-node-id="8UsfHvDEgThWVk6FAzDFuF">
+      <button class="tab active" data-screen="login" data-page-node-id="A0PXv35Hrg8Kk6sybUnzmm">登录</button>
+      <button class="tab" data-screen="main" data-page-node-id="HMERmXUsVBmqOH6zOBy1aV">主界面</button>
+      <button class="tab" data-screen="sync" data-page-node-id="ECYdji2BVQZvMrY65BvkDy">同步与存储</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 登录页 ================= -->
+<div class="window" data-page-node-id="JQcnE2f7Z0uv26whUWSV6z">
+  <div class="titlebar" data-page-node-id="vXG7quTDF0CTTENIHfmYla">
+    <div class="traffic" data-page-node-id="ZimmL47psitYM32b0RK0A1"><span class="dot r" data-page-node-id="NpUYJm0ATCjENwvRaaK64C"></span><span class="dot y" data-page-node-id="qa1kxPhZL32dL7P1tYJpp6"></span><span class="dot g" data-page-node-id="1if7zOsUPMvxPeUg3SiTDI"></span></div>
+    <div class="apptitle" data-page-node-id="JP50AJu77oVrbvm3GYhH0W">WorkLog</div>
+  </div>
+
+  <div class="screen active" id="screen-login" data-page-node-id="pkqNLoNlrsG7dixuuV3Ool">
+    <div class="login-body" data-page-node-id="nOlWtT9fVuvC2JS6SSPQ9G">
+      <div class="login-left" data-page-node-id="ok0RiUEx7CbD5z7EdXWydU">
+        <div class="brand-row" data-page-node-id="VgppR6cjTwjvPkVSM5mBjL">
+          <div class="brand-icon" data-page-node-id="vOAzFlvoMT324ZJFYPrIUc">
+            <svg viewBox="0 0 24 24" fill="none" data-page-node-id="kbpB2K4MEnm25PCJSzgvko"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="#fff" stroke-width="1.7" data-page-node-id="nRp4w1kcDH4EvThZDr8LoD"/><path d="M8 9h8M8 12.5h8M8 16h5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" data-page-node-id="GoIbAmGONPEAOOgzkNIYuC"/></svg>
+          </div>
+          <div data-page-node-id="KoFjliB5AbS7LPE0EGDDxd">
+            <div class="brand-name" data-page-node-id="M0dDVEWUFu2q7ca3zHinTe">WorkLog</div>
+            <div class="brand-en" data-page-node-id="lGtstcDPV651MU3rWOuXNv">工作日志 · 笔记</div>
+          </div>
+        </div>
+        <div class="pitch" data-page-node-id="wQHENNhucADlGzgve2pRLZ">
+          <h2 data-page-node-id="Ztf6xRZuLpgTOsTNYjXEwA">你的每一份记录，<br data-page-node-id="2anb77uuoTNfDuD1QFffQa">都交给你自己保管。</h2>
+          <p data-page-node-id="Kr2ADBDRy9FkYhKWAIqkYb">不用订阅、不锁数据。笔记直接写入你自己的百度网盘，随时可导出、可迁移，从此告别「笔记困在 App 里」的焦虑。</p>
+          <div class="feat-list" data-page-node-id="EkpH0aMwvsZLdzdanBYhCb">
+            <div class="feat" data-page-node-id="jciojPUb7HE1D3csorjhud"><span class="ck" data-page-node-id="meLD5H1LFzMczBhS0D5IPu"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="7KZoqWCuNsDrHvqFfZ149t"><path d="M5 12.5l5 5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="GEamOdmKuDTJtnbeSlbPx9"/></svg></span>数据存于百度网盘，跨 Mac / Android 同步</div>
+            <div class="feat" data-page-node-id="RPuDpDEUrDxxskmQHsgdn5"><span class="ck" data-page-node-id="Cly4Zbc38NAXB4W7G5t1kB"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="WMLhT7FDJxO5eYRdoWCQMQ"><path d="M5 12.5l5 5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Tm1ZFkC05sScxYp6Pt09BW"/></svg></span>Markdown 笔记 + 附件，格式开放可迁移</div>
+            <div class="feat" data-page-node-id="DXfIzsFqahjT49UDFWKmGM"><span class="ck" data-page-node-id="3Std4QETNFDl1y9G7OI84K"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="0PNLDdHmgfzm8l2PxPDMDO"><path d="M5 12.5l5 5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="vauqpA0ogDhLlIG7QLGZRQ"/></svg></span>离线编辑，联网自动增量同步</div>
+          </div>
+        </div>
+        <div class="login-foot" data-page-node-id="fS90peNYno6OLSceZtMoty">WorkLog 不会读取你网盘中 worklog 目录以外的任何文件</div>
+      </div>
+
+      <div class="login-right" data-page-node-id="3vmB95uyGIrH4beXwbEhg4">
+        <div class="welcome" data-page-node-id="ABm3jJaU22yC1M4ijqsCkB">欢迎使用 WorkLog</div>
+        <div class="welcome-sub" data-page-node-id="SckV6Ld5jXNxMhfiiHGWCH">使用百度网盘账号登录，笔记将存储于你的网盘</div>
+        <button class="baidu-btn" data-page-node-id="5RvaEWrQIYYrwJDP0Pk9AY">
+          <svg viewBox="0 0 24 24" fill="none" data-page-node-id="Qd7LW9trrY5o5goqtUat7x"><path d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V18l4-2.5L16 18v-3.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7Z" fill="#fff" data-page-node-id="UKDJFRBF8b6bkGtBRCjO8m"/><circle cx="9.5" cy="8.5" r="1.3" fill="#06a7ff" data-page-node-id="pKb90irU7uz9Kg0S5qPkbG"/><circle cx="14.5" cy="8.5" r="1.3" fill="#06a7ff" data-page-node-id="U7XIXAuwfdW52KgN59TETy"/></svg>
+          使用百度网盘账号登录
+        </button>
+        <div class="divider" data-page-node-id="d8ET4m4P3mZJ2jXbWceIoJ">或</div>
+        <div class="scan-box" data-page-node-id="ImhICb7mqqdEWRBpmsBPC4">
+          <div class="qr" data-page-node-id="aFkxLThpd208vkhvnofg8Y"></div>
+          打开「百度网盘 App」扫码登录
+        </div>
+        <div class="privacy" data-page-node-id="5rMdAr4f8X69DBBT0wpBRe">登录即代表你授权 WorkLog 通过百度网盘开放平台读写<br data-page-node-id="OYnCqxenrRr9Uo1N65LgGW"><span style="font-family:var(--mono)" data-page-node-id="JFaIDWAPgkcRMkc7NjLWoD">/apps/WorkLog</span> 目录。授权信息仅保存在本机密钥链中。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 主界面 ================= -->
+  <div class="screen" id="screen-main" data-page-node-id="mF5LFMNlw5HeziCmnB7zcG">
+    <div class="main-wrap" data-page-node-id="Z4s9vGvUne2NEMzuAzA2LC">
+      <!-- 侧边栏 -->
+      <div class="sidebar" data-page-node-id="F44v8BJYxT5NwOHLcnBaa6">
+        <div class="resizer" title="拖动调整宽度"></div>
+        <div class="account" data-page-node-id="BRO4ESciHvMUJTLuCKsP1X">
+          <div class="avatar" data-page-node-id="lHVBBz1mt6GVEKItBDkbZm">WL</div>
+          <div data-page-node-id="oWD6tQjTgUkqS852qIp6bA">
+            <div class="who" data-page-node-id="gKGjstR4tZVeRzizdpy1A6">老王的工作台</div>
+            <div class="sync" data-page-node-id="DyvEDdRGFijIpshGhF3wBq"><span class="st" data-page-node-id="DR8J3RcuaN7jMvgawWR2Kn"></span>已连接百度网盘 · 已同步</div>
+          </div>
+        </div>
+        <button class="new-note" data-page-node-id="2IwppRmo1itRyQynTtPKbh">
+          <svg viewBox="0 0 24 24" fill="none" data-page-node-id="C3taCae38oQQFRfGLGlFIi"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round" data-page-node-id="SeVyA24tDF3AulOPN9m7XX"/></svg>
+          新建笔记
+        </button>
+        <div class="side-scroll" data-page-node-id="fzhWWRwxC4rbUDPogV82c8">
+          <div class="side-group" data-page-node-id="LzpMDCjOwjOGRNHtryihRE">笔记本</div>
+          <div class="side-item active" data-page-node-id="dkY4kHPleDjpSYELLn4ABL"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="ud0NVsCW1LfoKjwSvBykGS"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="JnTpPAxCPnXMrV2gEF3y8B"/></svg>全部笔记<span class="cnt" data-page-node-id="0hvsilSzPSDezrRN15rX2v">128</span></div>
+          <div class="side-item" data-page-node-id="ohQ1nm6s3RpD6as3KNQZge"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="vkjhkxLGs3HJCzjn3ZkKX5"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.7" data-page-node-id="usv35ZdbWsQYUqqJsPjmvG"/></svg>工作日志<span class="cnt" data-page-node-id="ksaFCLSTb78adK0rcxfGY6">46</span></div>
+          <div class="side-item" data-page-node-id="vkiq4gKfeljd6BI6sf1t0K"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="NVHMSduO1hU5W4DaPyTawd"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.7" data-page-node-id="jY53ktVx7zhSPB7kVlm1Jj"/></svg>读书笔记<span class="cnt" data-page-node-id="UJsb3xIekEUYIPgVWl0GZ9">31</span></div>
+          <div class="side-item" data-page-node-id="0QH6rftg9wdKmWDobB8Iby"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="C1IIIw8syrOHe3wWQnjutO"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.7" data-page-node-id="QUGiXVA5489IiBHYwHUHlL"/></svg>投资研究<span class="cnt" data-page-node-id="apwUSVLWTn8sNDw00xkc22">27</span></div>
+          <div class="side-item" data-page-node-id="1CI6uaUSEnuRBCBZSdE9L5"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="c9l7BWQuHbTdZTnvV9ES3y"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.7" data-page-node-id="IB0YPHQ9tVeLzYdnNX0owe"/></svg>灵感速记<span class="cnt" data-page-node-id="KHiSiLHwdXBEiQ0mYa84KY">24</span></div>
+          <div class="side-group" data-page-node-id="G4WCOvE6jdZcc8IRp1Fb5T">标签</div>
+          <div class="side-item" data-page-node-id="sJqxLiQauvolyumVGMLWyJ"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="6rAEUMJzn7hzRjugIliTFC"><path d="M4 6h8l2 3h6v10H4V6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" data-page-node-id="hXvJG4dMpcNlKqBC77FPQI"/></svg>会议纪要<span class="cnt" data-page-node-id="gSMLRNMFuHPBIiWyf4Kiz9">18</span></div>
+          <div class="side-item" data-page-node-id="pfRL96zAGwYZPD09JVVxnm"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="2KoD6YxXDxXuVuK3wEhw1w"><path d="M4 6h8l2 3h6v10H4V6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" data-page-node-id="1aHjwBLBMADhNo7cXB9RZw"/></svg>A股复盘<span class="cnt" data-page-node-id="io2J3KnSxjZz8HFbzfHBbq">15</span></div>
+          <div class="side-item" data-page-node-id="UdjHCeaN2boanBf4uf9oLI"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="dmlfvLdfj4q9MRQAk3vDvo"><path d="M4 6h8l2 3h6v10H4V6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" data-page-node-id="uwtMbsDoblFe3xljE97bVp"/></svg>待办<span class="cnt" data-page-node-id="oSpKDS0tzjh5fkqOF3gE3F">9</span></div>
+        </div>
+        <div class="side-foot" data-page-node-id="g22n3vhNB6VGm7i54ceZGK">
+          <div class="side-item" data-page-node-id="ZpLGCZJ0JQpFGVAUrUAHmd"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="GquYazq0b0Xn28xJOHAuRo"><path d="M4 7h12l4 4v8a1 1 0 0 1-1 1H4V7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" data-page-node-id="spWjIbyPFD6LJE1eBXcwj0"/><path d="M16 7V5a1 1 0 0 0-1-1H7" stroke="currentColor" stroke-width="1.7" data-page-node-id="1OC2qa6CT3azQWFRyUDw08"/></svg>回收站<span class="cnt" data-page-node-id="sg1DcpBSEXVhfNF8DaXiZE">3</span></div>
+          <div class="storage-meter" data-page-node-id="cOMxbw86HHJwmqpopmFW5D">
+            百度网盘存储
+            <div class="bar" data-page-node-id="OG3AQ6yrBrX6piiwU5VvHv"><i data-page-node-id="Ek2UJRSoZ6GiGdECVOJXJk"></i></div>
+            <div class="num" data-page-node-id="zOHUoCGu7kFtprhJHPE4Sc"><span data-page-node-id="Yix4nM8En8l2Aw28PRvb8u">已用 2.4 GB</span><span data-page-node-id="Aumv6lyxdAuWxDNmonLd8G">2 TB</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 笔记列表 -->
+      <div class="note-list" data-page-node-id="5Az1LVskNE7ApnSuXSfGhX">
+        <div class="search-wrap" data-page-node-id="fgmlqJB7gKdd9zWoZU6N2b">
+          <div class="search" data-page-node-id="uTuuqT8eD40bVgQeNUMIta">
+            <svg viewBox="0 0 24 24" fill="none" data-page-node-id="V4fjiwwcErcm4MMnglRTtB"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" data-page-node-id="Lu8yseNml1ZGQupF8CGFqY"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="vhgroH7RXQRosZLBF1Z75T"/></svg>
+            <input placeholder="搜索笔记、标签…" value="" data-page-node-id="VRmBkKsoP8h5xf6HMib67k">
+          </div>
+        </div>
+        <div class="list-filter" data-page-node-id="taOO9Ur9Dv5D56ceVDkNoL"><span class="on" data-page-node-id="XobduYqfnZMlKAXiMZGJfl">最近更新</span><span data-page-node-id="Hjl0oEltAFZGs1FOZZ3zc9">按创建</span><span data-page-node-id="xYv0uN0niRx85PbqPos45Q">按标题</span></div>
+        <div class="notes-scroll" data-page-node-id="2uTKxhEpiRFyR3EvCO5YNX">
+          <div class="note-card active" data-page-node-id="NFg4ydB3xY1tx3qvVDdbum">
+            <div class="t" data-page-node-id="SNvNQUCk08ANpb8vUsK6Qm">长江材料 复盘 · 10月22日</div>
+            <div class="s" data-page-node-id="s6GJYZAbMvKafg8T0E7OkI">早盘低开震荡，午后在 20.5 一线反复争夺…缩量企稳，短线继续观察 20.2 支撑。</div>
+            <div class="meta" data-page-node-id="7waFdcbTEBTsnbvhTVA5HR"><span data-page-node-id="ljGhzvJ0pXYcixE8lhMbj7">今天 14:32</span><span class="tagchip" data-page-node-id="wDo5y2dEBxCSZ5riAIDx2g">A股复盘</span><span class="pin" data-page-node-id="YIYO8pjgMCz7kcwRG2H1g3">📌</span></div>
+          </div>
+          <div class="note-card" data-page-node-id="nK0NxSSohMxmiZ6mHSdbEo">
+            <div class="t" data-page-node-id="1P3m8zRYai5rV3TCxRh6ov">第四季度工作 OKR 草稿</div>
+            <div class="s" data-page-node-id="CH7YKL4wGeEeDc5FPUPl6V">Q4 核心目标：完成量化系统 V4.03 的实盘验证，跑通盘前报告自动化…</div>
+            <div class="meta" data-page-node-id="aleaEFnmHI11HCJsNjNUlX"><span data-page-node-id="WJfArAWaPQJXY56uQmF7Pu">昨天 18:05</span><span class="tagchip" data-page-node-id="Hy2RYwrTDe8FJKAmTLCjUD">待办</span></div>
+          </div>
+          <div class="note-card" data-page-node-id="xBNT01JVBk66aUPcjTKT3s">
+            <div class="t" data-page-node-id="AA2PSNU456ZmoWgvqQD0Uu">《非对称风险》读书笔记</div>
+            <div class="s" data-page-node-id="KC0rpnFfQL78LoTvKA7nf8">「风险共担」一章：不要听那些不承担后果的人的建议。决策者必须…</div>
+            <div class="meta" data-page-node-id="vxH8hAabVWoSLjIlOiXvxs"><span data-page-node-id="KpQeFypUI7BJtzYvbFVIWD">10月20日</span><span class="tagchip" data-page-node-id="2rwmXaq7pMduyYmq1nVHcJ">读书</span></div>
+          </div>
+          <div class="note-card" data-page-node-id="hXwXgJmZwkVtwkLHRt5Dsp">
+            <div class="t" data-page-node-id="T4G6nUyBuwgzAx2hTnWzeH">产品经理周会纪要</div>
+            <div class="s" data-page-node-id="ZkUlxKrBAiLrpPLG1degfu">1. 登录链路改为网盘 OAuth；2. 同步改为增量；3. 移动端下周评审…</div>
+            <div class="meta" data-page-node-id="GRcn3k5KbHLOielqjGj0T2"><span data-page-node-id="nZxT2Kchww7iruznU9gOdd">10月20日</span><span class="tagchip" data-page-node-id="kyNHGZaHWF48CDSAvoBajZ">会议纪要</span></div>
+          </div>
+          <div class="note-card" data-page-node-id="ZlqNA2jAMDwr3CstIabw1j">
+            <div class="t" data-page-node-id="uApk2URfWfkjhNuHtlJg6j">灵感：笔记应用数据所有权</div>
+            <div class="s" data-page-node-id="8YRkMvDyb1i8zEGO9GBo39">为什么用户愿意付费买「数据属于自己」？核心是迁移成本与信任…</div>
+            <div class="meta" data-page-node-id="GNP9i4Uv7jbh3TyeWF1sW3"><span data-page-node-id="8bKYRMAlfJTYJk3nAV6tik">10月19日</span><span class="tagchip" data-page-node-id="lEbVGog284Wg1MCbFmwmiS">灵感</span></div>
+          </div>
+          <div class="note-card" data-page-node-id="F43rvPHMitsqAs7I6zGwTU">
+            <div class="t" data-page-node-id="WN9nYFwSGQlRVayu6BdPhN">筹码峰用法整理</div>
+            <div class="s" data-page-node-id="Haqq58DWRboVm2TkrBwthq">单峰密集 + 量价齐升是最稳的启动形态；双峰则看上方套牢盘压力…</div>
+            <div class="meta" data-page-node-id="BwPO4kW5RvT1hLyGLQcuKy"><span data-page-node-id="03tyvUVj3frsU7ml3ACeez">10月18日</span><span class="tagchip" data-page-node-id="bFQtHkgSCOXRQjaSgBMwYe">A股复盘</span></div>
+          </div>
+          <div class="note-card" data-page-node-id="Iv2aPJYmhS43r3ilh2UqlQ">
+            <div class="t" data-page-node-id="mtDNge62vEYdZXYF6xiUwd">macOS 开发环境备忘</div>
+            <div class="s" data-page-node-id="84SVQuVa0HCvbKRSkXN75j">Xcode 16、SwiftUI、PCS OpenAPI SDK 接入、Keychain 存储 token…</div>
+            <div class="meta" data-page-node-id="VBckGUY73PEM3hP0KMeAsO"><span data-page-node-id="DQu3Fe4H6to2E5ZAB9sgJZ">10月16日</span><span class="tagchip" data-page-node-id="wZ60W82TNTKmE8hdyukBYA">技术</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 编辑器 -->
+      <div class="editor" data-page-node-id="xeTt8IGGO89Z6wSuPxKSij">
+        <div class="editor-top" data-page-node-id="GGffZ1AAIVXEG1WXg8u0VV">
+          <input class="ed-title" value="长江材料 复盘 · 10月22日" data-page-node-id="M4xRCtIwVwLVaCbSwpqkaF">
+          <div class="ed-sub" data-page-node-id="0pTfnbPthZSpqVBXBnSWUf">
+            <span class="chip" data-page-node-id="CLlL2dGP8EVbMDaBjkujIg">工作日志</span>
+            <span class="chip" data-page-node-id="E2D3JeI3hSXRZDFC2l7gC0">A股复盘</span>
+            <span data-page-node-id="XikdyylCpDsD6GTzg8SEBc">·</span>
+            <span data-page-node-id="PzhMgSBfYuEvUyZBJ8t2E1">编辑于 14:32</span>
+            <span style="margin-left:auto" class="sync-dot" data-page-node-id="D0t4tHvpBYw3O4jwPUArPL">已同步到百度网盘</span>
+          </div>
+        </div>
+        <div class="toolbar" data-page-node-id="2QUgpG1EMeWBreTK9pGQ6o">
+          <div class="tb-btn" data-page-node-id="A9GSjuwWZi0pjGQ0Kv5886"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="9JayiudTIZBQlGXYc0SrWE"><path d="M8 6h9M8 12h9M8 18h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-page-node-id="cNZk6BNsNb0bBgkMLar7A0"/></svg></div>
+          <div class="tb-btn" data-page-node-id="04EVU6P49RCFYY1Wmidnc7"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="IcnDsFzzu0Ldvh9iiRtnhH"><path d="M6 5h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" data-page-node-id="AfrNdErW2bVEjAkiDkhlXg"/><path d="M9 12h6M9 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" data-page-node-id="fkKGCQQy33G3VioNhYKvME"/></svg></div>
+          <div class="tb-btn" data-page-node-id="rFbaN9hKC4pK853KHub7Zc"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="NFewsHodnn748ES2vGKrhD"><path d="M4 5h16M9 5v14M4 19h16" stroke="currentColor" stroke-width="1.7" data-page-node-id="MKCpBagkdB0mUu74dOCyhu"/></svg></div>
+          <div class="tb-sep" data-page-node-id="df4YKOrvz0BEnMzOTTurjz"></div>
+          <div class="tb-btn" data-page-node-id="9S9Gwxnh0rMzjiusKKp5q4"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="rKjdv9BFFGWUEKpTsJ8Gwg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7" data-page-node-id="DiqbSN0UzoSUvvaburyb4C"/><path d="M12 8v4l2.5 2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" data-page-node-id="oJG1AhmOG6nJWmu6gt8owb"/></svg></div>
+          <div class="tb-btn" data-page-node-id="KE5yiJwoy88z3UCyeyxRXP"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="PF1TacVmzSShZBc8GYSLG1"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="1.7" data-page-node-id="Sk8loJcXRABv4Xpi60NV5C"/></svg></div>
+          <div class="tb-sep" data-page-node-id="mmWOB0AqI4SKWrdrG2w0MV"></div>
+          <div class="tb-btn" data-page-node-id="mOoU4VG8QTFNpx7dHNTPhb"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="x96Wuir4OfZlkgjJrPSmuu"><rect x="4" y="6" width="16" height="13" rx="2" stroke="currentColor" stroke-width="1.7" data-page-node-id="Npk67cEysPkqkErxhZxjKL"/><circle cx="9" cy="11" r="1.6" stroke="currentColor" stroke-width="1.5" data-page-node-id="tOXqbJ39w5QA9esvSI6PZa"/><path d="M4 16l4-4 3 3 4-4 5 5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" data-page-node-id="2kUIdICVgOa6lVjHPJJloC"/></svg></div>
+          <div class="tb-right" data-page-node-id="wNzk66363egRDxwHd59X0B">
+            213 字
+            <button class="tb-share" data-page-node-id="TpcMkOnkCKo1qZ76GIRMgc">分享</button>
+          </div>
+        </div>
+        <div class="editor-body" data-page-node-id="9YxqHBwC2WQqAnjsKqp2wE">
+          <div class="ed-content" data-page-node-id="uAoGy5zW5qGNDMezRgH00h">
+            <p data-page-node-id="v6sNTL4NIp9voUfaFgfHht">今日<span class="tag-inline" data-page-node-id="UNkbxapef1HuFyCPO3CgHe"> #长江材料(001296)</span> 走势回顾与明日预案。</p>
+            <h2 data-page-node-id="83iotUfFxg5XQORgN1fjdk">盘面回顾</h2>
+            <p data-page-node-id="wxsSkHjXvXO3a4jr7JOyuD">早盘低开 <span class="hl" data-page-node-id="cIj3ImU6bLRVIX2DEgaNj5">-1.2%</span>，随后下探至 20.28 一线获得承接，午后在 <span class="hl" data-page-node-id="KbHchg9xVhqA0cHLDNdFEj">20.5 附近</span> 反复争夺，尾盘小幅回升，收盘 20.50，<strong style="color:var(--red)" data-page-node-id="I94dTYdH2YWBSQwxL2mmNO">+0.39%</strong>。全天成交较昨日缩量约两成，属<span class="tag-inline" data-page-node-id="QPoHDxGbsLbs8PwGpAQi2e">缩量企稳</span>。</p>
+            <div class="kpi" data-page-node-id="cz9Jy3FNNr9dF0IuO5ACsQ">
+              <div class="box" data-page-node-id="Eb30AfUYADyjySlavBSTeO"><div class="k" data-page-node-id="uRKIGuoyjab1XT5MMjaa6z">收盘价</div><div class="v" data-page-node-id="almQCV1dxSX5tjsGkvA8jO">20.50</div></div>
+              <div class="box" data-page-node-id="xrXK2rDdkTVrnb7L3Yv9Hi"><div class="k" data-page-node-id="wzalAPkuP0ch1pA7Cz6WoK">持仓成本</div><div class="v" data-page-node-id="Ov9YokkvOXyeNmmPbV0u2L">20.60</div></div>
+              <div class="box" data-page-node-id="Y7MkmNs9nl8kjj9rcHp2n2"><div class="k" data-page-node-id="v8oxSwcxtEYYi4xTEf7z9x">浮盈浮亏</div><div class="v down" data-page-node-id="0zxdD1apxAuyM5sY4hFlX7">-0.49%</div></div>
+              <div class="box" data-page-node-id="d8e63flfHNhvtZppBxaLLF"><div class="k" data-page-node-id="BhG5tPTKT6EhK3it9Q6f2a">换手率</div><div class="v" data-page-node-id="x7xEFeDGQcmtYND2DWFaQX">2.1%</div></div>
+            </div>
+            <h2 data-page-node-id="L9bg7YkWbzhxksXoFEGSCl">关键观察</h2>
+            <ul data-page-node-id="jxEdqsBA9hZraLL6Z0KGJg">
+              <li data-page-node-id="oEkXwm5j44Sd7vrYTIm8Je">量能：缩量回踩，抛压明显减弱，但上方 20.8 仍有套牢盘压制。</li>
+              <li data-page-node-id="80exIFc1EEA5jqacE8gBMs">筹码：20.2–20.5 区间筹码逐步密集，下方支撑逐步夯实。</li>
+              <li data-page-node-id="OgAyxhIck9gIUF49maC2v3">均线：5 日线走平，10 日线仍在上方，短期仍需放量确认方向。</li>
+            </ul>
+            <h2 data-page-node-id="5DHHfJIw98BPlIMGACoFBZ">明日预案</h2>
+            <blockquote data-page-node-id="IZeSPxFZVfVqE8uoIOpSII">若放量站稳 20.8，可看 21.2 一线；若失守 20.2，则减仓控制风险，等待 19.8 附近再评估。持仓不动，止损位 19.8。</blockquote>
+            <p style="color:var(--text-4);font-size:12px" data-page-node-id="TXlY7GSXG8hKAHcdYF6kVA">本文仅为个人记录，不构成任何投资建议。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 同步与存储 ================= -->
+  <div class="screen" id="screen-sync" data-page-node-id="nHI2iMyqrj86RM1bmzwQHj">
+    <div class="sync-body" data-page-node-id="aYfz00SF39BJLr1rGFf8LA">
+      <div class="sync-main" data-page-node-id="INlHmn3uWZg0EW1tDoLVDy">
+        <h2 data-page-node-id="CnEYAhga7xhLGtgsvvIrIB">同步与存储</h2>
+        <div class="lead" data-page-node-id="4n3cimTsKp0fzsdwVCxTIc">笔记数据存放于你自己的百度网盘，WorkLog 仅做读写，不另建服务器。</div>
+
+        <div class="card" data-page-node-id="eEhueqNsU6s93kPb9mCm5q">
+          <div class="ct" data-page-node-id="hqRUwEY3nXmNzogU6P6BZB"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="0oKne7luePVAJoFjUM0b56"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" stroke="currentColor" stroke-width="1.6" data-page-node-id="A1EyGVdzIlKoKVrRvj0giq"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="FoG6NlLJiDGdtViADXX9WB"/></svg>同步状态</div>
+          <div class="row" data-page-node-id="yGW5mJEHKZ6yOeGPoXMhiy">
+            <div class="l" data-page-node-id="KEoDrrwJqNWWDSEneGuz1i">自动同步<small data-page-node-id="cXwaZnhjMOSsT3fFqkwNtK">联网时自动增量同步（默认开启）</small></div>
+            <div class="r" data-page-node-id="KI3nUxktVJw0k4g1utuE7O"><span class="toggle on" data-page-node-id="1OMkbnC8PV3Y7pzFTU5HBA"></span></div>
+          </div>
+          <div class="row" data-page-node-id="SH7G52lrKZLqMKCihLg8ZQ">
+            <div class="l" data-page-node-id="EBf0JKaQe42jnJobohpGow">同步频率<small data-page-node-id="KvrjhONtqdHwZMffoDWk2X">两次同步的最小间隔</small></div>
+            <div class="r" data-page-node-id="3MJFBOX1awOwYI2acvXWma">5 分钟</div>
+          </div>
+          <div class="row" data-page-node-id="WylmswSYUOXKmIYG03O7Bq">
+            <div class="l" data-page-node-id="bOoSHVHpZ6HxqeyUHRxKM8">最近同步<small data-page-node-id="cHd14o6dzrGWN4q70G0lAV">上次成功同步时间</small></div>
+            <div class="r" style="color:var(--accent)" data-page-node-id="BhpLBB8cQnlWBhwvWPaarJ">14:32:08 · 刚刚</div>
+          </div>
+          <div class="row" data-page-node-id="vizDw2q1e9HdC8akKbLVPh">
+            <div class="l" data-page-node-id="mUAzPi4sCW7m7FOR3Uy6AT">立即同步</div>
+            <div class="r" data-page-node-id="oi62IcKmIC5rl33ztMyuxh"><button class="btn-sync" data-page-node-id="cszMHAgOSIG6LsPMRrnW0s"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="yCHbY57MXA3XGYX2CGmVBQ"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="RClMMaLqd4FM9XTva4cXLu"/></svg>同步全部</button></div>
+          </div>
+        </div>
+
+        <div class="card" data-page-node-id="QZ2rNZikvVGlGx13ZhNP1i">
+          <div class="ct" data-page-node-id="cmufRaaTt24xArKxsT6tzI"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="KB6ODO0MHSiiCsse45U7Mz"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.6" data-page-node-id="hppHt7LEh0ON5AEmrKBhPx"/></svg>云端目录结构（百度网盘 /apps/WorkLog）</div>
+          <div class="tree" data-page-node-id="P4ZNoYB2yt0aYypC9TRzeA">
+            <div data-page-node-id="AHPg6vg2DHMqFVE7Nry1Nn"><span class="d" data-page-node-id="SnXifMhlD9GyCc4TKYVNmM">/apps/WorkLog/</span></div>
+            <div data-page-node-id="OCdRLKBhEEWTudE7ATPDPL">&nbsp;&nbsp;├─ <span class="f" data-page-node-id="xGORC5SWTYFbZUrcemLXmk">manifest.json</span> <span class="c" data-page-node-id="t0D5P6DjMg11RCh1fX674H"># 全量索引：笔记本 / 笔记 / 标签 / 修订号</span></div>
+            <div data-page-node-id="fwglCzM0aah0gdrcmlVqeb">&nbsp;&nbsp;├─ <span class="d" data-page-node-id="h3D2ZYaA0GjhdM3F6JCbHN">notes/</span> <span class="c" data-page-node-id="orDSr97EnMndLGbLFgxO5T"># 笔记正文（一笔记一文件）</span></div>
+            <div data-page-node-id="8urYwz6JJMjLrq3NhEtF9t">&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;├─ <span class="f" data-page-node-id="pdDVco7sB8mLQpLAQVoCdu">1729584921230.md</span></div>
+            <div data-page-node-id="xdb3M4gh5owvK5xCzu6yDq">&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;├─ <span class="f" data-page-node-id="DZmmOk6x2jxs1RRMEKe1hR">1729586304571.md</span> <span class="hl2" data-page-node-id="IOzvY0CiVAij5OF76DFeHU">← 正在编辑</span></div>
+            <div data-page-node-id="7jG8YqDc8SrhbEBN9PeHsf">&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;└─ …</div>
+            <div data-page-node-id="npNtQFPAygWWJ8rg4UskAn">&nbsp;&nbsp;├─ <span class="d" data-page-node-id="7aIKW0HFo9KHIcFq6uij57">assets/</span> <span class="c" data-page-node-id="7mfGyRVcCPpXMT5uzfDzi4"># 附件（按笔记隔离）</span></div>
+            <div data-page-node-id="YjO4BhakCGahYiDk9tWC9P">&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;└─ 1729586304571/<span class="f" data-page-node-id="bDBTO5eAoTrvTtWGoGNbWq">img_0001.png</span></div>
+            <div data-page-node-id="A8lK81SL4oduEon7m3KHSN">&nbsp;&nbsp;├─ <span class="d" data-page-node-id="MwX4laBwpBpYERQYw3dFS0">trash/</span> <span class="c" data-page-node-id="S9j3SxT6dgPDcHxNgEIqmr"># 回收站</span></div>
+            <div data-page-node-id="nAQnMD99QArCb0LT0GKYDF">&nbsp;&nbsp;└─ <span class="d" data-page-node-id="n9R2a46Qg6ZDzsRgOnOa9k">.meta/</span> <span class="c" data-page-node-id="IpIvWHEHSAfwT7uqbhfbLL"># 同步游标 / 账号配置</span></div>
+            <div data-page-node-id="5mvUw2oY6cCqbI8TTfiYzR">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <span class="f" data-page-node-id="3YXKP3rZImdvSoQV5YCoHY">sync_state.json</span></div>
+          </div>
+        </div>
+
+        <div class="card" data-page-node-id="3Jvdr0WNy3zGAGSm0pMH2Y">
+          <div class="ct" data-page-node-id="ChDp4KBsB3QIvZBJXaNdfj"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="3NsQW2cqpf99CHXc6EC5qy"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.6" data-page-node-id="VWD9oEUDReop3tsKfU27UC"/><path d="M19 10c1.5 0 2.5 1 2.5 2.5S20.5 15 19 15M5 10c-1.5 0-2.5 1-2.5 2.5S3.5 15 5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="8N1ofVqNlB5bE0xZ99zTBD"/><path d="M12 3v3M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="t6YBIRSF28XNwj9QIw3iTC"/></svg>账号与安全</div>
+          <div class="row" data-page-node-id="4g8Fs6vuUpoivVJQmY4nd6">
+            <div class="l" data-page-node-id="OLUnZ0P868noznqUQwaMOD">百度网盘账号</div>
+            <div class="r" data-page-node-id="slIhhEsvrUNwVZv3ApRjBT">wang***@163.com</div>
+          </div>
+          <div class="row" data-page-node-id="hcfMTuh39wtk8VbWJFlxki">
+            <div class="l" data-page-node-id="fWzhZeP1xhKhdEMhYZi9Zw">授权方式<small data-page-node-id="Q4cKrxkLZI4LwF323pr6ES">百度网盘开放平台 OAuth 2.0</small></div>
+            <div class="r" data-page-node-id="mwtPFqnMkNBMls4kPXK8BG"><button class="btn-outline" data-page-node-id="aDZwc6j5SJf7ZmUPOjADWB">重新授权</button></div>
+          </div>
+          <div class="row" data-page-node-id="6rMxKnUHMGDkTERJyYAA5N">
+            <div class="l" data-page-node-id="I8NM0rmw3vFMOuSec9Bz1M">退出登录</div>
+            <div class="r" data-page-node-id="eYtViwzD7ZngBg9wgoSZqp"><button class="btn-outline" style="color:var(--red);border-color:#f3d2d3" data-page-node-id="yWhwRiGuHI2jIJbwsfjqUA">退出</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sync-side" data-page-node-id="Sb12cL4oXYS6sd9DaEnHfX">
+        <div class="cap" data-page-node-id="HAPJxbaDQWvqS4YZyQguth">存储空间</div>
+        <div class="usage-card" data-page-node-id="nixiruCMPvDYH5nQnBTY1N">
+          <div class="big" data-page-node-id="hctOtf5fa0OMiEBUGRGNXx">2.4 GB <small data-page-node-id="KRcxnqW8NLxAhqD5TTxpOh">/ 2 TB</small></div>
+          <div class="bar" data-page-node-id="qnzF07HKzgkf8Z6eeFAC54"><i data-page-node-id="z6xXgY5Otleq6DH954MSzg"></i></div>
+          <div class="tip" data-page-node-id="huoca24mpS4YSgxzgCLyNu">笔记 128 篇 · 附件 312 个<br data-page-node-id="6uyQiEnaKFnC7iW9mvi6rd">以 Markdown 纯文本为主，占用极低。</div>
+        </div>
+        <div class="cap" data-page-node-id="hTsGtAgn9H3tKUkSU1V4ym">数据说明</div>
+        <div class="usage-card" style="font-size:12px;color:var(--text-2);line-height:1.8" data-page-node-id="tfgtcFphOhKX3nemnTUXxR">
+          所有笔记为开放格式，可直接用任意文本编辑器打开，也可通过百度网盘 App 查看、导出或迁移，数据完全归你所有。
+        </div>
+        <div class="note" data-page-node-id="L9OHqUNqEM8cUBIkfZfEwg">WorkLog · 数据属于你自己<br data-page-node-id="VDkNhlSLuVyO202rdK4RMA">无需订阅 · 无服务器存储</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const tabs=document.querySelectorAll('.tab');
+  const screens=document.querySelectorAll('.screen');
+  tabs.forEach(t=>{
+    t.addEventListener('click',()=>{
+      tabs.forEach(x=>x.classList.remove('active'));
+      screens.forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('screen-'+t.dataset.screen).classList.add('active');
+    });
+  });
+
+  // 侧边栏拖动调整宽度
+  (function(){
+    const sidebar=document.querySelector('.sidebar');
+    const resizer=document.querySelector('.resizer');
+    const mainWrap=document.querySelector('.main-wrap');
+    if(!sidebar||!resizer||!mainWrap) return;
+    const MIN=112, WIDE=200, MAX=320;
+    let dragging=false;
+    function applyMode(w){
+      if(w>=WIDE) sidebar.classList.add('wide');
+      else sidebar.classList.remove('wide');
+    }
+    resizer.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      dragging=true;
+      resizer.classList.add('active');
+      document.body.style.cursor='col-resize';
+      document.body.style.userSelect='none';
+    });
+    window.addEventListener('mousemove',function(e){
+      if(!dragging) return;
+      const rect=mainWrap.getBoundingClientRect();
+      let w=e.clientX-rect.left;
+      if(w<MIN) w=MIN;
+      if(w>MAX) w=MAX;
+      sidebar.style.width=w+'px';
+      applyMode(w);
+    });
+    window.addEventListener('mouseup',function(){
+      if(!dragging) return;
+      dragging=false;
+      resizer.classList.remove('active');
+      document.body.style.cursor='';
+      document.body.style.userSelect='';
+    });
+  })();
+</script>
+</body>
+</html>

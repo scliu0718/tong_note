@@ -1,0 +1,59 @@
+{
+  "": {
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/master.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/EditorView.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/EditorView.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/EditorView.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/EditorView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/EditorView.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/LoginView.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/LoginView.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/LoginView.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/LoginView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/LoginView.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/MainView.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/MainView.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/MainView.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/MainView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/MainView.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteListView.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteListView.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteListView.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteListView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteListView.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteStore+Bindings.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteStore+Bindings.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteStore+Bindings.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteStore+Bindings~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/NoteStore+Bindings.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SidebarView.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SidebarView.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SidebarView.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SidebarView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SidebarView.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SyncView.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SyncView.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SyncView.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SyncView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/SyncView.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/Theme.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/Theme.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/Theme.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/Theme~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/Theme.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/WorkLogApp.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/WorkLogApp.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/WorkLogApp.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/WorkLogApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLog.build/WorkLogApp.swiftdeps"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "": {
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/master.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/ImagePathScannerTests.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/ImagePathScannerTests.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/ImagePathScannerTests.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/ImagePathScannerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/ImagePathScannerTests.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/NoteStoreTests.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/NoteStoreTests.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/NoteStoreTests.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/NoteStoreTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogCoreTests.build/NoteStoreTests.swiftdeps"
+  }
+}

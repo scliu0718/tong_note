@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.build/master.swiftdeps"
+  },
+  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.build/runner.d",
+    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.build/runner.swiftdeps"
+  }
+}
