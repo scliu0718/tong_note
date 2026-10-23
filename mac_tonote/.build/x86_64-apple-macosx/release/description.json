@@ -1,8 +1,8 @@
 {
   "builtTestProducts" : [
     {
-      "binaryPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.xctest/Contents/MacOS/WorkLogPackageTests",
-      "packagePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog",
+      "binaryPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.xctest/Contents/MacOS/WorkLogPackageTests",
+      "packagePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote",
       "productName" : "WorkLogPackageTests"
     }
   ],
@@ -23,75 +23,75 @@
   "swiftCommands" : {
     "C.WorkLog-x86_64-apple-macosx15.0-release.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/sources",
-      "importPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "fileList" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/sources",
+      "importPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/EditorView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/LoginView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/MainView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteListView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteListView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteStore+Bindings.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteStore+Bindings.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SidebarView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SidebarView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SyncView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SyncView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/Theme.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/Theme.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/WorkLogApp.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/WorkLogApp.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/sources"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/sources"
         }
       ],
       "isLibrary" : false,
       "moduleName" : "WorkLog",
-      "moduleOutputPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLog.swiftmodule",
+      "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLog.swiftmodule",
       "objects" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/NoteListView.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/NoteStore+Bindings.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/SidebarView.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/SyncView.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/NoteListView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/NoteStore+Bindings.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/SidebarView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/SyncView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -100,7 +100,7 @@
         "-j12",
         "-DSWIFT_PACKAGE",
         "-module-cache-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
         "-parseable-output",
         "-Xfrontend",
         "-entry-point-function-name",
@@ -136,120 +136,120 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "worklog",
+        "mac_tonote",
         "-disable-sandbox"
       ],
-      "outputFileMapPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/NoteListView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/NoteListView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/NoteStore+Bindings.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/NoteStore+Bindings.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/SidebarView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/SidebarView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/SyncView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/SyncView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLog.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLog.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/EditorView.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/LoginView.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/MainView.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteListView.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteStore+Bindings.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SidebarView.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SyncView.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/Theme.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/WorkLogApp.swift"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteListView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteStore+Bindings.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SidebarView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SyncView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/Theme.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/WorkLogApp.swift"
       ],
-      "tempsPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build",
+      "tempsPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build",
       "wholeModuleOptimization" : true
     },
     "C.WorkLogCore-x86_64-apple-macosx15.0-release.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources",
-      "importPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "fileList" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources",
+      "importPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/AttachmentStore.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/ImagePathScanner.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/MarkdownConverter.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/Models.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/NoteStore.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/NoteStore.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextDocument.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextDocument.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextHTMLCodec.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextHTMLCodec.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "WorkLogCore",
-      "moduleOutputPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule",
+      "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule",
       "objects" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -258,12 +258,12 @@
         "-j12",
         "-DSWIFT_PACKAGE",
         "-module-cache-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-emit-objc-header",
         "-emit-objc-header-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/WorkLogCore-Swift.h",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/WorkLogCore-Swift.h",
         "-swift-version",
         "5",
         "-sdk",
@@ -294,95 +294,95 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "worklog",
+        "mac_tonote",
         "-disable-sandbox"
       ],
-      "outputFileMapPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/AttachmentStore.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/ImagePathScanner.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/MarkdownConverter.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/Models.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/NoteStore.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextDocument.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextHTMLCodec.swift"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/NoteStore.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextDocument.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextHTMLCodec.swift"
       ],
-      "tempsPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build",
+      "tempsPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build",
       "wholeModuleOptimization" : true
     },
     "C.WorkLogCoreTests-x86_64-apple-macosx15.0-release.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources",
-      "importPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "fileList" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources",
+      "importPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/ImagePathScannerTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/ImagePathScannerTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/NoteStoreTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/NoteStoreTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "WorkLogCoreTests",
-      "moduleOutputPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCoreTests.swiftmodule",
+      "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCoreTests.swiftmodule",
       "objects" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/ImagePathScannerTests.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/NoteStoreTests.swift.o"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/ImagePathScannerTests.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/NoteStoreTests.swift.o"
       ],
       "otherArguments" : [
         "-target",
         "x86_64-apple-macosx14.0",
         "-index-store-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/index/store",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/index/store",
         "-O",
         "-enable-testing",
         "-Xfrontend",
@@ -390,7 +390,7 @@
         "-j12",
         "-DSWIFT_PACKAGE",
         "-module-cache-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-swift-version",
@@ -423,63 +423,63 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "worklog",
+        "mac_tonote",
         "-disable-sandbox"
       ],
-      "outputFileMapPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/ImagePathScannerTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/ImagePathScannerTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/NoteStoreTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/NoteStoreTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCoreTests.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCoreTests.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/ImagePathScannerTests.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/NoteStoreTests.swift"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/ImagePathScannerTests.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/NoteStoreTests.swift"
       ],
-      "tempsPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build",
+      "tempsPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build",
       "wholeModuleOptimization" : true
     },
     "C.WorkLogPackageTests-x86_64-apple-macosx15.0-release.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources",
-      "importPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "fileList" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources",
+      "importPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichTextTests.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichTextTests.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCoreTests.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCoreTests.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "WorkLogPackageTests",
-      "moduleOutputPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogPackageTests.swiftmodule",
+      "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogPackageTests.swiftmodule",
       "objects" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/runner.swift.o"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/runner.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -491,12 +491,12 @@
         "-j12",
         "-DSWIFT_PACKAGE",
         "-module-cache-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-emit-objc-header",
         "-emit-objc-header-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/WorkLogPackageTests-Swift.h",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/WorkLogPackageTests-Swift.h",
         "-sdk",
         "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.4.sdk",
         "-F",
@@ -525,69 +525,74 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "worklog",
+        "mac_tonote",
         "-disable-sandbox"
       ],
-      "outputFileMapPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/runner.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/runner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogPackageTests.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogPackageTests.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
       ],
-      "tempsPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build",
+      "tempsPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build",
       "wholeModuleOptimization" : true
     },
     "C.WorkLogRichText-x86_64-apple-macosx15.0-release.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources",
-      "importPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "fileList" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources",
+      "importPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextBridge.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditor.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditorController.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditorController.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextNSTextView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextNSTextView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/ScalableImageCell.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "WorkLogRichText",
-      "moduleOutputPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule",
+      "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule",
       "objects" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell.swift.o"
       ],
       "otherArguments" : [
         "-target",
@@ -596,12 +601,12 @@
         "-j12",
         "-DSWIFT_PACKAGE",
         "-module-cache-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-emit-objc-header",
         "-emit-objc-header-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText-Swift.h",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText-Swift.h",
         "-swift-version",
         "5",
         "-sdk",
@@ -632,94 +637,99 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "worklog",
+        "mac_tonote",
         "-disable-sandbox"
       ],
-      "outputFileMapPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextBridge.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditor.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditorController.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextNSTextView.swift"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditorController.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextNSTextView.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/ScalableImageCell.swift"
       ],
-      "tempsPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build",
+      "tempsPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build",
       "wholeModuleOptimization" : true
     },
     "C.WorkLogRichTextTests-x86_64-apple-macosx15.0-release.module" : {
       "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
-      "fileList" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources",
-      "importPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "fileList" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources",
+      "importPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "inputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichText.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogCore.swiftmodule"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources"
         }
       ],
       "isLibrary" : true,
       "moduleName" : "WorkLogRichTextTests",
-      "moduleOutputPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichTextTests.swiftmodule",
+      "moduleOutputPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichTextTests.swiftmodule",
       "objects" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o"
       ],
       "otherArguments" : [
         "-target",
         "x86_64-apple-macosx14.0",
         "-index-store-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/index/store",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/index/store",
         "-O",
         "-enable-testing",
         "-Xfrontend",
@@ -727,7 +737,7 @@
         "-j12",
         "-DSWIFT_PACKAGE",
         "-module-cache-path",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
         "-parseable-output",
         "-parse-as-library",
         "-swift-version",
@@ -760,40 +770,40 @@
         "-Xcc",
         "-g",
         "-package-name",
-        "worklog",
+        "mac_tonote",
         "-disable-sandbox"
       ],
-      "outputFileMapPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/output-file-map.json",
+      "outputFileMapPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/output-file-map.json",
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules/WorkLogRichTextTests.swiftmodule"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules/WorkLogRichTextTests.swiftmodule"
         }
       ],
       "prepareForIndexing" : false,
       "sources" : [
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextTests.swift",
-        "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift"
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextTests.swift",
+        "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift"
       ],
-      "tempsPath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build",
+      "tempsPath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build",
       "wholeModuleOptimization" : true
     }
   },
@@ -806,29 +816,29 @@
       "-module-name",
       "WorkLog",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-whole-module-optimization",
       "-num-threads",
       "12",
       "-c",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/EditorView.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/LoginView.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/MainView.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteListView.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteStore+Bindings.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SidebarView.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SyncView.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/Theme.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/WorkLogApp.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteListView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteStore+Bindings.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SidebarView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SyncView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/Theme.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/WorkLogApp.swift",
       "-I",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "-target",
       "x86_64-apple-macosx14.0",
       "-O",
       "-j12",
       "-DSWIFT_PACKAGE",
       "-module-cache-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
       "-parseable-output",
       "-Xfrontend",
       "-entry-point-function-name",
@@ -864,7 +874,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-disable-sandbox",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
@@ -874,32 +884,32 @@
       "-module-name",
       "WorkLogCore",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-whole-module-optimization",
       "-num-threads",
       "12",
       "-c",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/AttachmentStore.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/ImagePathScanner.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/MarkdownConverter.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/Models.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/NoteStore.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextDocument.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextHTMLCodec.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/NoteStore.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextDocument.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextHTMLCodec.swift",
       "-I",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "-target",
       "x86_64-apple-macosx14.0",
       "-O",
       "-j12",
       "-DSWIFT_PACKAGE",
       "-module-cache-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-emit-objc-header",
       "-emit-objc-header-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/WorkLogCore-Swift.h",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/WorkLogCore-Swift.h",
       "-swift-version",
       "5",
       "-sdk",
@@ -930,7 +940,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-disable-sandbox",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
@@ -940,19 +950,19 @@
       "-module-name",
       "WorkLogCoreTests",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-whole-module-optimization",
       "-num-threads",
       "12",
       "-c",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/ImagePathScannerTests.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/NoteStoreTests.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/ImagePathScannerTests.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/NoteStoreTests.swift",
       "-I",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "-target",
       "x86_64-apple-macosx14.0",
       "-index-store-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/index/store",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/index/store",
       "-O",
       "-enable-testing",
       "-Xfrontend",
@@ -960,7 +970,7 @@
       "-j12",
       "-DSWIFT_PACKAGE",
       "-module-cache-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-swift-version",
@@ -993,7 +1003,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-disable-sandbox",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
@@ -1003,14 +1013,14 @@
       "-module-name",
       "WorkLogPackageTests",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-whole-module-optimization",
       "-num-threads",
       "12",
       "-c",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift",
       "-I",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "-target",
       "x86_64-apple-macosx14.0",
       "-O",
@@ -1020,12 +1030,12 @@
       "-j12",
       "-DSWIFT_PACKAGE",
       "-module-cache-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-emit-objc-header",
       "-emit-objc-header-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/WorkLogPackageTests-Swift.h",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/WorkLogPackageTests-Swift.h",
       "-sdk",
       "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.4.sdk",
       "-F",
@@ -1054,7 +1064,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-disable-sandbox",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
@@ -1064,29 +1074,30 @@
       "-module-name",
       "WorkLogRichText",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-whole-module-optimization",
       "-num-threads",
       "12",
       "-c",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextBridge.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditor.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditorController.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextNSTextView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditorController.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextNSTextView.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/ScalableImageCell.swift",
       "-I",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "-target",
       "x86_64-apple-macosx14.0",
       "-O",
       "-j12",
       "-DSWIFT_PACKAGE",
       "-module-cache-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-emit-objc-header",
       "-emit-objc-header-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText-Swift.h",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText-Swift.h",
       "-swift-version",
       "5",
       "-sdk",
@@ -1117,7 +1128,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-disable-sandbox",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
@@ -1127,21 +1138,21 @@
       "-module-name",
       "WorkLogRichTextTests",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-whole-module-optimization",
       "-num-threads",
       "12",
       "-c",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextTests.swift",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextTests.swift",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift",
       "-I",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/Modules",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/Modules",
       "-target",
       "x86_64-apple-macosx14.0",
       "-index-store-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/index/store",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/index/store",
       "-O",
       "-enable-testing",
       "-Xfrontend",
@@ -1149,7 +1160,7 @@
       "-j12",
       "-DSWIFT_PACKAGE",
       "-module-cache-path",
-      "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/ModuleCache",
+      "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/ModuleCache",
       "-parseable-output",
       "-parse-as-library",
       "-swift-version",
@@ -1182,7 +1193,7 @@
       "-Xcc",
       "-g",
       "-package-name",
-      "worklog",
+      "mac_tonote",
       "-disable-sandbox",
       "-driver-use-frontend-path",
       "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
@@ -1217,14 +1228,14 @@
 
   },
   "testEntryPointCommands" : {
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift" : {
       "inputs" : [
 
       ],
       "outputs" : [
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
         }
       ]
     }
@@ -1233,7 +1244,7 @@
     "enableAllTraits" : false
   },
   "writeCommands" : {
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/sources" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1242,44 +1253,44 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/EditorView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/EditorView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/LoginView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/LoginView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/MainView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/MainView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteListView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteListView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/NoteStore+Bindings.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/NoteStore+Bindings.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SidebarView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SidebarView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/SyncView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/SyncView.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/Theme.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/Theme.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLog/WorkLogApp.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLog/WorkLogApp.swift"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/sources"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/sources"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.product/Objects.LinkFileList" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.product/Objects.LinkFileList" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1288,88 +1299,92 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/EditorView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/LoginView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/MainView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/NoteListView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/NoteListView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/NoteStore+Bindings.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/NoteStore+Bindings.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/SidebarView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/SidebarView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/SyncView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/SyncView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/Theme.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.build/WorkLogApp.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell.swift.o"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLog.product/Objects.LinkFileList"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLog.product/Objects.LinkFileList"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1378,36 +1393,36 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/AttachmentStore.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/ImagePathScanner.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/MarkdownConverter.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/Models.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/NoteStore.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/NoteStore.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextDocument.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextDocument.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextHTMLCodec.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextHTMLCodec.swift"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/sources"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1416,16 +1431,16 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/ImagePathScannerTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/ImagePathScannerTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogCoreTests/NoteStoreTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogCoreTests/NoteStoreTests.swift"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/sources"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1434,12 +1449,12 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.derived/runner.swift"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/sources"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.product/Objects.LinkFileList" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.product/Objects.LinkFileList" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1448,80 +1463,84 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/AttachmentStore.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/ImagePathScanner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/MarkdownConverter.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/Models.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/NoteStore.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextDocument.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/RichTextHTMLCodec.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/ImagePathScannerTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/ImagePathScannerTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/NoteStoreTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCoreTests.build/NoteStoreTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/runner.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.build/runner.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RealDataRenderingTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextEditorInteractionTests.swift.o"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RichTextTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/RoundTripFidelityTests.swift.o"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogPackageTests.product/Objects.LinkFileList"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogPackageTests.product/Objects.LinkFileList"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1530,24 +1549,28 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextBridge.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditor.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditorController.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditorController.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextNSTextView.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextNSTextView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/ScalableImageCell.swift"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/sources"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources" : {
       "alwaysOutOfDate" : false,
       "inputs" : [
         {
@@ -1556,24 +1579,24 @@
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RealDataRenderingTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextEditorInteractionTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RichTextTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RichTextTests.swift"
         },
         {
           "kind" : "file",
-          "name" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift"
+          "name" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/Tests/WorkLogRichTextTests/RoundTripFidelityTests.swift"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichTextTests.build/sources"
     },
-    "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
+    "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
       "alwaysOutOfDate" : true,
       "inputs" : [
         {
@@ -1585,7 +1608,7 @@
           "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
         }
       ],
-      "outputFilePath" : "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+      "outputFilePath" : "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
     }
   }
 }

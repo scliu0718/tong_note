@@ -1,12 +1,12 @@
 version: "Apple Swift version 6.1 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)"
-options: "ae2952848eddda09d211809751adc0c0649818d4039ecee7bfd4868ca9eb49fe"
-build_start_time: [1792749509, 140738000]
-build_end_time: [1792749515, 735592000]
+options: "427c553302d11c9c7bda1322add5d3747b5200642092bfcc74395d42c3a5ec1f"
+build_start_time: [1792756557, 256590000]
+build_end_time: [1792756569, 69589000]
 inputs:
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/AttachmentStore.swift": [1792745089, 989942626]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/ImagePathScanner.swift": [1792748435, 259015126]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/MarkdownConverter.swift": [1792745872, 532378670]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/Models.swift": [1792745108, 21053338]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/NoteStore.swift": [1792745648, 886408325]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextDocument.swift": [1792745669, 323497888]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogCore/RichTextHTMLCodec.swift": [1792749399, 360061753]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/AttachmentStore.swift": [1792745089, 989942626]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/ImagePathScanner.swift": [1792748435, 259015126]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/MarkdownConverter.swift": [1792745872, 532378670]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/Models.swift": [1792745108, 21053338]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/NoteStore.swift": [1792745648, 886408325]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextDocument.swift": [1792745669, 323497888]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogCore/RichTextHTMLCodec.swift": [1792749399, 360061753]

@@ -90,7 +90,7 @@ struct SidebarView: View {
     }
 
     private var avatar: some View {
-        Text("WL")
+        Text("同")
             .font(.system(size: 12, weight: .bold))
             .foregroundColor(.white)
             .frame(width: 32, height: 32)

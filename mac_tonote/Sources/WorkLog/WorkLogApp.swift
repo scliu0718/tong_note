@@ -5,7 +5,7 @@ struct WorkLogApp: App {
     @State private var isLoggedIn = false
 
     var body: some Scene {
-        WindowGroup("WorkLog") {
+        WindowGroup("同笔记") {
             Group {
                 if isLoggedIn {
                     MainView(onLogout: { isLoggedIn = false })

@@ -1,9 +1,10 @@
 version: "Apple Swift version 6.1 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)"
-options: "73da07777770c4f101df12edce70e5f6beb9744f69ab9f0e10ebfab50ebb7adb"
-build_start_time: [1792749515, 911412000]
-build_end_time: [1792749520, 315192000]
+options: "8eb8a369ccbb8fdfac4be73f93395687d1365db221b06c90a387d8c8394ded8a"
+build_start_time: [1792756622, 210301000]
+build_end_time: [1792756626, 66269000]
 inputs:
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextBridge.swift": [1792749412, 326272576]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditor.swift": [1792748247, 691973778]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditorController.swift": [1792748220, 741866952]
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextNSTextView.swift": [1792748191, 146530002]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift": [1792749412, 326272576]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift": [1792748247, 691973778]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditorController.swift": [1792748220, 741866952]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextNSTextView.swift": [1792748191, 146530002]
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/ScalableImageCell.swift": [1792756613, 643746452]

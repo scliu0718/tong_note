@@ -1,4 +1,4 @@
 module WorkLogCore {
-    header "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogCore.build/WorkLogCore-Swift.h"
+    header "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogCore.build/WorkLogCore-Swift.h"
     requires objc
 }

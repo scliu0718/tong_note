@@ -1,27 +1,32 @@
 {
   "": {
-    "dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText.d",
-    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText.o",
-    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/master.swiftdeps"
+    "dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText.d",
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/WorkLogRichText.o",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/master.swiftdeps"
   },
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextBridge.swift": {
-    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o",
-    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge~partial.swiftmodule",
-    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swiftdeps"
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextBridge.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextBridge.swiftdeps"
   },
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditor.swift": {
-    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o",
-    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor~partial.swiftmodule",
-    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swiftdeps"
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditor.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditor.swiftdeps"
   },
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextEditorController.swift": {
-    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o",
-    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController~partial.swiftmodule",
-    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swiftdeps"
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextEditorController.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextEditorController.swiftdeps"
   },
-  "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/Sources/WorkLogRichText/RichTextNSTextView.swift": {
-    "object": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o",
-    "swiftmodule": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView~partial.swiftmodule",
-    "swift-dependencies": "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swiftdeps"
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/RichTextNSTextView.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/RichTextNSTextView.swiftdeps"
+  },
+  "/Users/wukong123/Documents/android/tong_note/mac_tonote/Sources/WorkLogRichText/ScalableImageCell.swift": {
+    "object": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell.swift.o",
+    "swiftmodule": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell~partial.swiftmodule",
+    "swift-dependencies": "/Users/wukong123/Documents/android/tong_note/mac_tonote/.build/x86_64-apple-macosx/release/WorkLogRichText.build/ScalableImageCell.swiftdeps"
   }
 }

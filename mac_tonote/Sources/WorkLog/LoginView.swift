@@ -48,8 +48,8 @@ struct LoginView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 13))
                 .overlay(RoundedRectangle(cornerRadius: 13).stroke(Color.white.opacity(0.22), lineWidth: 1))
             VStack(alignment: .leading, spacing: 1) {
-                Text("WorkLog").font(.system(size: 22, weight: .bold)).foregroundColor(.white)
-                Text("工作日志 · 笔记").font(.system(size: 12)).foregroundColor(.white.opacity(0.8))
+                Text("同笔记").font(.system(size: 22, weight: .bold)).foregroundColor(.white)
+                Text("记录 · 同步 · 属于你").font(.system(size: 12)).foregroundColor(.white.opacity(0.8))
             }
         }
     }
@@ -88,7 +88,7 @@ struct LoginView: View {
     }
 
     private var footerText: some View {
-        Text("WorkLog 不会读取你网盘中 worklog 目录以外的任何文件")
+        Text("同笔记不会读取你网盘中 worklog 目录以外的任何文件")
             .font(.system(size: 11))
             .foregroundColor(.white.opacity(0.65))
     }
@@ -96,7 +96,7 @@ struct LoginView: View {
     // MARK: - 右登录区
     private var loginPanel: some View {
         VStack(spacing: 22) {
-            Text("欢迎使用 WorkLog")
+            Text("欢迎使用同笔记")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(Theme.textPrimary)
             Text("使用百度网盘账号登录，笔记将存储于你的网盘")
@@ -146,7 +146,7 @@ struct LoginView: View {
                     .stroke(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
             )
 
-            Text("登录即代表你授权 WorkLog 通过百度网盘开放平台读写\n/apps/WorkLog 目录。授权信息仅保存在本机密钥链中。")
+            Text("登录即代表你授权同笔记通过百度网盘开放平台读写\n/apps/WorkLog 目录。授权信息仅保存在本机密钥链中。")
                 .font(.system(size: 11))
                 .foregroundColor(Theme.textQuaternary)
                 .multilineTextAlignment(.center)

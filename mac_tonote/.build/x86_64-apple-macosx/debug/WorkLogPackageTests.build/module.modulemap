@@ -1,4 +1,0 @@
-module WorkLogPackageTests {
-    header "/Users/wukong123/WorkBuddy/2026-10-22-16-59-02/WorkLog/.build/x86_64-apple-macosx/debug/WorkLogPackageTests.build/WorkLogPackageTests-Swift.h"
-    requires objc
-}
