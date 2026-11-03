@@ -93,7 +93,13 @@ def make_master():
     md = ImageDraw.Draw(mask)
     md.rounded_rectangle([0, 0, s - 1, s - 1], radius=round(s * 0.225), fill=255)
     bg.putalpha(mask)
-    return bg
+
+    # 5) 缩小到 macOS 标准占位（1024 画布中图标占 824），四周留透明边距
+    inner = round(s * 0.824)
+    art = bg.resize((inner, inner), Image.LANCZOS)
+    final = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    final.paste(art, ((s - inner) // 2, (s - inner) // 2), art)
+    return final
 
 
 def build_iconset(master):

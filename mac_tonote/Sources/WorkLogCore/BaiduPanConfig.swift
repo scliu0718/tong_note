@@ -52,6 +52,9 @@ public enum BaiduPanConfig {
     /// 网盘 xpan 接口（用户信息 / 配额）
     public static let xpanAPI = URL(string: "https://pan.baidu.com/rest/2.0/xpan/nas")!
 
+    /// 同笔记在百度网盘的应用根目录（PCS 会按需创建）
+    public static let remoteRoot = "/apps/tong_log"
+
     /// 是否已填入有效凭证
     public static var isConfigured: Bool {
         !appKey.isEmpty && !appSecret.isEmpty

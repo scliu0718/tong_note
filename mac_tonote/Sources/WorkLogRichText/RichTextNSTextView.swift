@@ -67,7 +67,7 @@ final class RichTextNSTextView: NSTextView {
             return nil
         }
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("WorkLogPaste", isDirectory: true)
+            .appendingPathComponent("tonotePaste", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("paste-\(UUID().uuidString).png")
         do {

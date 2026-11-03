@@ -22,8 +22,10 @@ struct EditorView: View {
     @Binding var note: Note
     @Binding var content: NoteContent
     var attachments: AttachmentStore
+    var store: NoteStore
     var onDelete: () -> Void
 
+    @EnvironmentObject private var sync: SyncEngine
     @StateObject private var controller = RichTextEditorController()
     @State private var newTag = ""
     @State private var showAddTag = false
@@ -88,6 +90,31 @@ struct EditorView: View {
         }
     }
 
+    private var isQuickSync: Bool {
+        note.id == NoteStore.quickSyncNoteID
+    }
+
+    private var syncStatusText: some View {
+        Group {
+            switch sync.status {
+            case .idle, .syncing:
+                EmptyView()
+            case .success(let date):
+                Text("已同步 \(Self.timeFormatter.string(from: date))")
+                    .font(.system(size: 11)).foregroundColor(Theme.textTertiary)
+            case .failed(let msg):
+                Text("失败：\(msg)")
+                    .font(.system(size: 11)).foregroundColor(Theme.red)
+            }
+        }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     // MARK: - 标题区
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -141,9 +168,33 @@ struct EditorView: View {
 
                 Spacer()
 
-                HStack(spacing: 5) {
-                    Circle().fill(Theme.accent).frame(width: 6, height: 6)
-                    Text("已保存到本地").font(.system(size: 12, weight: .medium)).foregroundColor(Theme.accent)
+                if isQuickSync {
+                    // 「快同步」篇：右上角提供单独同步本篇的按钮 + 状态
+                    HStack(spacing: 6) {
+                        syncStatusText
+                        Button(action: { Task { await sync.syncSingleNote(store: store, noteID: note.id) } }) {
+                            HStack(spacing: 4) {
+                                if sync.status.isSyncing {
+                                    ProgressView().controlSize(.small).scaleEffect(0.6)
+                                } else {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                Text("同步").font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Theme.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(sync.status.isSyncing)
+                    }
+                } else {
+                    HStack(spacing: 5) {
+                        Circle().fill(Theme.accent).frame(width: 6, height: 6)
+                        Text("已保存到本地").font(.system(size: 12, weight: .medium)).foregroundColor(Theme.accent)
+                    }
                 }
             }
         }
@@ -270,14 +321,16 @@ struct EditorView: View {
             Spacer()
 
             Text("\(plainWordCount) 字").font(.system(size: 12)).foregroundColor(Theme.textTertiary)
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 14))
-                    .foregroundColor(Theme.textTertiary)
-                    .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
+            if !isQuickSync {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundColor(Theme.textTertiary)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).help("删除（移入回收站）")
             }
-            .buttonStyle(.plain).help("删除（移入回收站）")
         }
         .padding(.horizontal, 20).padding(.vertical, 6)
         .overlay(Rectangle().fill(Theme.lineSoft).frame(height: 1), alignment: .bottom)
