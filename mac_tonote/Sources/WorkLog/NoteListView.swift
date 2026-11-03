@@ -46,7 +46,7 @@ struct NoteListView: View {
             Button("彻底删除", role: .destructive) {
                 if let id = confirmDeleteID {
                     store.permanentlyDelete(id)
-                    if selectedID == id { selectedID = nil }
+                    if selectedID == id { selectedID = NoteStore.quickSyncNoteID }
                 }
                 confirmDeleteID = nil
             }
@@ -79,7 +79,7 @@ struct NoteListView: View {
             Divider()
             Button("删除", role: .destructive) {
                 store.moveToTrash(note.id)
-                if selectedID == note.id { selectedID = nil }
+                if selectedID == note.id { selectedID = NoteStore.quickSyncNoteID }
             }
         }
     }
@@ -126,7 +126,7 @@ struct NoteListView: View {
 
     private var syncButton: some View {
         Button(action: { Task { await sync.quickSync(store: store) } }) {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 if sync.status.isSyncing {
                     ProgressView()
                         .controlSize(.small)
@@ -136,13 +136,15 @@ struct NoteListView: View {
                         .font(.system(size: 12, weight: .semibold))
                 }
                 if case .success = sync.status {
-                    Text("已同步").font(.system(size: 11, weight: .semibold))
+                    Text("已同步").font(.system(size: 12, weight: .semibold))
                 } else {
-                    Text("一键同步").font(.system(size: 11, weight: .semibold))
+                    Text("一键同步").font(.system(size: 12, weight: .semibold))
                 }
             }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundColor(.white)
-            .padding(.horizontal, 10).padding(.vertical, 5)
+            .padding(.horizontal, 11).padding(.vertical, 6)
             .background(Theme.accent)
             .clipShape(RoundedRectangle(cornerRadius: 7))
         }
