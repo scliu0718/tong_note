@@ -11,13 +11,22 @@ public final class NoteStore: ObservableObject {
 
     /// 数据根目录（notes.json 与 attachments 同级）
     public let rootDirectory: URL
+
+    /// 「快同步」虚拟笔记的固定 ID：它作为一条特殊笔记可在编辑器中打开，
+    /// 其顶部右上角提供「单独同步本篇」按钮。它不出现在普通笔记列表中。
+    public static let quickSyncNoteID = UUID(uuidString: "E1C2D3A4-B5F6-47C8-9D0E-1F2A3B4C5D6E")!
     /// 附件仓库
     public let attachments: AttachmentStore
 
     public convenience init() {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("WorkLog", isDirectory: true)
+        let dir = appSupport.appendingPathComponent("tonote", isDirectory: true)
+        // 迁移旧目录（WorkLog → tonote），避免升级后本地数据丢失
+        let legacyDir = appSupport.appendingPathComponent("WorkLog", isDirectory: true)
+        if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacyDir.path) {
+            try? fm.moveItem(at: legacyDir, to: dir)
+        }
         self.init(directory: dir)
     }
 
@@ -39,6 +48,26 @@ public final class NoteStore: ObservableObject {
             notes = Note.samples
             save()
         }
+        ensureQuickSyncNote()
+    }
+
+    /// 确保「快同步」虚拟笔记存在（不存在则创建并保存）。
+    private func ensureQuickSyncNote() {
+        guard notes.first(where: { $0.id == NoteStore.quickSyncNoteID }) == nil else { return }
+        var q = Note(id: NoteStore.quickSyncNoteID,
+                     title: "快同步",
+                     body: """
+                     这是「快同步」专属笔记。点击右上角的「同步」按钮即可**单独**把本篇同步到百度网盘（先拉云端、对比、再上传）。
+
+                     - 同步逻辑：仅针对本篇笔记与云端同 ID 笔记对比，以「更新时间较新者」为准，再回写本地并上传。
+                     - 需要登录并已授权百度网盘（netdisk 读写）才能生效。
+                     - 在左侧「全部笔记」顶部也能看到「快同步」卡片，点击可在此打开；右上角「一键同步」按钮则同步整个资料库。
+                     """,
+                     notebook: "工作日志")
+        q.contentFormat = .markdown
+        q.pinned = false
+        notes.append(q)
+        save()
     }
 
     public var storagePath: String { fileURL.path }
@@ -55,14 +84,15 @@ public final class NoteStore: ObservableObject {
 
     public var allTags: [String] {
         var set = Set<String>()
-        for n in notes where !n.isTrashed {
+        for n in notes where !n.isTrashed && n.id != NoteStore.quickSyncNoteID {
             for t in n.tags { set.insert(t) }
         }
         return set.sorted()
     }
 
     public func count(inNotebook name: String) -> Int {
-        name == Notebooks.all ? activeNotes.count : activeNotes.filter { $0.notebook == name }.count
+        let list = activeNotes.filter { $0.id != NoteStore.quickSyncNoteID }
+        return name == Notebooks.all ? list.count : list.filter { $0.notebook == name }.count
     }
 
     public func count(withTag tag: String) -> Int {
@@ -105,6 +135,12 @@ public final class NoteStore: ObservableObject {
 
     public func note(with id: UUID) -> Note? {
         notes.first { $0.id == id }
+    }
+
+    /// 整体替换笔记集合（同步合并后回写）。会刷新更新时间并原子保存。
+    public func setNotes(_ newNotes: [Note]) {
+        notes = newNotes
+        save()
     }
 
     /// 更新一条笔记（编辑写回），自动刷新更新时间并保存

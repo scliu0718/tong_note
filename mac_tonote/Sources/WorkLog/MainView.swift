@@ -47,6 +47,7 @@ struct MainView: View {
                 EditorView(note: store.binding(for: id),
                            content: store.contentBinding(for: id),
                            attachments: store.attachments,
+                           store: store,
                            onDelete: { store.moveToTrash(id) })
                     .id(id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -56,7 +57,9 @@ struct MainView: View {
         }
         .background(Theme.windowBg)
         .onAppear {
-            if selectedID == nil { selectedID = store.notes.first?.id }
+            if selectedID == nil {
+                selectedID = store.notes.first(where: { $0.id != NoteStore.quickSyncNoteID })?.id
+            }
         }
         .sheet(isPresented: $showSync) {
             SyncView()
@@ -67,6 +70,7 @@ struct MainView: View {
     // MARK: - 过滤后的列表
     private var displayedNotes: [Note] {
         var list = showingTrash ? store.trashNotes : store.activeNotes
+        list = list.filter { $0.id != NoteStore.quickSyncNoteID }
         if !showingTrash {
             if selectedNotebook != Notebooks.all {
                 list = list.filter { $0.notebook == selectedNotebook }

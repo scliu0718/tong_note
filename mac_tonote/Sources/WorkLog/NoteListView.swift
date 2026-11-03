@@ -9,6 +9,7 @@ struct NoteListView: View {
     let notes: [Note]
     let showingTrash: Bool
 
+    @EnvironmentObject private var sync: SyncEngine
     @State private var confirmDeleteID: UUID?
 
     var body: some View {
@@ -17,6 +18,12 @@ struct NoteListView: View {
             filterBar
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 8) {
+                    // 「快同步」固定第一行：不随排序/搜索变化，始终置顶
+                    if !showingTrash {
+                        QuickSyncCard(status: sync.status, message: sync.lastMessage)
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedID = NoteStore.quickSyncNoteID }
+                    }
                     if notes.isEmpty {
                         emptyState
                     } else {
@@ -109,10 +116,38 @@ struct NoteListView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { sortMode = mode }
             }
+            Spacer(minLength: 0)
+            syncButton
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14).padding(.bottom, 8)
         .overlay(Rectangle().fill(Theme.lineSoft).frame(height: 1), alignment: .bottom)
+    }
+
+    private var syncButton: some View {
+        Button(action: { Task { await sync.quickSync(store: store) } }) {
+            HStack(spacing: 4) {
+                if sync.status.isSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.6)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                if case .success = sync.status {
+                    Text("已同步").font(.system(size: 11, weight: .semibold))
+                } else {
+                    Text("一键同步").font(.system(size: 11, weight: .semibold))
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Theme.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .disabled(sync.status.isSyncing)
     }
 }
 
@@ -158,4 +193,84 @@ struct NoteCard: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Theme.accentTint2 : Color.clear, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
+}
+
+/// 列表顶部固定的「快同步」控制行：点击即触发一次拉取→对比→上传。
+struct QuickSyncCard: View {
+    let status: SyncEngine.Status
+    let message: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Theme.accentTint)
+                    .frame(width: 34, height: 34)
+                if status.isSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.6)
+                } else {
+                    Image(systemName: "icloud.and.arrow.up")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Theme.accent)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text("快同步")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+                    if status.isSyncing {
+                        Text("同步中…")
+                            .font(.system(size: 11))
+                            .foregroundColor(Theme.accent)
+                    }
+                }
+                Text(statusSubtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(statusColor)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Theme.textQuaternary)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.accentTint)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accentTint2, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var statusSubtitle: String {
+        switch status {
+        case .idle:
+            return "点击同步到百度网盘"
+        case .syncing:
+            return "正在拉取云端并对比…"
+        case .success(let date):
+            let t = Self.timeFormatter.string(from: date)
+            let extra = message.map { " · \($0)" } ?? ""
+            return "上次同步 \(t)\(extra)"
+        case .failed(let msg):
+            return "同步失败：\(msg)"
+        }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case .idle: return Theme.textTertiary
+        case .syncing: return Theme.accent
+        case .success: return Theme.textTertiary
+        case .failed: return Theme.red
+        }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
 }
