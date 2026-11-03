@@ -48,7 +48,10 @@ struct MainView: View {
                            content: store.contentBinding(for: id),
                            attachments: store.attachments,
                            store: store,
-                           onDelete: { store.moveToTrash(id) })
+                           onDelete: {
+                               store.moveToTrash(id)
+                               if selectedID == id { selectedID = NoteStore.quickSyncNoteID }
+                           })
                     .id(id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -57,8 +60,14 @@ struct MainView: View {
         }
         .background(Theme.windowBg)
         .onAppear {
-            if selectedID == nil {
-                selectedID = store.notes.first(where: { $0.id != NoteStore.quickSyncNoteID })?.id
+            if let id = selectedID, store.note(with: id) != nil { return }
+            selectedID = store.activeNotes.first(where: { $0.id != NoteStore.quickSyncNoteID })?.id
+                ?? NoteStore.quickSyncNoteID
+        }
+        // 兜底：当前选中的笔记被删除/消失时，右侧回到「快同步」
+        .onReceive(store.$notes) { notes in
+            if let id = selectedID, !notes.contains(where: { $0.id == id }) {
+                selectedID = NoteStore.quickSyncNoteID
             }
         }
         .sheet(isPresented: $showSync) {

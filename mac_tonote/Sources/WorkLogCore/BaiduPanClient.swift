@@ -207,49 +207,50 @@ public final class BaiduPanClient {
         )
         struct PreResp: Codable {
             let uploadid: String?
+            let returnType: Int?
+            let blockList: [String]?
             let errno: Int?
-        }
-        guard let pre = try? JSONDecoder().decode(PreResp.self, from: precreate),
-              let uploadID = pre.uploadid, pre.errno ?? -1 == 0 else {
-            let errno = (try? JSONDecoder().decode(PreResp.self, from: precreate).errno) ?? -1
-            throw BaiduPanError.server(message: "precreate 失败（errno=\(errno)）")
+
+            enum CodingKeys: String, CodingKey {
+                case uploadid
+                case returnType = "return_type"
+                case blockList = "block_list"
+                case errno
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                // uploadid 百度有时返回字符串、有时是数字，做兼容
+                if let s = try? c.decode(String.self, forKey: .uploadid) {
+                    uploadid = s
+                } else if let i = try? c.decode(Int64.self, forKey: .uploadid) {
+                    uploadid = String(i)
+                } else {
+                    uploadid = nil
+                }
+                returnType = try? c.decode(Int.self, forKey: .returnType)
+                blockList = try? c.decode([String].self, forKey: .blockList)
+                errno = try? c.decode(Int.self, forKey: .errno)
+            }
         }
 
-        // 2) 上传分片到 c.pcs.baidu.com（type=tmpfile）
-        guard let blockURL = URL(string: "https://c.pcs.baidu.com/rest/2.0/pcs/file") else {
-            throw BaiduPanError.invalidResponse
+        let decodePre = { try? JSONDecoder().decode(PreResp.self, from: precreate) }
+        guard let pre = decodePre(), pre.errno ?? -1 == 0, let uploadID = pre.uploadid else {
+            let errno = decodePre()?.errno ?? -1
+            throw BaiduPanError.server(message: "precreate 失败（errno=\(errno)）\(Self.bodySnippet(precreate))")
         }
-        var bc = URLComponents(url: blockURL, resolvingAgainstBaseURL: false)!
-        bc.queryItems = [
-            URLQueryItem(name: "method", value: "upload"),
-            URLQueryItem(name: "type", value: "tmpfile"),
-            URLQueryItem(name: "path", value: remotePath),
-            URLQueryItem(name: "uploadid", value: uploadID),
-            URLQueryItem(name: "partseq", value: "0"),
-            URLQueryItem(name: "access_token", value: accessToken),
-        ]
-        let boundary = "----TonoteBoundary\(UUID().uuidString)"
-        var upReq = URLRequest(url: bc.url!)
-        upReq.httpMethod = "POST"
-        upReq.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"blob\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
-        body.append(data)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        upReq.httpBody = body
-        let (upData, upResp) = try await session.data(for: upReq)
-        if let http = upResp as? HTTPURLResponse, http.statusCode >= 300 {
-            throw BaiduPanError.server(message: "上传分片失败（HTTP \(http.statusCode)）")
-        }
-        if let obj = try? JSONSerialization.jsonObject(with: upData) as? [String: Any],
-           let errno = obj["errno"] as? Int, errno != 0 {
-            throw BaiduPanError.server(message: "上传分片失败（errno=\(errno)）")
+
+        // return_type == 2 表示云端已有相同分片（秒传），无需再上传分片
+        let needBlockUpload = (pre.returnType ?? 1) != 2 && !(pre.blockList?.isEmpty ?? false)
+        if needBlockUpload {
+            try await uploadBlock(data,
+                                  remotePath: remotePath,
+                                  uploadID: uploadID,
+                                  accessToken: accessToken)
         }
 
         // 3) create：提交分片，完成文件（rtype=3 覆盖同名）
-        _ = try await postForm(
+        let created = try await postForm(
             "https://pan.baidu.com/rest/2.0/xpan/file",
             accessToken: accessToken,
             query: [URLQueryItem(name: "method", value: "create")],
@@ -262,9 +263,21 @@ public final class BaiduPanClient {
                 "rtype": "3",
             ]
         )
+        if let obj = try? JSONSerialization.jsonObject(with: created) as? [String: Any],
+           let errno = obj["errno"] as? Int, errno != 0 {
+            throw BaiduPanError.server(message: "create 失败（errno=\(errno)）\(Self.bodySnippet(created))")
+        }
     }
 
     // MARK: 私有
+
+    /// 截取响应体前 300 字符，便于在错误信息中看到服务端原始返回。
+    private static func bodySnippet(_ data: Data) -> String {
+        guard let text = String(data: data.prefix(300), encoding: .utf8), !text.isEmpty else {
+            return ""
+        }
+        return " · 响应：\(text)"
+    }
 
     /// 以 application/x-www-form-urlencoded 发送 POST 并返回响应体。
     private func postForm(_ base: String, accessToken: String,
@@ -280,6 +293,42 @@ public final class BaiduPanClient {
             throw BaiduPanError.server(message: "请求失败（HTTP \(http.statusCode)）")
         }
         return data
+    }
+
+    /// 上传单个分片到 `superfile2`（开放平台分片上传专用端点）。
+    private func uploadBlock(_ data: Data, remotePath: String,
+                             uploadID: String, accessToken: String) async throws {
+        guard let url = URL(string: "https://c.pcs.baidu.com/rest/2.0/pcs/superfile2") else {
+            throw BaiduPanError.invalidResponse
+        }
+        var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            URLQueryItem(name: "method", value: "upload"),
+            URLQueryItem(name: "type", value: "tmpfile"),
+            URLQueryItem(name: "path", value: remotePath),
+            URLQueryItem(name: "uploadid", value: uploadID),
+            URLQueryItem(name: "partseq", value: "0"),
+            URLQueryItem(name: "access_token", value: accessToken),
+        ]
+        let boundary = "----TonoteBoundary\(UUID().uuidString)"
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"blob\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+        let (respData, resp) = try await session.data(for: req)
+        if let http = resp as? HTTPURLResponse, http.statusCode >= 300 {
+            throw BaiduPanError.server(message: "上传分片失败（HTTP \(http.statusCode)）\(Self.bodySnippet(respData))")
+        }
+        if let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+           let errno = obj["errno"] as? Int, errno != 0 {
+            throw BaiduPanError.server(message: "上传分片失败（errno=\(errno)）\(Self.bodySnippet(respData))")
+        }
     }
 
     // MARK: 私有
