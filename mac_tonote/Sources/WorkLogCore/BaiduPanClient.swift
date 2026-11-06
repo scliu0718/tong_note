@@ -38,14 +38,15 @@ public final class BaiduPanClient {
     // MARK: 授权
 
     /// 构造授权页 URL（授权码模式）。
-    public func authorizationURL(state: String) -> URL {
+    /// - Parameter display: 授权页展示方式：`popup`（内嵌弹窗）/ `page`（完整网页，含扫码登录）。
+    public func authorizationURL(state: String, display: String = "popup") -> URL {
         var comps = URLComponents(url: BaiduPanConfig.authorizeURL, resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: BaiduPanConfig.appKey),
             URLQueryItem(name: "redirect_uri", value: BaiduPanConfig.redirectURI),
             URLQueryItem(name: "scope", value: BaiduPanConfig.scope),
-            URLQueryItem(name: "display", value: "popup"),
+            URLQueryItem(name: "display", value: display),
             URLQueryItem(name: "state", value: state),
         ]
         return comps.url!

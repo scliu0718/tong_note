@@ -142,25 +142,36 @@ struct LoginView: View {
             .frame(maxWidth: 340)
 
             VStack(spacing: 8) {
-                // 扫码占位（真机二维码后续接入）
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(
-                        ImagePaint(image: Image(systemName: "qrcode"))
-                    )
-                    .frame(width: 92, height: 92)
-                    .foregroundColor(Theme.textPrimary.opacity(0.8))
-                Text("打开「百度网盘 App」扫码登录")
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.textTertiary)
+                Button(action: { auth.signInViaBrowser() }) {
+                    HStack(spacing: 8) {
+                        if auth.isAuthorizing {
+                            ProgressView().controlSize(.small).tint(Theme.baidu)
+                        } else {
+                            Image(systemName: "qrcode")
+                                .font(.system(size: 16))
+                        }
+                        Text("浏览器扫码登录")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(Theme.baidu)
+                    .frame(maxWidth: 340)
+                    .frame(height: 40)
+                    .background(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.baidu.opacity(0.5), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(auth.isAuthorizing)
+
+                Text("跳转浏览器后切换到「扫码登录」，用百度 / 百度网盘 App 扫一扫，\n授权完成后自动回到同笔记。")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textQuaternary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
             }
             .frame(maxWidth: 340)
-            .frame(height: 150)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            )
 
-            Text("登录即代表你授权同笔记通过百度网盘开放平台读写\n/apps/tong_log 目录。授权信息仅保存在本机密钥链中。")
+            Text("登录即代表你授权同笔记通过百度网盘开放平台读写\n/apps/tong_log 目录。授权信息仅保存在本机。")
                 .font(.system(size: 11))
                 .foregroundColor(Theme.textQuaternary)
                 .multilineTextAlignment(.center)
