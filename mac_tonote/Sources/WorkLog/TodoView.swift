@@ -1,17 +1,26 @@
 import SwiftUI
 import WorkLogCore
 
-/// 任务面板：待完成 / 进行中 / 已完成 三组，支持勾选、开始、完成、删除、编辑备注与日期。
+/// 任务面板：待完成 / 进行中 / 已完成 / 终止 四组，支持折叠、勾选、流转、删除、编辑备注与日期。
+/// 任何任务变更后防抖自动同步到百度网盘。
 struct TodoView: View {
     @ObservedObject var store: TodoStore
+    @ObservedObject var noteStore: NoteStore
+    @EnvironmentObject private var sync: SyncEngine
 
     @State private var newTitle = ""
     @State private var expandedID: UUID?
     @State private var hoveredID: UUID?
     @State private var filter: Filter = .all
     @State private var showCalendar = false
+    @State private var collapsed: Set<String> = []
+    @State private var autoSyncTask: Task<Void, Never>?
 
-    private enum Filter { case all, incomplete }
+    private enum Filter: String, CaseIterable, Identifiable {
+        case all = "全部"
+        case incomplete = "仅未完成"
+        var id: String { rawValue }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,10 +31,14 @@ struct TodoView: View {
                     if store.todos.isEmpty {
                         emptyState
                     } else {
-                        group("待完成", color: Theme.red, items: store.pending, showStart: true)
-                        group("进行中", color: Theme.amber, items: store.doing, showComplete: true)
+                        group("待完成", color: Theme.red, items: store.pending,
+                              showStart: true, showTerminate: true)
+                        group("进行中", color: Theme.amber, items: store.doing,
+                              showComplete: true, showTerminate: true)
                         if filter == .all {
                             group("已完成", color: Theme.accent, items: store.done)
+                            group("终止", color: Theme.textTertiary, items: store.terminated,
+                                  showRestore: true)
                         }
                     }
                 }
@@ -40,7 +53,7 @@ struct TodoView: View {
     // MARK: 头部
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
+            HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("任务")
                         .font(.system(size: 20, weight: .bold))
@@ -50,25 +63,22 @@ struct TodoView: View {
                         .foregroundColor(Theme.textTertiary)
                 }
                 Spacer()
-                Button(action: { filter = filter == .all ? .incomplete : .all }) {
-                    Text(filter == .all ? "全部" : "仅未完成")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Theme.textSecondary)
-                        .padding(.horizontal, 11).padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.white)
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
-                        )
-                }
-                .buttonStyle(.plain)
 
-                AccentButton(title: "新建任务", icon: "plus") { addTask() }
+                Picker("", selection: $filter) {
+                    ForEach(Filter.allCases) { f in
+                        Text(f.rawValue).tag(f)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 110)
+
+                syncButton
             }
             if store.doneCount > 0 && filter == .all {
                 HStack {
                     Spacer()
-                    Button("清空已完成") { store.clearCompleted() }
+                    Button("清空已完成") { mutate { store.clearCompleted() } }
                         .buttonStyle(.plain)
                         .font(.system(size: 11))
                         .foregroundColor(Theme.textTertiary)
@@ -79,16 +89,50 @@ struct TodoView: View {
         .overlay(Rectangle().fill(Theme.lineSoft).frame(height: 1), alignment: .bottom)
     }
 
+    /// 与「快同步」一致的绿色同步按钮，触发全量同步（笔记 + 任务）。
+    private var syncButton: some View {
+        Button(action: {
+            autoSyncTask?.cancel()
+            Task { await sync.quickSync(store: noteStore, todos: store) }
+        }) {
+            HStack(spacing: 5) {
+                if sync.status.isSyncing {
+                    ProgressView().controlSize(.small).scaleEffect(0.65)
+                } else {
+                    Image(systemName: isSyncFailed ? "exclamationmark.triangle" : "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                Text(sync.status.isSyncing ? "同步中" : "同步")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .background(isSyncFailed ? Theme.red : Theme.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(sync.status.isSyncing)
+        .help("同步全部笔记与任务到百度网盘")
+    }
+
+    private var isSyncFailed: Bool {
+        if case .failed = sync.status { return true }
+        return false
+    }
+
     private var statText: String {
         var parts = ["待完成 \(store.pendingCount)", "进行中 \(store.doingCount)", "已完成 \(store.doneCount)"]
+        if store.terminatedCount > 0 { parts.append("终止 \(store.terminatedCount)") }
         if store.overdueCount > 0 { parts.append("逾期 \(store.overdueCount)") }
         return parts.joined(separator: " · ")
     }
 
-    // MARK: 分组
-    private func group(_ title: String, color: Color,
-                       items: [Todo], showStart: Bool = false, showComplete: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    // MARK: 分组（可折叠）
+    private func group(_ title: String, color: Color, items: [Todo],
+                       showStart: Bool = false, showComplete: Bool = false,
+                       showTerminate: Bool = false, showRestore: Bool = false) -> some View {
+        let isCollapsed = collapsed.contains(title)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 9) {
                 ZStack {
                     Circle().fill(color.opacity(0.13)).frame(width: 20, height: 20)
@@ -105,37 +149,54 @@ struct TodoView: View {
                     .clipShape(Capsule())
                 Rectangle().fill(Theme.lineSoft).frame(height: 1)
                     .padding(.leading, 5)
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Theme.textQuaternary)
+                    .frame(width: 16, height: 16)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { toggleCollapse(title) }
 
-            if items.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 11))
-                        .foregroundColor(Theme.textQuaternary)
-                    Text("暂无任务")
-                        .font(.system(size: 12))
-                        .foregroundColor(Theme.textQuaternary)
-                }
-                .padding(.leading, 29)
-                .padding(.vertical, 6)
-            } else {
-                ForEach(items) { todo in
-                    todoRow(todo, showStart: showStart, showComplete: showComplete)
+            if !isCollapsed {
+                if items.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "tray")
+                            .font(.system(size: 11))
+                            .foregroundColor(Theme.textQuaternary)
+                        Text("暂无任务")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textQuaternary)
+                    }
+                    .padding(.leading, 29)
+                    .padding(.vertical, 6)
+                } else {
+                    ForEach(items) { todo in
+                        todoRow(todo, showStart: showStart, showComplete: showComplete,
+                                showTerminate: showTerminate, showRestore: showRestore)
+                    }
                 }
             }
         }
     }
 
+    private func toggleCollapse(_ title: String) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if collapsed.contains(title) { collapsed.remove(title) }
+            else { collapsed.insert(title) }
+        }
+    }
+
     // MARK: 任务行
     @ViewBuilder
-    private func todoRow(_ todo: Todo, showStart: Bool, showComplete: Bool) -> some View {
+    private func todoRow(_ todo: Todo, showStart: Bool, showComplete: Bool,
+                         showTerminate: Bool, showRestore: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 11) {
                 checkbox(for: todo)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(todo.title)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(todo.status == .done ? Theme.textQuaternary : Theme.textPrimary)
+                        .foregroundColor(rowTitleColor(todo))
                         .strikethrough(todo.status == .done, color: Theme.textQuaternary)
                         .lineLimit(2)
                     HStack(spacing: 6) {
@@ -151,6 +212,9 @@ struct TodoView: View {
                         } else if todo.status == .doing, let start = todo.startedAt {
                             Text("开始于 \(Self.dateTimeFmt.string(from: start))")
                                 .font(.system(size: 11)).foregroundColor(Theme.textTertiary)
+                        } else if todo.status == .terminated {
+                            Text("已终止")
+                                .font(.system(size: 11)).foregroundColor(Theme.textQuaternary)
                         }
                         Spacer(minLength: 0)
                     }
@@ -168,10 +232,24 @@ struct TodoView: View {
 
                 if todo.status != .done {
                     if showStart {
-                        SmallActionButton(title: "开始", tint: Theme.textSecondary) { store.start(todo.id) }
+                        SmallActionButton(title: "开始", tint: Theme.textSecondary) {
+                            mutate { store.start(todo.id) }
+                        }
                     }
                     if showComplete {
-                        SmallActionButton(title: "完成", tint: Theme.accent) { store.complete(todo.id) }
+                        SmallActionButton(title: "完成", tint: Theme.accent) {
+                            mutate { store.complete(todo.id) }
+                        }
+                    }
+                }
+                if showTerminate {
+                    SmallActionButton(title: "终止", tint: Theme.textQuaternary) {
+                        mutate { store.terminate(todo.id) }
+                    }
+                }
+                if showRestore {
+                    SmallActionButton(title: "恢复", tint: Theme.accent) {
+                        mutate { store.restore(todo.id) }
                     }
                 }
 
@@ -184,7 +262,7 @@ struct TodoView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: { store.remove(todo.id) }) {
+                Button(action: { mutate { store.remove(todo.id) } }) {
                     Image(systemName: "trash")
                         .font(.system(size: 12))
                         .foregroundColor(Theme.textQuaternary)
@@ -211,6 +289,13 @@ struct TodoView: View {
         .overlay(Rectangle().fill(Theme.lineSoft).frame(height: 1), alignment: .bottom)
     }
 
+    private func rowTitleColor(_ todo: Todo) -> Color {
+        switch todo.status {
+        case .done, .terminated: return Theme.textQuaternary
+        default: return Theme.textPrimary
+        }
+    }
+
     private func toggleExpand(_ id: UUID) {
         withAnimation(.easeInOut(duration: 0.14)) {
             expandedID = expandedID == id ? nil : id
@@ -220,7 +305,7 @@ struct TodoView: View {
     private func checkbox(for todo: Todo) -> some View {
         let border: Color = todo.status == .doing ? Theme.amber
             : (todo.status == .done ? Theme.accent : Color(hex: 0xC7C7CC))
-        return Button(action: { store.toggleDone(todo.id) }) {
+        return Button(action: { mutate { store.toggleDone(todo.id) } }) {
             ZStack {
                 if todo.status == .done {
                     Circle().fill(Theme.accent).frame(width: 17, height: 17)
@@ -229,6 +314,9 @@ struct TodoView: View {
                         .foregroundColor(.white)
                 } else {
                     Circle().stroke(border, lineWidth: 1.5).frame(width: 17, height: 17)
+                    if todo.status == .terminated {
+                        Rectangle().fill(Theme.textQuaternary).frame(width: 7, height: 1.5)
+                    }
                 }
             }
             .frame(width: 22, height: 22)
@@ -259,12 +347,6 @@ struct TodoView: View {
                 Text("完成时间：\(Self.dateTimeFmt.string(from: done))")
                     .font(.system(size: 11)).foregroundColor(Theme.textQuaternary)
             }
-
-            HStack {
-                Spacer()
-                AccentButton(title: "保存") { expandedID = nil }
-                    .help("保存并收起")
-            }
         }
         .padding(14)
         .background(
@@ -282,11 +364,23 @@ struct TodoView: View {
             .kerning(0.3)
     }
 
-    // MARK: 截止时间（年月日步进 + 日历）
+    // MARK: 截止时间（保存 + 年月日步进 + 日历）
     @ViewBuilder
     private func deadlineSection(_ todo: Todo) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            plannedToggle(todo)
+            // 「保存」为绿色文字，与「设置截止时间」同一行、置于其前，不再单开一行
+            HStack(spacing: 14) {
+                Button("保存") {
+                    expandedID = nil
+                    scheduleAutoSync()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.accent)
+                .help("保存并收起")
+
+                plannedToggle(todo)
+            }
 
             if todo.plannedAt != nil {
                 let c = components(of: todo)
@@ -305,9 +399,12 @@ struct TodoView: View {
     private func plannedToggle(_ todo: Todo) -> some View {
         let on = todo.plannedAt != nil
         return Button(action: {
-            guard var t = store.todo(with: todo.id) else { return }
-            t.plannedAt = on ? nil : Date()
-            store.update(t)
+            mutate {
+                if var t = store.todo(with: todo.id) {
+                    t.plannedAt = on ? nil : Date()
+                    store.update(t)
+                }
+            }
         }) {
             HStack(spacing: 8) {
                 ZStack {
@@ -375,6 +472,7 @@ struct TodoView: View {
         c.year = y; c.month = m; c.day = d; c.hour = 12; c.minute = 0
         if let nd = Calendar.current.date(from: c) { t.plannedAt = nd }
         store.update(t)
+        scheduleAutoSync()
     }
 
     private func stepField(_ label: String, value: Int, range: ClosedRange<Int>, wrap: Bool,
@@ -414,6 +512,7 @@ struct TodoView: View {
                     if var t = store.todo(with: todo.id) {
                         t.notes = newValue
                         store.update(t)
+                        scheduleAutoSync()
                     }
                 })
     }
@@ -424,8 +523,36 @@ struct TodoView: View {
                     if var t = store.todo(with: todo.id) {
                         t.plannedAt = newValue
                         store.update(t)
+                        scheduleAutoSync()
                     }
                 })
+    }
+
+    // MARK: 自动同步
+    /// 用户操作触发任务变更后调用；同步写回（setTodos）不经过这里，避免循环。
+    private func mutate(_ action: () -> Void) {
+        action()
+        scheduleAutoSync()
+    }
+
+    /// 防抖 1.2 秒后自动全量同步，避免连续输入/连续点击时反复请求云端。
+    private func scheduleAutoSync() {
+        autoSyncTask?.cancel()
+        autoSyncTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled else { return }
+            // 未登录时不打扰用户
+            guard BaiduPanClient.shared.currentToken != nil else { return }
+            // 若上一次同步仍在进行，最多等 10 秒再执行，避免变更被跳过
+            var waited = 0
+            while sync.status.isSyncing && waited < 20 {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                waited += 1
+                if Task.isCancelled { return }
+            }
+            guard !Task.isCancelled, !sync.status.isSyncing else { return }
+            await sync.quickSync(store: noteStore, todos: store)
+        }
     }
 
     // MARK: 底部快捷添加
@@ -461,7 +588,7 @@ struct TodoView: View {
     private func addTask() {
         let t = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        store.add(title: t)
+        mutate { _ = store.add(title: t) }
         newTitle = ""
     }
 
@@ -508,34 +635,6 @@ private struct StepButton: View {
                         .fill(hovering ? Theme.accentTint : Color(hex: 0xF4F4F6))
                 )
                 .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-}
-
-/// 主按钮：主题绿 + 轻投影 + 悬停加深
-private struct AccentButton: View {
-    let title: String
-    var icon: String? = nil
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                if let icon = icon {
-                    Image(systemName: icon).font(.system(size: 12, weight: .bold))
-                }
-                Text(title).font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 15).padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(hovering ? Theme.accentHover : Theme.accent)
-                    .shadow(color: Theme.accent.opacity(0.22), radius: 5, x: 0, y: 2)
-            )
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }

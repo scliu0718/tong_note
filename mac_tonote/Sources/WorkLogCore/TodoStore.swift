@@ -1,15 +1,16 @@
 import Foundation
 import Combine
 
-/// 任务状态（三态，对应「待完成 / 进行中 / 已完成」）。
+/// 任务状态（四态，对应「待完成 / 进行中 / 已完成 / 终止」）。
 public enum TodoStatus: String, Codable, CaseIterable {
-    case todo, doing, done
+    case todo, doing, done, terminated
 
     public var label: String {
         switch self {
         case .todo: return "待完成"
         case .doing: return "进行中"
         case .done: return "已完成"
+        case .terminated: return "终止"
         }
     }
 }
@@ -50,9 +51,9 @@ public struct Todo: Identifiable, Codable, Hashable {
         self.order = order
     }
 
-    /// 是否逾期：未完成且计划完成时间早于今天。
+    /// 是否逾期：仍在进行中/待完成，且计划完成时间早于今天（已完成、终止均不算逾期）。
     public var isOverdue: Bool {
-        guard status != .done, let p = plannedAt else { return false }
+        guard status != .done, status != .terminated, let p = plannedAt else { return false }
         return p < Calendar.current.startOfDay(for: Date())
     }
 
@@ -108,11 +109,13 @@ public final class TodoStore: ObservableObject {
     public var pending: [Todo] { sorted(for: .todo) }
     public var doing: [Todo] { sorted(for: .doing) }
     public var done: [Todo] { sorted(for: .done) }
+    public var terminated: [Todo] { sorted(for: .terminated) }
 
-    public var incompleteCount: Int { todos.filter { $0.status != .done }.count }
+    public var incompleteCount: Int { todos.filter { $0.status == .todo || $0.status == .doing }.count }
     public var pendingCount: Int { todos.filter { $0.status == .todo }.count }
     public var doingCount: Int { todos.filter { $0.status == .doing }.count }
     public var doneCount: Int { todos.filter { $0.status == .done }.count }
+    public var terminatedCount: Int { todos.filter { $0.status == .terminated }.count }
     public var overdueCount: Int { todos.filter(\.isOverdue).count }
 
     private func sorted(for status: TodoStatus) -> [Todo] {
@@ -173,6 +176,24 @@ public final class TodoStore: ObservableObject {
         guard let i = index(of: id) else { return }
         todos[i].status = .done
         todos[i].completedAt = Date()
+        todos[i].updatedAt = Date()
+        save()
+    }
+
+    /// 任意状态 → 终止（停止的任务），不记完成时间。
+    public func terminate(_ id: UUID) {
+        guard let i = index(of: id) else { return }
+        todos[i].status = .terminated
+        todos[i].completedAt = nil
+        todos[i].updatedAt = Date()
+        save()
+    }
+
+    /// 终止 → 待完成（重新激活）。
+    public func restore(_ id: UUID) {
+        guard let i = index(of: id) else { return }
+        todos[i].status = .todo
+        todos[i].completedAt = nil
         todos[i].updatedAt = Date()
         save()
     }
