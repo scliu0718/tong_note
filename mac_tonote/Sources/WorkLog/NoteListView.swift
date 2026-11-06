@@ -321,8 +321,8 @@ struct TodoEntryCard: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.panelBg)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+        .background(Theme.accentTint)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accentTint2, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
