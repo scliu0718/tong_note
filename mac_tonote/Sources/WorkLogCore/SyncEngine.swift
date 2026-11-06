@@ -5,10 +5,8 @@ import Combine
 /// 再把合并结果写回本地并上传到百度网盘 /apps/tong_log/manifest.json。
 ///
 /// 设计要点：
-/// - 云端以单个 `manifest.json` 保存全部笔记（含正文/标签/笔记本/回收站状态），
-///   一文件即全量索引，结构简洁、可靠性高。
+/// - 云端以单个 `manifest.json` 保存全部笔记与任务，一文件即全量索引，结构简洁、可靠性高。
 /// - 冲突策略为「更新时间较新者胜出」（last-write-wins），适配单人多端场景。
-///   多端同时编辑同一篇且都改过时，较旧一方的修改会被覆盖——这是 MVP 的合理取舍。
 public final class SyncEngine: ObservableObject {
     public enum Status: Equatable {
         case idle
@@ -20,49 +18,52 @@ public final class SyncEngine: ObservableObject {
     }
 
     @Published public private(set) var status: Status = .idle
-    /// 最近一次同步的统计信息（如「上传 2 · 拉取 1 · 合并 3」）
+    /// 最近一次同步的统计信息（如「共 3 篇 · 上传 2 · 拉取 1」）
     @Published public private(set) var lastMessage: String?
+    /// 最近一次成功同步时间（持久化，供设置页展示）
+    @Published public private(set) var lastSyncDate: Date? {
+        didSet {
+            if let d = lastSyncDate { UserDefaults.standard.set(d, forKey: Self.lastSyncKey) }
+        }
+    }
 
     private let client = BaiduPanClient.shared
+    private static let lastSyncKey = "tonote.lastSyncDate"
     private static let manifestName = "manifest.json"
     private var remoteManifestPath: String {
         BaiduPanConfig.remoteRoot + "/" + SyncEngine.manifestName
     }
 
-    public init() {}
+    public init() {
+        lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date
+    }
 
     // MARK: - 对外入口
 
-    /// 一键同步：拉远端 → 对比合并 → 写回本地并上传。
-    /// - Parameter store: 本地笔记仓库（结果会整体替换进去）。
+    /// 一键同步：拉远端 → 对比合并笔记与任务 → 写回本地并上传。
     @MainActor
-    public func quickSync(store: NoteStore) async {
+    public func quickSync(store: NoteStore, todos: TodoStore) async {
         guard !status.isSyncing else { return }
         status = .syncing
         lastMessage = nil
         do {
             let token = try await client.validToken()
+            let remote = try await pull(token: token)
 
-            // 1) 先拉远程笔记
-            let remoteNotes: [Note]
-            do {
-                let data = try await client.downloadData(remoteManifestPath, accessToken: token.accessToken)
-                remoteNotes = try decodeManifest(data)?.notes ?? []
-            } catch BaiduPanError.notFound {
-                remoteNotes = [] // 云端尚未同步过
-            }
+            // 对比合并
+            let mergedNotes = mergeNotes(local: store.notes, remote: remote.notes)
+            let mergedTodos = mergeTodos(local: todos.todos, remote: remote.todos)
+            let stats = diffStats(local: store.notes, remote: remote.notes, merged: mergedNotes)
 
-            // 2) 对比合并
-            let merged = merge(local: store.notes, remote: remoteNotes)
-            let stats = diffStats(local: store.notes, remote: remoteNotes, merged: merged)
-
-            // 3) 写回本地并上传
-            store.setNotes(merged)
-            let manifest = try encodeManifest(merged)
+            // 写回本地并上传
+            store.setNotes(mergedNotes)
+            todos.setTodos(mergedTodos)
+            let manifest = try encodeManifest(notes: mergedNotes, todos: mergedTodos)
             try await client.uploadData(manifest, to: remoteManifestPath, accessToken: token.accessToken)
 
             let ts = Date()
             status = .success(ts)
+            lastSyncDate = ts
             lastMessage = stats
         } catch {
             status = .failed(error.localizedDescription)
@@ -70,31 +71,19 @@ public final class SyncEngine: ObservableObject {
         }
     }
 
-    /// 单独同步某一篇笔记：拉取云端 manifest，仅就该篇与远端同 ID 笔记对比
-    ///（更新时间较新者胜出），回写本地并上传整份 manifest。
-    /// - Parameters:
-    ///   - store: 本地笔记仓库。
-    ///   - noteID: 目标笔记 ID（如 `NoteStore.quickSyncNoteID`）。
+    /// 单独同步某一篇笔记：仅就该篇与远端对比，任务一并做拉取合并，保持云端完整。
     @MainActor
-    public func syncSingleNote(store: NoteStore, noteID: UUID) async {
+    public func syncSingleNote(store: NoteStore, todos: TodoStore, noteID: UUID) async {
         guard !status.isSyncing else { return }
         status = .syncing
         lastMessage = nil
         do {
             let token = try await client.validToken()
+            let remote = try await pull(token: token)
 
-            // 1) 先拉远程
-            let remoteNotes: [Note]
-            do {
-                let data = try await client.downloadData(remoteManifestPath, accessToken: token.accessToken)
-                remoteNotes = try decodeManifest(data)?.notes ?? []
-            } catch BaiduPanError.notFound {
-                remoteNotes = []
-            }
-
-            // 2) 仅对比本篇
+            // 仅对比本篇笔记
             let localNote = store.note(with: noteID)
-            let remoteNote = remoteNotes.first { $0.id == noteID }
+            let remoteNote = remote.notes.first { $0.id == noteID }
             let resolved: Note?
             if let local = localNote, let remote = remoteNote {
                 resolved = local.updatedAt >= remote.updatedAt ? local : remote
@@ -102,21 +91,24 @@ public final class SyncEngine: ObservableObject {
                 resolved = localNote ?? remoteNote
             }
 
-            // 3) 回写该篇（其余笔记保持本地不变）并上传
-            var merged = store.notes
+            var mergedNotes = store.notes
             if let r = resolved {
-                if let idx = merged.firstIndex(where: { $0.id == noteID }) {
-                    merged[idx] = r
+                if let idx = mergedNotes.firstIndex(where: { $0.id == noteID }) {
+                    mergedNotes[idx] = r
                 } else {
-                    merged.append(r)
+                    mergedNotes.append(r)
                 }
             }
-            store.setNotes(merged)
-            let manifest = try encodeManifest(merged)
+            let mergedTodos = mergeTodos(local: todos.todos, remote: remote.todos)
+
+            store.setNotes(mergedNotes)
+            todos.setTodos(mergedTodos)
+            let manifest = try encodeManifest(notes: mergedNotes, todos: mergedTodos)
             try await client.uploadData(manifest, to: remoteManifestPath, accessToken: token.accessToken)
 
             let ts = Date()
             status = .success(ts)
+            lastSyncDate = ts
             lastMessage = resolved == nil ? "本地与云端均无该笔记" : "已同步本篇"
         } catch {
             status = .failed(error.localizedDescription)
@@ -124,10 +116,20 @@ public final class SyncEngine: ObservableObject {
         }
     }
 
-    // MARK: - 合并逻辑
+    // MARK: - 拉取与合并
 
-    /// 按 id 聚合，updatedAt 较新者胜出；仅一端存在的直接纳入。
-    private func merge(local: [Note], remote: [Note]) -> [Note] {
+    private func pull(token: BaiduPanToken) async throws -> (notes: [Note], todos: [Todo]) {
+        do {
+            let data = try await client.downloadData(remoteManifestPath, accessToken: token.accessToken)
+            let m = try decodeManifest(data)
+            return (m?.notes ?? [], m?.todos ?? [])
+        } catch BaiduPanError.notFound {
+            return ([], []) // 云端尚未同步过
+        }
+    }
+
+    /// 笔记合并：按 id 聚合，updatedAt 较新者胜出。
+    private func mergeNotes(local: [Note], remote: [Note]) -> [Note] {
         var map: [UUID: Note] = [:]
         for n in remote { map[n.id] = n }
         for n in local {
@@ -140,15 +142,27 @@ public final class SyncEngine: ObservableObject {
         return Array(map.values).sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    /// 生成同步统计文案。
+    /// 任务合并：同 id 取更新时间较新者，仅一端存在的直接纳入。
+    private func mergeTodos(local: [Todo], remote: [Todo]) -> [Todo] {
+        var map: [UUID: Todo] = [:]
+        for t in remote { map[t.id] = t }
+        for t in local {
+            if let r = map[t.id] {
+                map[t.id] = t.updatedAt >= r.updatedAt ? t : r
+            } else {
+                map[t.id] = t
+            }
+        }
+        return Array(map.values).sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// 生成同步统计文案（仅统计笔记，任务不额外计数）。
     private func diffStats(local: [Note], remote: [Note], merged: [Note]) -> String {
         let localIDs = Set(local.map { $0.id })
         let remoteIDs = Set(remote.map { $0.id })
-        let addedFromLocal = localIDs.subtracting(remoteIDs).count   // 本地独有 → 上传
-        let addedFromRemote = remoteIDs.subtracting(localIDs).count  // 云端独有 → 拉取
-        let both = localIDs.intersection(remoteIDs)
-        let updated = both.count // 两端都存在 → 已合并（取较新者）
-        return "上传 \(addedFromLocal) · 拉取 \(addedFromRemote) · 合并 \(updated)"
+        let addedFromLocal = localIDs.subtracting(remoteIDs).count
+        let addedFromRemote = remoteIDs.subtracting(localIDs).count
+        return "共 \(merged.count) 篇 · 上传 \(addedFromLocal) · 拉取 \(addedFromRemote)"
     }
 
     // MARK: - 编解码
@@ -157,11 +171,28 @@ public final class SyncEngine: ObservableObject {
         let deviceID: String
         let syncedAt: Date
         let notes: [Note]
+        let todos: [Todo]
 
         enum CodingKeys: String, CodingKey {
             case deviceID = "device_id"
             case syncedAt = "synced_at"
             case notes
+            case todos
+        }
+
+        init(deviceID: String, syncedAt: Date, notes: [Note], todos: [Todo]) {
+            self.deviceID = deviceID
+            self.syncedAt = syncedAt
+            self.notes = notes
+            self.todos = todos
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            deviceID = try c.decode(String.self, forKey: .deviceID)
+            syncedAt = try c.decode(Date.self, forKey: .syncedAt)
+            notes = try c.decodeIfPresent([Note].self, forKey: .notes) ?? []
+            todos = try c.decodeIfPresent([Todo].self, forKey: .todos) ?? []
         }
     }
 
@@ -171,11 +202,12 @@ public final class SyncEngine: ObservableObject {
         return try? dec.decode(CloudManifest.self, from: data)
     }
 
-    private func encodeManifest(_ notes: [Note]) throws -> Data {
+    private func encodeManifest(notes: [Note], todos: [Todo]) throws -> Data {
         let manifest = CloudManifest(
             deviceID: Host.current().name ?? "unknown",
             syncedAt: Date(),
-            notes: notes
+            notes: notes,
+            todos: todos
         )
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -170,19 +170,25 @@ public final class BaiduPanClient {
             let list: [DlItem]?
             struct DlItem: Codable { let dlink: String? }
         }
-        guard let meta = try? JSONDecoder().decode(DlMeta.self, from: metaData),
-              meta.errno ?? -1 == 0,
+        guard let meta = try? JSONDecoder().decode(DlMeta.self, from: metaData) else {
+            // 响应不是 JSON（多为百度风控/网关返回的 HTML 页），把原文带出来，不要静默当成「云端无文件」
+            throw BaiduPanError.server(message: "查询云端文件失败\(Self.bodySnippet(metaData))")
+        }
+        guard meta.errno ?? -1 == 0,
               let dlink = meta.list?.first?.dlink, !dlink.isEmpty else {
-            // 拿不到直链（多为文件不存在）→ 视为无远端文件
+            // JSON 但 errno 非 0 / 无直链 → 多为文件不存在，视为无远端文件（首次同步正常路径）
             throw BaiduPanError.notFound
         }
         guard var dl = URLComponents(string: dlink) else { throw BaiduPanError.invalidResponse }
         var q = dl.queryItems ?? []
         q.append(URLQueryItem(name: "access_token", value: accessToken))
         dl.queryItems = q
-        let (fileData, resp) = try await session.data(from: dl.url!)
+        // 百度开放平台要求下载 dlink 时携带 User-Agent: pan.baidu.com，否则会被 403 拒绝
+        var dlReq = URLRequest(url: dl.url!)
+        dlReq.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
+        let (fileData, resp) = try await session.data(for: dlReq)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            throw BaiduPanError.server(message: "下载文件失败（HTTP \(http.statusCode)）")
+            throw BaiduPanError.server(message: "下载文件失败（HTTP \(http.statusCode)）\(Self.bodySnippet(fileData))")
         }
         return fileData
     }
@@ -236,7 +242,8 @@ public final class BaiduPanClient {
         }
 
         let decodePre = { try? JSONDecoder().decode(PreResp.self, from: precreate) }
-        guard let pre = decodePre(), pre.errno ?? -1 == 0, let uploadID = pre.uploadid else {
+        // 成功响应里 errno 可能缺省；只要拿到 uploadid 且 errno 未明确报错即视为成功
+        guard let pre = decodePre(), let uploadID = pre.uploadid, (pre.errno ?? 0) == 0 else {
             let errno = decodePre()?.errno ?? -1
             throw BaiduPanError.server(message: "precreate 失败（errno=\(errno)）\(Self.bodySnippet(precreate))")
         }
@@ -264,8 +271,10 @@ public final class BaiduPanClient {
                 "rtype": "3",
             ]
         )
-        if let obj = try? JSONSerialization.jsonObject(with: created) as? [String: Any],
-           let errno = obj["errno"] as? Int, errno != 0 {
+        guard let obj = try? JSONSerialization.jsonObject(with: created) as? [String: Any] else {
+            throw BaiduPanError.server(message: "create 返回异常\(Self.bodySnippet(created))")
+        }
+        if let errno = obj["errno"] as? Int, errno != 0 {
             throw BaiduPanError.server(message: "create 失败（errno=\(errno)）\(Self.bodySnippet(created))")
         }
     }
@@ -288,10 +297,11 @@ public final class BaiduPanClient {
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
         req.httpBody = form.map { "\($0.key)=\($0.value)" }.joined(separator: "&").data(using: .utf8)
         let (data, resp) = try await session.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 300 {
-            throw BaiduPanError.server(message: "请求失败（HTTP \(http.statusCode)）")
+            throw BaiduPanError.server(message: "请求失败（HTTP \(http.statusCode)）\(Self.bodySnippet(data))")
         }
         return data
     }
@@ -315,6 +325,7 @@ public final class BaiduPanClient {
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "POST"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"blob\"\r\n".data(using: .utf8)!)

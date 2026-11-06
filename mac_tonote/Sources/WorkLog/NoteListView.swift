@@ -3,11 +3,13 @@ import WorkLogCore
 
 struct NoteListView: View {
     @ObservedObject var store: NoteStore
+    @ObservedObject var todos: TodoStore
     @Binding var selectedID: UUID?
     @Binding var searchText: String
     @Binding var sortMode: SortMode
     let notes: [Note]
     let showingTrash: Bool
+    let onOpenTodos: () -> Void
 
     @EnvironmentObject private var sync: SyncEngine
     @State private var confirmDeleteID: UUID?
@@ -23,6 +25,10 @@ struct NoteListView: View {
                         QuickSyncCard(status: sync.status, message: sync.lastMessage)
                             .contentShape(Rectangle())
                             .onTapGesture { selectedID = NoteStore.quickSyncNoteID }
+                        // 「任务」固定第二行
+                        TodoEntryCard(todos: todos)
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: onOpenTodos)
                     }
                     if notes.isEmpty {
                         emptyState
@@ -125,7 +131,7 @@ struct NoteListView: View {
     }
 
     private var syncButton: some View {
-        Button(action: { Task { await sync.quickSync(store: store) } }) {
+        Button(action: { Task { await sync.quickSync(store: store, todos: todos) } }) {
             HStack(spacing: 5) {
                 if sync.status.isSyncing {
                     ProgressView()
@@ -275,4 +281,48 @@ struct QuickSyncCard: View {
         f.dateFormat = "HH:mm"
         return f
     }()
+}
+
+/// 列表顶部固定的「任务」入口行：显示未完成数量，点击进入任务面板。
+struct TodoEntryCard: View {
+    @ObservedObject var todos: TodoStore
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Theme.accentTint)
+                    .frame(width: 34, height: 34)
+                Image(systemName: "checklist")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Theme.accent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("任务")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text("待完成 \(todos.pendingCount) · 进行中 \(todos.doingCount)")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textTertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if todos.incompleteCount > 0 {
+                Text("\(todos.incompleteCount)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .background(Theme.accent)
+                    .clipShape(Circle())
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Theme.textQuaternary)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.panelBg)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
 }
