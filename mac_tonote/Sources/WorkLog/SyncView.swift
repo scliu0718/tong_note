@@ -37,6 +37,17 @@ struct SyncView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var closeButton: some View {
+        Button(action: { dismiss() }) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundColor(Theme.textQuaternary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("关闭（Esc）")
+    }
+
     private var syncStatusCard: some View {
         card("同步状态") {
             VStack(spacing: 0) {
@@ -126,9 +137,14 @@ struct SyncView: View {
     // MARK: 右侧面板
     private var sidePanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("存储空间")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.textQuaternary)
+            HStack(alignment: .top) {
+                Text("存储空间")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Theme.textQuaternary)
+                Spacer(minLength: 8)
+                closeButton
+                    .offset(y: -4)
+            }
             usageCard
             Text("数据说明")
                 .font(.system(size: 11, weight: .semibold))

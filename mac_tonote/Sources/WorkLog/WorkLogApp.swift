@@ -18,6 +18,8 @@ struct WorkLogApp: App {
             .frame(minWidth: 960, minHeight: 620)
             .environmentObject(auth)
             .environmentObject(sync)
+            // 浏览器扫码登录的回调：tongnote://oauth/callback
+            .onOpenURL { url in auth.handleCallback(url) }
         }
         .defaultSize(width: 1120, height: 700)
         .windowResizability(.contentMinSize)

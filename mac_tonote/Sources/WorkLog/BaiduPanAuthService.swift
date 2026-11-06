@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WorkLogCore
 
@@ -15,6 +16,9 @@ final class BaiduPanAuthService: ObservableObject {
     @Published private(set) var state: State = .signedOut
     @Published private(set) var userInfo: BaiduPanUserInfo?
     @Published private(set) var quota: BaiduPanQuota?
+
+    /// 浏览器登录流程中用于校验回调的 state（防 CSRF）
+    private var pendingBrowserState: String?
 
     private let client = BaiduPanClient.shared
 
@@ -51,6 +55,48 @@ final class BaiduPanAuthService: ObservableObject {
         Task {
             do {
                 let code = try await BaiduPanAuthSession.authorize()
+                _ = try await client.exchangeCode(code)
+                await loadAccount()
+                state = .signedIn
+            } catch {
+                state = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    /// 浏览器扫码登录：在系统默认浏览器打开授权页（display=page，含「扫码登录」），
+    /// 用户用百度 / 百度网盘 App 扫码授权后，浏览器跳转 tongnote://oauth/callback 拉回本 App，
+    /// 由 `handleCallback(_:)` 完成登录。
+    func signInViaBrowser() {
+        guard BaiduPanConfig.isConfigured else {
+            state = .failed("尚未配置 AppKey / AppSecret，请先在 baidupan.secret.json 中填写")
+            return
+        }
+        let nonce = UUID().uuidString
+        pendingBrowserState = nonce
+        state = .authorizing
+        let url = client.authorizationURL(state: nonce, display: "page")
+        NSWorkspace.shared.open(url)
+    }
+
+    /// 处理浏览器授权后的回调（tongnote://oauth/callback?code=…&state=…）。
+    func handleCallback(_ url: URL) {
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
+        if let err = comps.queryItems?.first(where: { $0.name == "error" })?.value {
+            pendingBrowserState = nil
+            state = .failed("授权被拒绝：\(err)")
+            return
+        }
+        guard let code = comps.queryItems?.first(where: { $0.name == "code" })?.value else { return }
+        let returnedState = comps.queryItems?.first(where: { $0.name == "state" })?.value
+        if let expected = pendingBrowserState, returnedState != expected {
+            state = .failed("登录回调校验失败（state 不匹配），请重试")
+            return
+        }
+        pendingBrowserState = nil
+        state = .authorizing
+        Task {
+            do {
                 _ = try await client.exchangeCode(code)
                 await loadAccount()
                 state = .signedIn
