@@ -49,7 +49,7 @@ struct MainView: View {
             Rectangle().fill(Theme.line).frame(width: 1)
 
             if showTodos {
-                TodoView(store: todos)
+                TodoView(store: todos, noteStore: store)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let id = selectedID, store.note(with: id) != nil {
                 EditorView(note: store.binding(for: id),
