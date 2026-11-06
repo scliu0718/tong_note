@@ -9,9 +9,12 @@ enum SortMode: String, CaseIterable {
 
 struct MainView: View {
     @StateObject private var store = NoteStore()
+    @StateObject private var todos = TodoStore()
+    @EnvironmentObject private var sync: SyncEngine
     @State private var sidebarWidth: CGFloat = 112
     @State private var selectedID: UUID?
     @State private var showSync = false
+    @State private var showTodos = false
 
     // 过滤状态
     @State private var selectedNotebook: String = Notebooks.all
@@ -34,20 +37,26 @@ struct MainView: View {
             ResizeHandle(width: $sidebarWidth)
 
             NoteListView(store: store,
+                         todos: todos,
                          selectedID: $selectedID,
                          searchText: $searchText,
                          sortMode: $sortMode,
                          notes: displayedNotes,
-                         showingTrash: showingTrash)
+                         showingTrash: showingTrash,
+                         onOpenTodos: { showTodos = true; selectedID = nil })
                 .frame(width: 292)
 
             Rectangle().fill(Theme.line).frame(width: 1)
 
-            if let id = selectedID, store.note(with: id) != nil {
+            if showTodos {
+                TodoView(store: todos)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let id = selectedID, store.note(with: id) != nil {
                 EditorView(note: store.binding(for: id),
                            content: store.contentBinding(for: id),
                            attachments: store.attachments,
                            store: store,
+                           todos: todos,
                            onDelete: {
                                store.moveToTrash(id)
                                if selectedID == id { selectedID = NoteStore.quickSyncNoteID }
@@ -68,10 +77,15 @@ struct MainView: View {
         .onReceive(store.$notes) { notes in
             if let id = selectedID, !notes.contains(where: { $0.id == id }) {
                 selectedID = NoteStore.quickSyncNoteID
+                showTodos = false
             }
         }
+        .onChange(of: selectedID) { _, newValue in
+            if newValue != nil { showTodos = false }
+        }
         .sheet(isPresented: $showSync) {
-            SyncView()
+            SyncView(store: store, todos: todos)
+                .environmentObject(sync)
                 .frame(width: 900, height: 640)
         }
     }
@@ -107,6 +121,7 @@ struct MainView: View {
         let note = store.addNote(notebook: notebook)
         selectedID = note.id
         showingTrash = false
+        showTodos = false
     }
 
     private var emptyEditor: some View {

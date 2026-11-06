@@ -1,10 +1,12 @@
 import SwiftUI
+import WorkLogCore
 
 struct SyncView: View {
     @EnvironmentObject private var auth: BaiduPanAuthService
+    @EnvironmentObject private var sync: SyncEngine
+    @ObservedObject var store: NoteStore
+    @ObservedObject var todos: TodoStore
     @Environment(\.dismiss) private var dismiss
-    @State private var autoSync = true
-    @State private var frequency = "5 分钟"
 
     var body: some View {
         HStack(spacing: 0) {
@@ -51,35 +53,105 @@ struct SyncView: View {
     private var syncStatusCard: some View {
         card("同步状态") {
             VStack(spacing: 0) {
-                row("自动同步", subtitle: "联网时自动增量同步（默认开启）") {
-                    Toggle("", isOn: $autoSync)
-                        .toggleStyle(.switch)
-                        .tint(Theme.accent)
-                        .labelsHidden()
+                row("同步范围", subtitle: "笔记 + 任务，存于 \(BaiduPanConfig.remoteRoot)/manifest.json") {
+                    Text("笔记 · 任务")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Theme.textSecondary)
                 }
-                row("同步频率", subtitle: "两次同步的最小间隔") {
-                    Text(frequency).font(.system(size: 13, weight: .medium))
+                row("最近同步", subtitle: lastSyncSubtitle) {
+                    Text(lastSyncText)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(sync.lastSyncDate == nil ? Theme.textQuaternary : Theme.accent)
                 }
-                row("最近同步", subtitle: "上次成功同步时间") {
-                    Text("14:32:08 · 刚刚").font(.system(size: 13, weight: .medium))
-                        .foregroundColor(Theme.accent)
-                }
-                row("立即同步") {
-                    Button(action: {}) {
+                row("同步状态") { statusBadge }
+                row("立即同步", subtitle: sync.status.isSyncing ? "正在拉取云端并对比…" : nil) {
+                    Button(action: { Task { await sync.quickSync(store: store, todos: todos) } }) {
                         HStack(spacing: 6) {
-                            Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13))
-                            Text("同步全部").font(.system(size: 13, weight: .semibold))
+                            if sync.status.isSyncing {
+                                ProgressView().controlSize(.small).scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13))
+                            }
+                            Text(syncButtonTitle).font(.system(size: 13, weight: .semibold))
                         }
                         .foregroundColor(.white)
                         .padding(.horizontal, 16).padding(.vertical, 7)
-                        .background(Theme.accent)
+                        .background(sync.status.isSyncing ? Theme.textQuaternary : Theme.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
+                    .disabled(sync.status.isSyncing)
+                }
+
+                if let msg = sync.lastMessage {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: isSyncFailed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                        Text(msg).font(.system(size: 11)).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundColor(isSyncFailed ? Theme.red : Theme.accent)
+                    .padding(.top, 10)
                 }
             }
         }
     }
+
+    private var isSyncFailed: Bool {
+        if case .failed = sync.status { return true }
+        return false
+    }
+
+    private var syncButtonTitle: String {
+        switch sync.status {
+        case .idle: return "同步全部"
+        case .syncing: return "同步中…"
+        case .success: return "再次同步"
+        case .failed: return "重试同步"
+        }
+    }
+
+    private var statusBadge: some View {
+        HStack(spacing: 5) {
+            Circle().fill(statusColor).frame(width: 6, height: 6)
+            Text(statusText).font(.system(size: 12, weight: .medium)).foregroundColor(statusColor)
+        }
+    }
+
+    private var statusText: String {
+        switch sync.status {
+        case .idle: return "待同步"
+        case .syncing: return "同步中"
+        case .success: return "已同步"
+        case .failed: return "同步失败"
+        }
+    }
+
+    private var statusColor: Color {
+        switch sync.status {
+        case .idle: return Theme.textQuaternary
+        case .syncing: return Theme.amber
+        case .success: return Theme.accent
+        case .failed: return Theme.red
+        }
+    }
+
+    private var lastSyncText: String {
+        guard let d = sync.lastSyncDate else { return "尚未同步" }
+        return Self.timeFormatter.string(from: d)
+    }
+
+    private var lastSyncSubtitle: String {
+        guard let d = sync.lastSyncDate else { return "上次成功同步时间" }
+        return Self.dayFormatter.string(from: d)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
+    }()
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
 
     private var cloudTreeCard: some View {
         card("云端目录结构（百度网盘 /apps/tong_log）") {
@@ -111,7 +183,7 @@ struct SyncView: View {
                     Text(auth.userInfo?.displayName ?? "已授权").font(.system(size: 13, weight: .medium))
                 }
                 row("授权方式", subtitle: "百度网盘开放平台 OAuth 2.0") {
-                    Button("重新授权") {}
+                    Button("重新授权") { auth.signInViaBrowser() }
                         .buttonStyle(.plain)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Theme.textSecondary)

@@ -23,6 +23,7 @@ struct EditorView: View {
     @Binding var content: NoteContent
     var attachments: AttachmentStore
     var store: NoteStore
+    var todos: TodoStore
     var onDelete: () -> Void
 
     @EnvironmentObject private var sync: SyncEngine
@@ -172,7 +173,7 @@ struct EditorView: View {
                     // 「快同步」篇：右上角提供单独同步本篇的按钮 + 状态
                     HStack(spacing: 6) {
                         syncStatusText
-                        Button(action: { Task { await sync.syncSingleNote(store: store, noteID: note.id) } }) {
+                        Button(action: { Task { await sync.syncSingleNote(store: store, todos: todos, noteID: note.id) } }) {
                             HStack(spacing: 4) {
                                 if sync.status.isSyncing {
                                     ProgressView().controlSize(.small).scaleEffect(0.6)
