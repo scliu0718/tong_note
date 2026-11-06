@@ -10,6 +10,9 @@ struct SidebarView: View {
     var onNewNote: () -> Void
     var onSettings: () -> Void
 
+    @ObservedObject private var avatarStore = AvatarStore.shared
+    @State private var showAvatarPicker = false
+
     private var isWide: Bool { width >= 200 }
 
     var body: some View {
@@ -89,14 +92,68 @@ struct SidebarView: View {
         }
     }
 
+    /// 可点击头像：点击弹出候选图标，更换后立即保存到本地并上传云端。
     private var avatar: some View {
-        Text("同")
-            .font(.system(size: 12, weight: .bold))
-            .foregroundColor(.white)
-            .frame(width: 32, height: 32)
-            .background(LinearGradient(colors: [Color(hex: 0x19B46A), Color(hex: 0x0E8A48)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing))
-            .clipShape(Circle())
+        Button(action: { showAvatarPicker.toggle() }) {
+            AvatarBadge(preset: avatarStore.current, size: 32)
+        }
+        .buttonStyle(.plain)
+        .help("更换头像")
+        .popover(isPresented: $showAvatarPicker, arrowEdge: .bottom) {
+            avatarPicker
+        }
+        .task { await avatarStore.pullFromCloudIfNeeded() }
+    }
+
+    private var avatarPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("选择头像")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.textPrimary)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 12), count: 4), spacing: 12) {
+                ForEach(AvatarStore.presets) { preset in
+                    Button(action: { avatarStore.select(preset.id) }) {
+                        ZStack(alignment: .bottomTrailing) {
+                            AvatarBadge(preset: preset, size: 42)
+                            if avatarStore.currentID == preset.id {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(Theme.accent)
+                                    .background(Circle().fill(Color.white))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(preset.id == "tong" ? "同笔记（默认）" : preset.id)
+                }
+            }
+            Divider()
+            HStack(spacing: 5) {
+                Image(systemName: cloudIcon).font(.system(size: 11))
+                Text(cloudText).font(.system(size: 11)).lineLimit(2)
+            }
+            .foregroundColor(Theme.textTertiary)
+        }
+        .padding(16)
+        .frame(width: 244)
+    }
+
+    private var cloudIcon: String {
+        switch avatarStore.cloudState {
+        case .idle: return "icloud"
+        case .uploading: return "icloud.and.arrow.up"
+        case .synced: return "checkmark.icloud"
+        case .failed: return "exclamationmark.icloud"
+        }
+    }
+
+    private var cloudText: String {
+        switch avatarStore.cloudState {
+        case .idle: return "更换后自动上传到百度网盘"
+        case .uploading: return "正在上传到百度网盘…"
+        case .synced: return "已同步到百度网盘"
+        case .failed(let msg): return "上传失败（已保存到本地）：\(msg)"
+        }
     }
 
     private var newNoteButton: some View {
@@ -241,5 +298,31 @@ struct SidebarView: View {
                 Text("\(store.notes.count)").font(.system(size: 10)).foregroundColor(Theme.textQuaternary)
             }
         }
+    }
+}
+
+/// 圆形渐变头像徽标：文字或 SF Symbol。
+private struct AvatarBadge: View {
+    let preset: AvatarPreset
+    var size: CGFloat = 32
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(LinearGradient(colors: [Color(hex: preset.color1), Color(hex: preset.color2)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            Group {
+                if preset.isSymbol {
+                    Image(systemName: preset.glyph)
+                        .font(.system(size: size * 0.46, weight: .semibold))
+                } else {
+                    Text(preset.glyph)
+                        .font(.system(size: size * 0.42, weight: .bold))
+                }
+            }
+            .foregroundColor(.white)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
     }
 }

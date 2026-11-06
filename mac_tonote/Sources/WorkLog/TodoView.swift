@@ -71,7 +71,7 @@ struct TodoView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 110)
+                .fixedSize(horizontal: true, vertical: false)
 
                 syncButton
             }
@@ -97,7 +97,9 @@ struct TodoView: View {
         }) {
             HStack(spacing: 5) {
                 if sync.status.isSyncing {
-                    ProgressView().controlSize(.small).scaleEffect(0.65)
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.6)
                 } else {
                     Image(systemName: isSyncFailed ? "exclamationmark.triangle" : "arrow.triangle.2.circlepath")
                         .font(.system(size: 12, weight: .semibold))
@@ -105,10 +107,12 @@ struct TodoView: View {
                 Text(sync.status.isSyncing ? "同步中" : "同步")
                     .font(.system(size: 12, weight: .semibold))
             }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundColor(.white)
-            .padding(.horizontal, 14).padding(.vertical, 7)
+            .padding(.horizontal, 11).padding(.vertical, 6)
             .background(isSyncFailed ? Theme.red : Theme.accent)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
         .disabled(sync.status.isSyncing)
@@ -330,7 +334,13 @@ struct TodoView: View {
     private func detail(_ todo: Todo) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                sectionLabel("备注")
+                HStack(spacing: 8) {
+                    sectionLabel("备注")
+                    Text("创建于 \(Self.createdFmt.string(from: todo.createdAt))")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(Color(hex: 0x3A8FD9))
+                    Spacer(minLength: 0)
+                }
                 TextEditor(text: notesBinding(todo))
                     .font(.system(size: 12))
                     .foregroundColor(Theme.textPrimary)
@@ -613,6 +623,9 @@ struct TodoView: View {
     }()
     private static let dateTimeFmt: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "MM-dd HH:mm"; return f
+    }()
+    private static let createdFmt: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm"; return f
     }()
 }
 
