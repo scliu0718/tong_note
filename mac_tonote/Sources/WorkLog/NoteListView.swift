@@ -189,7 +189,7 @@ struct NoteCard: View {
                         .font(.system(size: 10))
                         .foregroundColor(selected ? Theme.accentHover : Theme.textTertiary)
                         .padding(.horizontal, 7).padding(.vertical, 1)
-                        .background(selected ? Theme.accentTint2 : Color(hex: 0xEFEFF1))
+                        .background(selected ? Color(hex: 0xE7F3EB) : Color(hex: 0xEFEFF1))
                         .clipShape(Capsule())
                 }
                 Spacer(minLength: 0)
@@ -197,8 +197,9 @@ struct NoteCard: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? Theme.accentTint : Color.clear)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Theme.accentTint2 : Color.clear, lineWidth: 1))
+        // 选中态比「快同步 / 任务」两个固定卡片更淡，避免视觉上混为一类
+        .background(selected ? Color(hex: 0xF4FAF6) : Color.clear)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color(hex: 0xDCEDE2) : Color.clear, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

@@ -95,24 +95,24 @@ struct TodoView: View {
             autoSyncTask?.cancel()
             Task { await sync.quickSync(store: noteStore, todos: store) }
         }) {
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 if sync.status.isSyncing {
                     ProgressView()
                         .controlSize(.small)
-                        .scaleEffect(0.6)
+                        .scaleEffect(0.55)
                 } else {
                     Image(systemName: isSyncFailed ? "exclamationmark.triangle" : "arrow.triangle.2.circlepath")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                 }
                 Text(sync.status.isSyncing ? "同步中" : "同步")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
             }
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundColor(.white)
-            .padding(.horizontal, 11).padding(.vertical, 6)
+            .padding(.horizontal, 10).padding(.vertical, 3)
             .background(isSyncFailed ? Theme.red : Theme.accent)
-            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
         .disabled(sync.status.isSyncing)
@@ -151,12 +151,16 @@ struct TodoView: View {
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(color.opacity(0.10))
                     .clipShape(Capsule())
-                Rectangle().fill(Theme.lineSoft).frame(height: 1)
-                    .padding(.leading, 5)
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Theme.textQuaternary)
-                    .frame(width: 16, height: 16)
+                // 横线用该组主题色，折叠图标置于横线正中间
+                HStack(spacing: 7) {
+                    Rectangle().fill(color.opacity(0.45)).frame(height: 1)
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(color)
+                    Rectangle().fill(color.opacity(0.45)).frame(height: 1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.leading, 6)
             }
             .contentShape(Rectangle())
             .onTapGesture { toggleCollapse(title) }
