@@ -14,10 +14,16 @@ struct SidebarView: View {
     @ObservedObject private var notebooks = NotebookStore.shared
     @State private var showAvatarPicker = false
     @State private var hoveredTag: String?
-    @State private var pendingDeleteTag: String?
-    @State private var showNewNotebook = false
     @State private var newNotebookName = ""
-    @State private var notebookError: String?
+    /// 侧栏所有弹窗统一走一个状态：多个 .alert 串在同一视图上时容易只有一个生效。
+    @State private var activeDialog: SidebarDialog?
+
+    private enum SidebarDialog {
+        case deleteTag(String)
+        case newNotebook
+        case notebookError(String)
+        case deleteNotebook(String)
+    }
 
     private var isWide: Bool { width >= SidebarWidth.threshold }
 
@@ -33,7 +39,6 @@ struct SidebarView: View {
                     ForEach(notebooks.list, id: \.self) { nb in
                         notebookItem(nb, icon: notebookIcon(nb))
                     }
-                    newNotebookButton
 
                     // 分类与标签之间的分割线：宽版也显示，避免两组混在一起
                     sectionDivider
@@ -55,34 +60,47 @@ struct SidebarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.sidebarBg)
-        .alert("删除标签「\(pendingDeleteTag ?? "")」？",
-               isPresented: Binding(get: { pendingDeleteTag != nil },
-                                    set: { if !$0 { pendingDeleteTag = nil } })) {
-            Button("取消", role: .cancel) { pendingDeleteTag = nil }
-            Button("删除标签", role: .destructive) {
-                if let tag = pendingDeleteTag {
-                    store.removeTag(tag)
-                    if selectedTag == tag { selectedTag = nil }
-                    if hoveredTag == tag { hoveredTag = nil }
+        .alert(dialogTitle,
+               isPresented: Binding(get: { activeDialog != nil },
+                                    set: { if !$0 { activeDialog = nil } })) {
+            if let dialog = activeDialog {
+                switch dialog {
+                case .newNotebook:
+                    TextField("分类名称", text: $newNotebookName)
+                    Button("创建") { createNotebook() }
+                    Button("取消", role: .cancel) { newNotebookName = "" }
+                case .deleteTag(let tag):
+                    Button("取消", role: .cancel) {}
+                    Button("删除标签", role: .destructive) { confirmDeleteTag(tag) }
+                case .deleteNotebook(let name):
+                    Button("取消", role: .cancel) {}
+                    Button("删除该目录", role: .destructive) { confirmDeleteNotebook(name) }
+                case .notebookError:
+                    Button("好") {}
                 }
-                pendingDeleteTag = nil
             }
         } message: {
-            Text("该标签会从所有笔记上移除，笔记本身不会被删除。")
+            Text(dialogMessage)
         }
-        .alert("新建笔记分类", isPresented: $showNewNotebook) {
-            TextField("分类名称", text: $newNotebookName)
-            Button("创建") { createNotebook() }
-            Button("取消", role: .cancel) { newNotebookName = "" }
-        } message: {
-            Text("新分类会出现在分类列表中，编辑器里也能把笔记切换过去。")
+    }
+
+    private var dialogTitle: String {
+        guard let dialog = activeDialog else { return "" }
+        switch dialog {
+        case .deleteTag(let tag): return "删除标签「\(tag)」？"
+        case .newNotebook: return "新建笔记分类"
+        case .notebookError: return "无法新建分类"
+        case .deleteNotebook(let name): return "删除目录「\(name)」？"
         }
-        .alert("无法新建分类",
-               isPresented: Binding(get: { notebookError != nil },
-                                    set: { if !$0 { notebookError = nil } })) {
-            Button("好") { notebookError = nil }
-        } message: {
-            Text(notebookError ?? "")
+    }
+
+    private var dialogMessage: String {
+        guard let dialog = activeDialog else { return "" }
+        switch dialog {
+        case .deleteTag: return "该标签会从所有笔记上移除，笔记本身不会被删除。"
+        case .newNotebook: return "新分类会出现在分类列表中，编辑器里也能把笔记切换过去。"
+        case .notebookError(let message): return message
+        case .deleteNotebook(let name): return deleteNotebookMessage(name)
         }
     }
 
@@ -237,56 +255,57 @@ struct SidebarView: View {
             .padding(.vertical, isWide ? 10 : 8)
     }
 
-    /// 新建分类入口，紧跟在分类列表末尾。
-    private var newNotebookButton: some View {
-        Button(action: { showNewNotebook = true }) {
-            if isWide {
-                HStack(spacing: 9) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Theme.textQuaternary)
-                        .frame(width: 18)
-                    Text("新建分类")
-                        .font(.system(size: 12))
-                        .foregroundColor(Theme.textTertiary)
-                    Spacer()
-                }
-                .padding(.horizontal, 8).padding(.vertical, 6)
-                .contentShape(Rectangle())
-            } else {
-                VStack(spacing: 3) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(Theme.textQuaternary)
-                        .frame(width: 18, height: 18)
-                    Text("新建")
-                        .font(.system(size: 9))
-                        .foregroundColor(Theme.textQuaternary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-        }
-        .buttonStyle(.plain)
-        .help("新建一个笔记分类")
-    }
-
     private func createNotebook() {
         let name = newNotebookName
         newNotebookName = ""
         if let error = notebooks.add(name) {
-            notebookError = error
+            // 先关掉输入框弹窗，再单独展示错误，避免两个弹窗互相抢状态。
+            activeDialog = nil
+            DispatchQueue.main.async { activeDialog = .notebookError(error) }
+            return
         }
+        activeDialog = nil
+    }
+
+    private func confirmDeleteTag(_ tag: String) {
+        store.removeTag(tag)
+        if selectedTag == tag { selectedTag = nil }
+        if hoveredTag == tag { hoveredTag = nil }
+        activeDialog = nil
+    }
+
+    /// 删除目录：先把笔记转移到「全部笔记」，再从自建分类里移除。
+    private func confirmDeleteNotebook(_ name: String) {
+        store.moveNotes(from: name, to: Notebooks.all)
+        notebooks.remove(name)
+        if selectedNotebook == name { selectedNotebook = Notebooks.all }
+        activeDialog = nil
+    }
+
+    private func deleteNotebookMessage(_ name: String) -> String {
+        let count = store.count(inNotebook: name)
+        if count > 0 {
+            return "该目录下有 \(count) 篇笔记，删除后会自动转移到「全部笔记」，笔记本身不会丢失。"
+        }
+        return "该目录下暂无笔记，删除后会从分类列表中移除。"
     }
 
     // MARK: 笔记本/标签项
     private func notebookItem(_ name: String, icon: String) -> some View {
         let active = !showingTrash && selectedTag == nil && selectedNotebook == name
-        return sideItem(title: name, icon: icon, count: store.count(inNotebook: name), active: active) {
+        let isCustom = notebooks.custom.contains(name)
+        return sideItem(title: name, icon: icon,
+                        count: store.count(inNotebook: name), active: active) {
             selectedNotebook = name
             selectedTag = nil
             showingTrash = false
+        }
+        .contextMenu {
+            Button("新建笔记分类") { activeDialog = .newNotebook }
+            if isCustom {
+                Divider()
+                Button("删除该目录", role: .destructive) { activeDialog = .deleteNotebook(name) }
+            }
         }
     }
 
@@ -296,10 +315,10 @@ struct SidebarView: View {
         let hovering = hoveredTag == tag
         // 紧凑档下压缩图标、间距与内边距，让标签名能完整显示四个字
         return HStack(spacing: isWide ? 9 : 3) {
-            Image(systemName: "tag")
-                .font(.system(size: isWide ? 14 : 11))
-                .foregroundColor(active ? Theme.accent : Theme.textTertiary)
-                .frame(width: isWide ? 18 : 12)
+            // 按用户提供样式重绘的书页图标，取代原来的 tag 标签牌
+            BookTagIcon(size: isWide ? 17 : 15,
+                        color: active ? Theme.accent : Theme.textTertiary)
+                .frame(width: isWide ? 19 : 15)
             Text(tag)
                 .font(.system(size: isWide ? 13 : 11, weight: active ? .semibold : .regular))
                 .foregroundColor(active ? Theme.accentHover : Theme.textSecondary)
@@ -322,7 +341,7 @@ struct SidebarView: View {
         }
         .onHover { hoveredTag = $0 ? tag : nil }
         .contextMenu {
-            Button("删除标签", role: .destructive) { pendingDeleteTag = tag }
+            Button("删除标签", role: .destructive) { activeDialog = .deleteTag(tag) }
         }
     }
 
@@ -450,5 +469,66 @@ private struct AvatarBadge: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+    }
+}
+
+// MARK: - 标签项图标（按用户提供样式重绘）
+
+/// 圆角书页框：上边中部浅凹、下边中部向下凸出，四角为圆角。
+private struct BookFrameShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let r = min(w, h) * 0.20
+        let top = h * 0.06
+        let bottom = h * 0.86
+        let notchW = w * 0.30
+        // 二次曲线的实际偏移是控制点偏移的一半，因此控制点取 2 倍。
+        // 凹/凸都保持浅一些，避免小尺寸下变成明显的「V」字。
+        let notch = h * 0.065
+        var p = Path()
+        p.move(to: CGPoint(x: r, y: top))
+        p.addLine(to: CGPoint(x: w / 2 - notchW / 2, y: top))
+        p.addQuadCurve(to: CGPoint(x: w / 2 + notchW / 2, y: top),
+                       control: CGPoint(x: w / 2, y: top + notch * 2))
+        p.addLine(to: CGPoint(x: w - r, y: top))
+        p.addQuadCurve(to: CGPoint(x: w, y: top + r), control: CGPoint(x: w, y: top))
+        p.addLine(to: CGPoint(x: w, y: bottom - r))
+        p.addQuadCurve(to: CGPoint(x: w - r, y: bottom), control: CGPoint(x: w, y: bottom))
+        p.addLine(to: CGPoint(x: w / 2 + notchW / 2, y: bottom))
+        p.addQuadCurve(to: CGPoint(x: w / 2 - notchW / 2, y: bottom),
+                       control: CGPoint(x: w / 2, y: bottom + notch * 2))
+        p.addLine(to: CGPoint(x: r, y: bottom))
+        p.addQuadCurve(to: CGPoint(x: 0, y: bottom - r), control: CGPoint(x: 0, y: bottom))
+        p.addLine(to: CGPoint(x: 0, y: top + r))
+        p.addQuadCurve(to: CGPoint(x: r, y: top), control: CGPoint(x: 0, y: top))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// 书页框 + 中间三条圆头竖线（中间长、两侧短且更浅）。
+private struct BookTagIcon: View {
+    let size: CGFloat
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            BookFrameShape()
+                .stroke(color, style: StrokeStyle(lineWidth: size * 0.11,
+                                                  lineCap: .round,
+                                                  lineJoin: .round))
+                .padding(size * 0.06)
+            // 三条竖线之间留出明显间隙，否则窄版小尺寸下会糊成一块灰方块
+            HStack(spacing: size * 0.105) {
+                Capsule().fill(color.opacity(0.5))
+                    .frame(width: size * 0.07, height: size * 0.24)
+                Capsule().fill(color.opacity(0.5))
+                    .frame(width: size * 0.07, height: size * 0.40)
+                Capsule().fill(color.opacity(0.5))
+                    .frame(width: size * 0.07, height: size * 0.24)
+            }
+        }
+        .frame(width: size, height: size)
     }
 }
