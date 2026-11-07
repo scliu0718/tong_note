@@ -218,7 +218,7 @@ struct SidebarView: View {
         }
     }
 
-    /// 标签项：图标 + 文字单行横排；悬浮显示删除按钮，右键菜单也可删除。
+    /// 标签项：图标 + 文字单行横排；删除只走右键菜单，保持行内简洁。
     private func tagItem(_ tag: String) -> some View {
         let active = !showingTrash && selectedTag == tag
         let hovering = hoveredTag == tag
@@ -232,19 +232,9 @@ struct SidebarView: View {
                 .foregroundColor(active ? Theme.accentHover : Theme.textSecondary)
                 .lineLimit(1)
             Spacer(minLength: 2)
-            if hovering {
-                Button(action: { pendingDeleteTag = tag }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(Theme.red)
-                }
-                .buttonStyle(.plain)
-                .help("删除标签「\(tag)」")
-            } else {
-                Text(verbatim: "\(store.count(withTag: tag))")
-                    .font(.system(size: isWide ? 11 : 10))
-                    .foregroundColor(Theme.textQuaternary)
-            }
+            Text(verbatim: "\(store.count(withTag: tag))")
+                .font(.system(size: isWide ? 11 : 10))
+                .foregroundColor(Theme.textQuaternary)
         }
         .padding(.horizontal, 8).padding(.vertical, isWide ? 7 : 6)
         .background(active ? Theme.accentTint : (hovering ? Color(hex: 0xEFEFF1) : Color.clear))
@@ -257,7 +247,7 @@ struct SidebarView: View {
         }
         .onHover { hoveredTag = $0 ? tag : nil }
         .contextMenu {
-            Button("删除标签「\(tag)」", role: .destructive) { pendingDeleteTag = tag }
+            Button("删除标签", role: .destructive) { pendingDeleteTag = tag }
         }
     }
 
