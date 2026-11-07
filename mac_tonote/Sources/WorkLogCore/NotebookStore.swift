@@ -29,4 +29,11 @@ public final class NotebookStore: ObservableObject {
         UserDefaults.standard.set(custom, forKey: defaultsKey)
         return nil
     }
+
+    /// 删除自建分类（内置分类不可删除）。
+    public func remove(_ name: String) {
+        guard custom.contains(name) else { return }
+        custom.removeAll { $0 == name }
+        UserDefaults.standard.set(custom, forKey: defaultsKey)
+    }
 }

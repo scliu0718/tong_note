@@ -185,7 +185,9 @@ struct EditorView: View {
                         .font(.system(size: 12)).foregroundColor(Theme.textQuaternary)
                 } else {
                     Menu {
-                        ForEach(notebooks.list, id: \.self) { nb in
+                        // 目录被删除后笔记会落到「全部笔记」（未分类），
+                        // 此时把它也列入选项，避免下拉里当前选中项为空。
+                        ForEach(notebookChoices, id: \.self) { nb in
                             Button(nb) { note.notebook = nb }
                         }
                     } label: {
@@ -269,6 +271,13 @@ struct EditorView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 16).padding(.bottom, 10)
+    }
+
+    /// 分类下拉选项；当前分类已不存在时（例如目录被删除）额外保留它作为「未分类」项。
+    private var notebookChoices: [String] {
+        notebooks.list.contains(note.notebook)
+            ? notebooks.list
+            : [note.notebook] + notebooks.list
     }
 
     /// 「快同步」独立条目标识：明确它不属于任何笔记本分类、也不参与分类筛选。

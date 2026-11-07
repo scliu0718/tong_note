@@ -99,6 +99,17 @@ public final class NoteStore: ObservableObject {
         activeNotes.filter { $0.tags.contains(tag) }.count
     }
 
+    /// 删除目录时把该目录下的笔记（含回收站）整体转移到目标分类，笔记本身不删除。
+    public func moveNotes(from: String, to: String) {
+        var changed = false
+        for i in notes.indices where notes[i].notebook == from {
+            notes[i].notebook = to
+            notes[i].updatedAt = Date()
+            changed = true
+        }
+        if changed { save() }
+    }
+
     /// 删除一个标签：从所有笔记（含回收站）上移除，笔记本身与正文保留。
     public func removeTag(_ tag: String) {
         var changed = false
