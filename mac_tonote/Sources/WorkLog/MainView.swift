@@ -59,8 +59,17 @@ struct MainView: View {
                            todos: todos,
                            onDelete: {
                                store.moveToTrash(id)
-                               if selectedID == id { selectedID = NoteStore.quickSyncNoteID }
-                           })
+                               selectFirstNote(afterRemoving: id)
+                           },
+                           onPermanentDelete: {
+                               store.permanentlyDelete(id)
+                               selectFirstNote(afterRemoving: id)
+                           },
+                           onRestore: {
+                               store.restore(id)
+                               selectFirstNote(afterRemoving: id)
+                           },
+                           showingTrash: showingTrash)
                     .id(id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -73,12 +82,11 @@ struct MainView: View {
             selectedID = store.activeNotes.first(where: { $0.id != NoteStore.quickSyncNoteID })?.id
                 ?? NoteStore.quickSyncNoteID
         }
-        // 兜底：当前选中的笔记被删除/消失时，右侧回到「快同步」
+        // 兜底：当前选中的笔记被删除/消失时，选中当前分类第一条，而不是「快同步」
         .onReceive(store.$notes) { notes in
-            if let id = selectedID, !notes.contains(where: { $0.id == id }) {
-                selectedID = NoteStore.quickSyncNoteID
-                showTodos = false
-            }
+            guard let id = selectedID, id != NoteStore.quickSyncNoteID else { return }
+            guard !notes.contains(where: { $0.id == id }) else { return }
+            selectedID = displayedNotes.first?.id ?? NoteStore.quickSyncNoteID
         }
         .onChange(of: selectedID) { _, newValue in
             if newValue != nil { showTodos = false }
@@ -114,6 +122,14 @@ struct MainView: View {
         case .title: list.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
         }
         return list
+    }
+
+    /// 删除 / 彻底删除 / 恢复之后，自动选中当前筛选分类里的第一条笔记；
+    /// 只有该分类已经空了，才回退到固定的「快同步」篇。
+    private func selectFirstNote(afterRemoving removedID: UUID? = nil) {
+        let remaining = displayedNotes.filter { $0.id != removedID }
+        selectedID = remaining.first?.id ?? NoteStore.quickSyncNoteID
+        showTodos = false
     }
 
     private func newNote() {

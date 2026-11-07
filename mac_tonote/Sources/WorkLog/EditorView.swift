@@ -25,12 +25,22 @@ struct EditorView: View {
     var store: NoteStore
     var todos: TodoStore
     var onDelete: () -> Void
+    var onPermanentDelete: () -> Void
+    var onRestore: () -> Void
+    var showingTrash: Bool
 
     @EnvironmentObject private var sync: SyncEngine
     @StateObject private var controller = RichTextEditorController()
     @State private var newTag = ""
     @State private var showAddTag = false
+    @State private var pendingDelete: DeleteAction?
     @State private var errorMessage: String?
+
+    /// 右上角删除按钮的两种确认：移入回收站 / 永久删除（回收站内）
+    private enum DeleteAction: String {
+        case trash
+        case permanent
+    }
     @State private var showLinkPrompt = false
     @State private var linkURL = "https://"
     @State private var linkText = ""
@@ -89,6 +99,25 @@ struct EditorView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        // 删除二次确认：普通笔记移入回收站，回收站笔记永久删除
+        .alert(deleteAlertTitle,
+               isPresented: Binding(get: { pendingDelete != nil },
+                                    set: { if !$0 { pendingDelete = nil } })) {
+            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button(pendingDelete == .permanent ? "彻底删除" : "移入回收站", role: .destructive) {
+                let action = pendingDelete
+                pendingDelete = nil
+                if action == .permanent { onPermanentDelete() } else { onDelete() }
+            }
+        } message: {
+            Text(pendingDelete == .permanent
+                 ? "此操作不可恢复，笔记将被永久移除。"
+                 : "笔记将移入回收站，可随时在回收站中恢复。")
+        }
+    }
+
+    private var deleteAlertTitle: String {
+        pendingDelete == .permanent ? "彻底删除笔记？" : "删除笔记？"
     }
 
     private var isQuickSync: Bool {
@@ -193,8 +222,11 @@ struct EditorView: View {
                     }
                 } else {
                     HStack(spacing: 5) {
-                        Circle().fill(Theme.accent).frame(width: 6, height: 6)
-                        Text("已保存到本地").font(.system(size: 12, weight: .medium)).foregroundColor(Theme.accent)
+                        Circle().fill(showingTrash ? Theme.textQuaternary : Theme.accent)
+                            .frame(width: 6, height: 6)
+                        Text(showingTrash ? "回收站中的笔记" : "已保存到本地")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(showingTrash ? Theme.textTertiary : Theme.accent)
                     }
                 }
             }
@@ -323,14 +355,37 @@ struct EditorView: View {
 
             Text("\(plainWordCount) 字").font(.system(size: 12)).foregroundColor(Theme.textTertiary)
             if !isQuickSync {
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                        .foregroundColor(Theme.textTertiary)
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
+                // 回收站里的笔记不再显示「删除」，改为「恢复笔记」+「彻底删除」
+                if showingTrash {
+                    Button(action: onRestore) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("恢复笔记").font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(Theme.accent)
+                        .padding(.horizontal, 9).padding(.vertical, 5)
+                        .background(Theme.accentTint)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("把笔记恢复到原分类")
                 }
-                .buttonStyle(.plain).help("删除（移入回收站）")
+
+                Button(action: { pendingDelete = showingTrash ? .permanent : .trash }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: showingTrash ? "trash.slash" : "trash")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(showingTrash ? "彻底删除" : "删除笔记")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(showingTrash ? Theme.red : Theme.textSecondary)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(showingTrash ? Color(hex: 0xFCEBEB) : Theme.lineSoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help(showingTrash ? "永久删除这篇笔记" : "删除笔记（移入回收站）")
             }
         }
         .padding(.horizontal, 20).padding(.vertical, 6)

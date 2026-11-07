@@ -378,34 +378,38 @@ struct TodoView: View {
             .kerning(0.3)
     }
 
-    // MARK: 截止时间（保存 + 年月日步进 + 日历）
+    // MARK: 截止时间（全部收进一行：保存 + 设置截止时间 + 紧凑年月日 + 日历）
     @ViewBuilder
     private func deadlineSection(_ todo: Todo) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 「保存」为绿色文字，与「设置截止时间」同一行、置于其前，不再单开一行
-            HStack(spacing: 14) {
-                Button("保存") {
-                    expandedID = nil
-                    scheduleAutoSync()
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.accent)
-                .help("保存并收起")
-
-                plannedToggle(todo)
+        HStack(spacing: 9) {
+            Button("保存") {
+                expandedID = nil
+                scheduleAutoSync()
             }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(Theme.accent)
+            .help("保存并收起")
 
+            plannedToggle(todo)
+
+            // 原来是独立第二行的三个大步进框，现缩小后紧跟「设置截止时间」
             if todo.plannedAt != nil {
                 let c = components(of: todo)
-                HStack(spacing: 8) {
-                    stepField("年", value: c.year, range: 2000...2100, wrap: false) { setDate(todo, y: $0, m: c.month, d: min(c.day, daysIn(y: $0, m: c.month))) }
-                    stepField("月", value: c.month, range: 1...12, wrap: true) { setDate(todo, y: c.year, m: $0, d: min(c.day, daysIn(y: c.year, m: $0))) }
-                    stepField("日", value: c.day, range: 1...daysIn(y: c.year, m: c.month), wrap: false) { setDate(todo, y: c.year, m: c.month, d: $0) }
+                HStack(spacing: 5) {
+                    miniStepField("年", value: c.year, range: 2000...2100, wrap: false) {
+                        setDate(todo, y: $0, m: c.month, d: min(c.day, daysIn(y: $0, m: c.month)))
+                    }
+                    miniStepField("月", value: c.month, range: 1...12, wrap: true) {
+                        setDate(todo, y: c.year, m: $0, d: min(c.day, daysIn(y: c.year, m: $0)))
+                    }
+                    miniStepField("日", value: c.day, range: 1...daysIn(y: c.year, m: c.month), wrap: false) {
+                        setDate(todo, y: c.year, m: c.month, d: $0)
+                    }
                     calendarButton(todo)
-                    Spacer(minLength: 0)
                 }
             }
+            Spacer(minLength: 0)
         }
     }
 
@@ -443,28 +447,26 @@ struct TodoView: View {
 
     private func calendarButton(_ todo: Todo) -> some View {
         Button(action: { showCalendar.toggle() }) {
-            HStack(spacing: 5) {
-                Image(systemName: "calendar").font(.system(size: 12, weight: .medium))
-                Text("日历").font(.system(size: 11, weight: .semibold))
+            HStack(spacing: 4) {
+                Image(systemName: "calendar").font(.system(size: 10, weight: .semibold))
+                Text("日历").font(.system(size: 10, weight: .semibold))
             }
             .foregroundColor(Theme.accent)
-            .padding(.horizontal, 11).padding(.vertical, 8)
+            .padding(.horizontal, 8).padding(.vertical, 4)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 6)
                     .fill(Color.white)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accentTint2, lineWidth: 1))
-                    .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.accentTint2, lineWidth: 1))
             )
         }
         .buttonStyle(.plain)
+        .help("在日历中选择日期")
         .popover(isPresented: $showCalendar, arrowEdge: .bottom) {
-            DatePicker("", selection: dateBinding(todo, todo.plannedAt ?? Date()),
-                       displayedComponents: .date)
-                .datePickerStyle(.graphical)
-                .labelsHidden()
-                .tint(Theme.accent)
-                .padding(14)
-                .frame(width: 280)
+            TodoCalendarPopover(
+                selected: todo.plannedAt ?? Date(),
+                onPick: { y, m, d in setDate(todo, y: y, m: m, d: d) },
+                onClose: { showCalendar = false }
+            )
         }
     }
 
@@ -489,27 +491,26 @@ struct TodoView: View {
         scheduleAutoSync()
     }
 
-    private func stepField(_ label: String, value: Int, range: ClosedRange<Int>, wrap: Bool,
-                           onChange: @escaping (Int) -> Void) -> some View {
-        HStack(spacing: 3) {
+    /// 紧凑版年月日步进框：与「设置截止时间」同排，不再独占一行。
+    private func miniStepField(_ label: String, value: Int, range: ClosedRange<Int>, wrap: Bool,
+                               onChange: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 2) {
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 9, weight: .medium))
                 .foregroundColor(Theme.textQuaternary)
-                .padding(.trailing, 2)
-            StepButton(systemName: "minus") { onChange(step(value, -1, range: range, wrap: wrap)) }
+            MiniStepButton(systemName: "minus") { onChange(step(value, -1, range: range, wrap: wrap)) }
             // 用 verbatim 避免 LocalizedStringKey 把 2028 格式化成 "2,028"
             Text(verbatim: "\(value)")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                 .foregroundColor(Theme.textPrimary)
-                .frame(minWidth: label == "年" ? 40 : 26)
-            StepButton(systemName: "plus") { onChange(step(value, 1, range: range, wrap: wrap)) }
+                .frame(minWidth: label == "年" ? 32 : 20)
+            MiniStepButton(systemName: "plus") { onChange(step(value, 1, range: range, wrap: wrap)) }
         }
-        .padding(.horizontal, 7).padding(.vertical, 5)
+        .padding(.horizontal, 5).padding(.vertical, 2)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 6)
                 .fill(Color.white)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line, lineWidth: 1))
         )
     }
 
@@ -525,17 +526,6 @@ struct TodoView: View {
                 set: { newValue in
                     if var t = store.todo(with: todo.id) {
                         t.notes = newValue
-                        store.update(t)
-                        scheduleAutoSync()
-                    }
-                })
-    }
-
-    private func dateBinding(_ todo: Todo, _ current: Date) -> Binding<Date> {
-        Binding(get: { store.todo(with: todo.id)?.plannedAt ?? current },
-                set: { newValue in
-                    if var t = store.todo(with: todo.id) {
-                        t.plannedAt = newValue
                         store.update(t)
                         scheduleAutoSync()
                     }
@@ -635,8 +625,8 @@ struct TodoView: View {
 
 // MARK: - 精致化基础组件
 
-/// 步进按钮：带圆形浅底与悬停反馈
-private struct StepButton: View {
+/// 紧凑步进按钮：14×16，用于第一行日期微调
+private struct MiniStepButton: View {
     let systemName: String
     let action: () -> Void
     @State private var hovering = false
@@ -644,11 +634,11 @@ private struct StepButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 8, weight: .bold))
                 .foregroundColor(hovering ? Theme.accent : Theme.textSecondary)
-                .frame(width: 20, height: 20)
+                .frame(width: 14, height: 16)
                 .background(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: 4)
                         .fill(hovering ? Theme.accentTint : Color(hex: 0xF4F4F6))
                 )
                 .contentShape(Rectangle())
@@ -679,5 +669,188 @@ private struct SmallActionButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - 自定义日历弹窗（替代系统 graphical DatePicker）
+/// 更宽、带月份导航 / 今天 / 已选日期 / 完成按钮的日历，与 App 主题色统一。
+private struct TodoCalendarPopover: View {
+    let selected: Date
+    let onPick: (Int, Int, Int) -> Void
+    let onClose: () -> Void
+
+    @State private var page: Date
+    @State private var hoveredDay: Date?
+
+    private let cal = Calendar.current
+    private static let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
+    private static let selectedFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy年M月d日"
+        return f
+    }()
+
+    init(selected: Date,
+         onPick: @escaping (Int, Int, Int) -> Void,
+         onClose: @escaping () -> Void) {
+        self.selected = selected
+        self.onPick = onPick
+        self.onClose = onClose
+        _page = State(initialValue: selected)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+            weekdayRow
+            dayGrid
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+            footer
+        }
+        .frame(width: 348)
+        .background(Color.white)
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: monthTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                Text("选择任务截止日期")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textTertiary)
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 5) {
+                navButton("chevron.left") { moveMonth(-1) }
+                Button("今天") { pick(Date()) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Theme.accent)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Theme.accentTint)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                navButton("chevron.right") { moveMonth(1) }
+            }
+        }
+        .padding(.horizontal, 18).padding(.vertical, 14)
+    }
+
+    private func navButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Theme.textSecondary)
+                .frame(width: 24, height: 24)
+                .background(Color(hex: 0xF4F4F6))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var weekdayRow: some View {
+        HStack(spacing: 0) {
+            ForEach(Self.weekdays, id: \.self) { w in
+                Text(w)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundColor(w == "日" || w == "六" ? Theme.textTertiary : Theme.textQuaternary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 6)
+    }
+
+    private var dayGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 3) {
+            ForEach(dayItems) { item in
+                dayCell(item)
+            }
+        }
+        .padding(.horizontal, 18).padding(.bottom, 14)
+    }
+
+    private func dayCell(_ item: DayItem) -> some View {
+        let isSelected = cal.isDate(item.date, inSameDayAs: selected)
+        let isToday = cal.isDateInToday(item.date)
+        return Button(action: { pick(item.date) }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected ? Theme.accent
+                          : (hoveredDay == item.date ? Theme.accentTint : Color.clear))
+                if isToday && !isSelected {
+                    Circle().fill(Theme.accent).frame(width: 4, height: 4).offset(y: 11)
+                }
+                Text(verbatim: "\(item.number)")
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular,
+                                  design: .monospaced))
+                    .foregroundColor(isSelected ? .white
+                                     : (item.inMonth ? Theme.textPrimary
+                                        : Theme.textQuaternary.opacity(0.55)))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in hoveredDay = inside ? item.date : nil }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 12))
+                .foregroundColor(Theme.accent)
+            Text(verbatim: "已选 \(Self.selectedFormatter.string(from: selected))")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Theme.textSecondary)
+            Spacer(minLength: 0)
+            Button("完成") { onClose() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 15).padding(.vertical, 5)
+                .background(Theme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(.horizontal, 18).padding(.vertical, 12)
+    }
+
+    private struct DayItem: Identifiable {
+        let id: Int
+        let date: Date
+        let number: Int
+        let inMonth: Bool
+    }
+
+    private var dayItems: [DayItem] {
+        let comps = cal.dateComponents([.year, .month], from: page)
+        guard let first = cal.date(from: comps) else { return [] }
+        let weekday = cal.component(.weekday, from: first)   // 1 = 周日
+        let start = cal.date(byAdding: .day, value: 1 - weekday, to: first) ?? first
+        return (0..<42).compactMap { i in
+            guard let d = cal.date(byAdding: .day, value: i, to: start) else { return nil }
+            let c = cal.dateComponents([.year, .month, .day], from: d)
+            return DayItem(id: i, date: d, number: c.day ?? 1,
+                           inMonth: c.year == comps.year && c.month == comps.month)
+        }
+    }
+
+    private var monthTitle: String {
+        let c = cal.dateComponents([.year, .month], from: page)
+        return "\(c.year ?? 2026)年 \(c.month ?? 1)月"
+    }
+
+    private func moveMonth(_ delta: Int) {
+        if let d = cal.date(byAdding: .month, value: delta, to: page) { page = d }
+    }
+
+    private func pick(_ date: Date) {
+        let c = cal.dateComponents([.year, .month, .day], from: date)
+        page = date
+        onPick(c.year ?? 2026, c.month ?? 1, c.day ?? 1)
     }
 }
