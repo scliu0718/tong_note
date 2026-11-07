@@ -99,6 +99,17 @@ public final class NoteStore: ObservableObject {
         activeNotes.filter { $0.tags.contains(tag) }.count
     }
 
+    /// 删除一个标签：从所有笔记（含回收站）上移除，笔记本身与正文保留。
+    public func removeTag(_ tag: String) {
+        var changed = false
+        for i in notes.indices where notes[i].tags.contains(tag) {
+            notes[i].tags.removeAll { $0 == tag }
+            notes[i].updatedAt = Date()
+            changed = true
+        }
+        if changed { save() }
+    }
+
     // MARK: - CRUD
     @discardableResult
     public func addNote(notebook: String = "工作日志") -> Note {
