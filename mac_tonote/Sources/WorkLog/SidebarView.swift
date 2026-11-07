@@ -11,9 +11,13 @@ struct SidebarView: View {
     var onSettings: () -> Void
 
     @ObservedObject private var avatarStore = AvatarStore.shared
+    @ObservedObject private var notebooks = NotebookStore.shared
     @State private var showAvatarPicker = false
     @State private var hoveredTag: String?
     @State private var pendingDeleteTag: String?
+    @State private var showNewNotebook = false
+    @State private var newNotebookName = ""
+    @State private var notebookError: String?
 
     private var isWide: Bool { width >= SidebarWidth.threshold }
 
@@ -26,11 +30,13 @@ struct SidebarView: View {
                     groupDivider
 
                     notebookItem(Notebooks.all, icon: "tray.full")
-                    ForEach(Notebooks.list, id: \.self) { nb in
+                    ForEach(notebooks.list, id: \.self) { nb in
                         notebookItem(nb, icon: notebookIcon(nb))
                     }
+                    newNotebookButton
 
-                    groupDivider
+                    // 分类与标签之间的分割线：宽版也显示，避免两组混在一起
+                    sectionDivider
 
                     ForEach(store.allTags, id: \.self) { tag in
                         tagItem(tag)
@@ -63,6 +69,20 @@ struct SidebarView: View {
             }
         } message: {
             Text("该标签会从所有笔记上移除，笔记本身不会被删除。")
+        }
+        .alert("新建笔记分类", isPresented: $showNewNotebook) {
+            TextField("分类名称", text: $newNotebookName)
+            Button("创建") { createNotebook() }
+            Button("取消", role: .cancel) { newNotebookName = "" }
+        } message: {
+            Text("新分类会出现在分类列表中，编辑器里也能把笔记切换过去。")
+        }
+        .alert("无法新建分类",
+               isPresented: Binding(get: { notebookError != nil },
+                                    set: { if !$0 { notebookError = nil } })) {
+            Button("好") { notebookError = nil }
+        } message: {
+            Text(notebookError ?? "")
         }
     }
 
@@ -206,6 +226,58 @@ struct SidebarView: View {
     private var groupDivider: some View {
         if isWide { return AnyView(EmptyView()) }
         return AnyView(Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 8).padding(.horizontal, 4))
+    }
+
+    /// 分类与标签之间的分隔线，宽窄两版都显示。
+    private var sectionDivider: some View {
+        Rectangle()
+            .fill(Theme.line)
+            .frame(height: 1)
+            .padding(.horizontal, isWide ? 8 : 4)
+            .padding(.vertical, isWide ? 10 : 8)
+    }
+
+    /// 新建分类入口，紧跟在分类列表末尾。
+    private var newNotebookButton: some View {
+        Button(action: { showNewNotebook = true }) {
+            if isWide {
+                HStack(spacing: 9) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Theme.textQuaternary)
+                        .frame(width: 18)
+                    Text("新建分类")
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.textTertiary)
+                    Spacer()
+                }
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .contentShape(Rectangle())
+            } else {
+                VStack(spacing: 3) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Theme.textQuaternary)
+                        .frame(width: 18, height: 18)
+                    Text("新建")
+                        .font(.system(size: 9))
+                        .foregroundColor(Theme.textQuaternary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+        }
+        .buttonStyle(.plain)
+        .help("新建一个笔记分类")
+    }
+
+    private func createNotebook() {
+        let name = newNotebookName
+        newNotebookName = ""
+        if let error = notebooks.add(name) {
+            notebookError = error
+        }
     }
 
     // MARK: 笔记本/标签项
