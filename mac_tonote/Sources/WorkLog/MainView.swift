@@ -7,11 +7,18 @@ enum SortMode: String, CaseIterable {
     case title = "按标题"
 }
 
+/// 侧栏只允许两档固定宽度，避免拖到中间宽度时两种排版混在一起、对不齐。
+enum SidebarWidth {
+    static let compact: CGFloat = 112
+    static let expanded: CGFloat = 200
+    static let threshold: CGFloat = (compact + expanded) / 2   // 156
+}
+
 struct MainView: View {
     @StateObject private var store = NoteStore()
     @StateObject private var todos = TodoStore()
     @EnvironmentObject private var sync: SyncEngine
-    @State private var sidebarWidth: CGFloat = 112
+    @State private var sidebarWidth: CGFloat = SidebarWidth.compact
     @State private var selectedID: UUID?
     @State private var showSync = false
     @State private var showTodos = false
@@ -159,9 +166,6 @@ struct ResizeHandle: View {
     @State private var initialWidth: CGFloat = 0
     @State private var hovering = false
 
-    private let minWidth: CGFloat = 112
-    private let maxWidth: CGFloat = 320
-
     var body: some View {
         Rectangle()
             .fill(hovering ? Theme.accent : Color.clear)
@@ -173,10 +177,19 @@ struct ResizeHandle: View {
                 DragGesture()
                     .onChanged { value in
                         if initialWidth == 0 { initialWidth = width }
-                        let newWidth = initialWidth + value.translation.width
-                        width = min(max(newWidth, minWidth), maxWidth)
+                        let projected = initialWidth + value.translation.width
+                        // 只吸附到两档，不再产生中间宽度
+                        let target = projected >= SidebarWidth.threshold
+                            ? SidebarWidth.expanded : SidebarWidth.compact
+                        // 瞬间切换，不产生任何中间宽度的过渡帧
+                        if width != target { width = target }
                     }
                     .onEnded { _ in initialWidth = 0 }
             )
+            .onTapGesture {
+                width = width >= SidebarWidth.threshold
+                    ? SidebarWidth.compact : SidebarWidth.expanded
+            }
+            .help("拖动或点击切换侧栏宽度")
     }
 }
