@@ -15,7 +15,7 @@ struct SidebarView: View {
     @State private var hoveredTag: String?
     @State private var pendingDeleteTag: String?
 
-    private var isWide: Bool { width >= 200 }
+    private var isWide: Bool { width >= SidebarWidth.threshold }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -222,21 +222,24 @@ struct SidebarView: View {
     private func tagItem(_ tag: String) -> some View {
         let active = !showingTrash && selectedTag == tag
         let hovering = hoveredTag == tag
-        return HStack(spacing: isWide ? 9 : 6) {
+        // 紧凑档下压缩图标、间距与内边距，让标签名能完整显示四个字
+        return HStack(spacing: isWide ? 9 : 3) {
             Image(systemName: "tag")
-                .font(.system(size: isWide ? 14 : 12))
+                .font(.system(size: isWide ? 14 : 11))
                 .foregroundColor(active ? Theme.accent : Theme.textTertiary)
-                .frame(width: isWide ? 18 : 14)
+                .frame(width: isWide ? 18 : 12)
             Text(tag)
                 .font(.system(size: isWide ? 13 : 11, weight: active ? .semibold : .regular))
                 .foregroundColor(active ? Theme.accentHover : Theme.textSecondary)
                 .lineLimit(1)
-            Spacer(minLength: 2)
+                // 直接吃掉剩余空间，省掉 Spacer 带来的两段额外间距
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(verbatim: "\(store.count(withTag: tag))")
                 .font(.system(size: isWide ? 11 : 10))
                 .foregroundColor(Theme.textQuaternary)
+                .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 8).padding(.vertical, isWide ? 7 : 6)
+        .padding(.horizontal, isWide ? 8 : 6).padding(.vertical, isWide ? 7 : 6)
         .background(active ? Theme.accentTint : (hovering ? Color(hex: 0xEFEFF1) : Color.clear))
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
