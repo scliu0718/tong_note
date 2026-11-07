@@ -325,20 +325,28 @@ struct SidebarView: View {
     }
 
     private var storageMeter: some View {
-        VStack(spacing: 0) {
+        // 与「全部笔记」分类计数同口径：只算有效笔记，
+        // 排除回收站里的笔记和「快同步」这条独立虚拟笔记。
+        let count = store.count(inNotebook: Notebooks.all)
+        return VStack(spacing: 0) {
             if isWide {
                 Text("本地存储").font(.system(size: 11)).foregroundColor(Theme.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack {
-                    Text("\(store.notes.count) 篇笔记").font(.system(size: 10)).foregroundColor(Theme.textQuaternary)
+                    Text(verbatim: "\(count) 篇笔记").font(.system(size: 10)).foregroundColor(Theme.textQuaternary)
                     Spacer()
                     Text("本地").font(.system(size: 10)).foregroundColor(Theme.textQuaternary)
                 }
                 .padding(.top, 4)
             } else {
-                Text("\(store.notes.count)").font(.system(size: 10)).foregroundColor(Theme.textQuaternary)
+                // 窄侧栏原本只显示一个裸数字，容易被误读成回收站计数，补上「本地 N 篇」
+                Text(verbatim: "本地 \(count) 篇")
+                    .font(.system(size: 9))
+                    .foregroundColor(Theme.textQuaternary)
+                    .lineLimit(1)
             }
         }
+        .help("本地有效笔记数，不含回收站与「快同步」独立笔记")
     }
 }
 
