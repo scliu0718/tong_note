@@ -323,7 +323,7 @@ struct TodoEntryCard: View {
                     .foregroundColor(Theme.accent)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text("任务")
+                Text("快任务")
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
                 Text("待完成 \(todos.pendingCount) · 进行中 \(todos.doingCount)")

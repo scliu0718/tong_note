@@ -71,12 +71,18 @@ struct EditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            toolbar
+            // 回收站里的笔记只读：整条格式功能区不显示，只保留一条分隔线
+            if showingTrash {
+                Rectangle().fill(Theme.lineSoft).frame(height: 1)
+            } else {
+                toolbar
+            }
             RichTextEditor(noteID: note.id,
                            content: $content,
                            controller: controller,
                            attachments: attachments,
-                           onEditorError: { errorMessage = $0 })
+                           onEditorError: { errorMessage = $0 },
+                           readOnly: showingTrash)
                 .background(Theme.panelBg)
         }
         .background(Theme.panelBg)
@@ -148,10 +154,25 @@ struct EditorView: View {
     // MARK: - 标题区
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("笔记标题", text: $note.title)
-                .textFieldStyle(.plain)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(Theme.textPrimary)
+            // 回收站：把「恢复 / 彻底删除」放在标题行右上角，正好位于「回收站中的笔记」状态上方
+            HStack(spacing: 10) {
+                if showingTrash {
+                    Text(note.title.isEmpty ? "笔记标题" : note.title)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 12)
+                    if !isQuickSync {
+                        trashActions
+                    }
+                } else {
+                    TextField("笔记标题", text: $note.title)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
                 Menu {
@@ -228,11 +249,47 @@ struct EditorView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(showingTrash ? Theme.textTertiary : Theme.accent)
                     }
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
             }
+            // 回收站笔记的笔记本 / 标签等元数据也不允许修改
+            .disabled(showingTrash)
         }
         .padding(.horizontal, 24)
         .padding(.top, 16).padding(.bottom, 10)
+    }
+
+    /// 回收站笔记的标题行操作区：两个按钮强制横排，不再挤进工具栏导致文字竖排。
+    private var trashActions: some View {
+        HStack(spacing: 7) {
+            Button(action: onRestore) {
+                Label("恢复笔记", systemImage: "arrow.uturn.backward")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Theme.accent)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Theme.accentTint)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help("把笔记恢复到原分类")
+
+            Button(action: { pendingDelete = .permanent }) {
+                Label("彻底删除", systemImage: "trash.slash")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Theme.red)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Color(hex: 0xFCEBEB))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help("永久删除这篇笔记，不可恢复")
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - 工具栏
@@ -354,38 +411,17 @@ struct EditorView: View {
             Spacer()
 
             Text("\(plainWordCount) 字").font(.system(size: 12)).foregroundColor(Theme.textTertiary)
+            // 删除按钮回到单个图标，功能靠悬浮说明 + 二次确认交代
             if !isQuickSync {
-                // 回收站里的笔记不再显示「删除」，改为「恢复笔记」+「彻底删除」
-                if showingTrash {
-                    Button(action: onRestore) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("恢复笔记").font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(Theme.accent)
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Theme.accentTint)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-                    .help("把笔记恢复到原分类")
-                }
-
-                Button(action: { pendingDelete = showingTrash ? .permanent : .trash }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: showingTrash ? "trash.slash" : "trash")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(showingTrash ? "彻底删除" : "删除笔记")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundColor(showingTrash ? Theme.red : Theme.textSecondary)
-                    .padding(.horizontal, 9).padding(.vertical, 5)
-                    .background(showingTrash ? Color(hex: 0xFCEBEB) : Theme.lineSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Button(action: { pendingDelete = .trash }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundColor(Theme.textTertiary)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(showingTrash ? "永久删除这篇笔记" : "删除笔记（移入回收站）")
+                .help("删除笔记（移入回收站）")
             }
         }
         .padding(.horizontal, 20).padding(.vertical, 6)
@@ -400,15 +436,7 @@ struct EditorView: View {
 
     private func formatButton(_ icon: String, _ action: ToolbarAction, _ help: String,
                               perform: @escaping () -> Void) -> some View {
-        Button(action: perform) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundColor(Theme.textSecondary)
-                .frame(width: 30, height: 30)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        ToolbarIconButton(icon: icon, hint: help, perform: perform)
     }
 
     private var toolbarDivider: some View {
@@ -457,6 +485,52 @@ struct EditorView: View {
         }
         let text = linkText.trimmingCharacters(in: .whitespaces)
         controller.insertLink(url: url, displayText: text.isEmpty ? nil : text)
+    }
+}
+
+/// 工具栏纯图标按钮：悬浮时立刻显示功能文字气泡，系统 help 作为兜底。
+/// 覆盖加粗 / 斜体 / 下划线 / 删除线 / 无序列表 / 有序列表 / 引用 / 代码块 / 链接 / 图片。
+private struct ToolbarIconButton: View {
+    let icon: String
+    let hint: String
+    let perform: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: perform) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(hovering ? Theme.accent : Theme.textSecondary)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(hovering ? Theme.accentTint : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(hint)
+        .onHover { hovering = $0 }
+        .overlay(alignment: .top) {
+            if hovering {
+                Text(hint)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color(hex: 0x2C2C2E).opacity(0.95))
+                    )
+                    .offset(y: -28)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .zIndex(hovering ? 20 : 0)
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
 
