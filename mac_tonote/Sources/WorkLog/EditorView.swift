@@ -175,47 +175,57 @@ struct EditorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
-                Menu {
-                    ForEach(Notebooks.list, id: \.self) { nb in
-                        Button(nb) { note.notebook = nb }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(note.notebook).font(.system(size: 12))
-                        Image(systemName: "chevron.down").font(.system(size: 9))
-                    }
-                    .foregroundColor(Theme.textTertiary)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Color(hex: 0xF2F2F4))
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-
-                ForEach(note.tags, id: \.self) { tag in
-                    HStack(spacing: 3) {
-                        Text(tag).font(.system(size: 12)).foregroundColor(Theme.textTertiary)
-                        Button(action: { removeTag(tag) }) {
-                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
-                                .foregroundColor(Theme.textQuaternary)
+                if isQuickSync {
+                    // 「快同步」和「快任务」一样是独立条目：不归属任何笔记本分类，
+                    // 因此不再显示分类下拉、标签和添加标签入口。
+                    independentBadge
+                    Text("·").foregroundColor(Theme.textQuaternary)
+                    Text("编辑于 \(note.timeText)")
+                        .font(.system(size: 12)).foregroundColor(Theme.textQuaternary)
+                } else {
+                    Menu {
+                        ForEach(Notebooks.list, id: \.self) { nb in
+                            Button(nb) { note.notebook = nb }
                         }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Color(hex: 0xF2F2F4))
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                }
-                Button(action: { showAddTag = true }) {
-                    Image(systemName: "plus").font(.system(size: 10, weight: .bold))
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(note.notebook).font(.system(size: 12))
+                            Image(systemName: "chevron.down").font(.system(size: 9))
+                        }
                         .foregroundColor(Theme.textTertiary)
-                        .frame(width: 20, height: 20)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(Color(hex: 0xF2F2F4))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain).help("添加标签")
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
 
-                Text("·").foregroundColor(Theme.textQuaternary)
-                Text("编辑于 \(note.timeText)").font(.system(size: 12)).foregroundColor(Theme.textQuaternary)
+                    ForEach(note.tags, id: \.self) { tag in
+                        HStack(spacing: 3) {
+                            Text(tag).font(.system(size: 12)).foregroundColor(Theme.textTertiary)
+                            Button(action: { removeTag(tag) }) {
+                                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(Theme.textQuaternary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color(hex: 0xF2F2F4))
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                    }
+                    Button(action: { showAddTag = true }) {
+                        Image(systemName: "plus").font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Theme.textTertiary)
+                            .frame(width: 20, height: 20)
+                            .background(Color(hex: 0xF2F2F4))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain).help("添加标签")
+
+                    Text("·").foregroundColor(Theme.textQuaternary)
+                    Text("编辑于 \(note.timeText)")
+                        .font(.system(size: 12)).foregroundColor(Theme.textQuaternary)
+                }
 
                 Spacer()
 
@@ -258,6 +268,22 @@ struct EditorView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 16).padding(.bottom, 10)
+    }
+
+    /// 「快同步」独立条目标识：明确它不属于任何笔记本分类、也不参与分类筛选。
+    private var independentBadge: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "square.dashed")
+                .font(.system(size: 10, weight: .medium))
+            Text("独立笔记 · 不归属任何分类")
+                .font(.system(size: 11, weight: .medium))
+        }
+        .foregroundColor(Theme.textTertiary)
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(Color(hex: 0xF2F2F4))
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .fixedSize(horizontal: true, vertical: false)
+        .help("「快同步」与「快任务」一样是独立条目，不参与笔记本分类筛选")
     }
 
     /// 回收站笔记的标题行操作区：两个按钮强制横排，不再挤进工具栏导致文字竖排。

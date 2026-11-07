@@ -12,6 +12,8 @@ struct SidebarView: View {
 
     @ObservedObject private var avatarStore = AvatarStore.shared
     @State private var showAvatarPicker = false
+    @State private var hoveredTag: String?
+    @State private var pendingDeleteTag: String?
 
     private var isWide: Bool { width >= 200 }
 
@@ -47,6 +49,21 @@ struct SidebarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.sidebarBg)
+        .alert("删除标签「\(pendingDeleteTag ?? "")」？",
+               isPresented: Binding(get: { pendingDeleteTag != nil },
+                                    set: { if !$0 { pendingDeleteTag = nil } })) {
+            Button("取消", role: .cancel) { pendingDeleteTag = nil }
+            Button("删除标签", role: .destructive) {
+                if let tag = pendingDeleteTag {
+                    store.removeTag(tag)
+                    if selectedTag == tag { selectedTag = nil }
+                    if hoveredTag == tag { hoveredTag = nil }
+                }
+                pendingDeleteTag = nil
+            }
+        } message: {
+            Text("该标签会从所有笔记上移除，笔记本身不会被删除。")
+        }
     }
 
     private func notebookIcon(_ name: String) -> String {
@@ -201,12 +218,46 @@ struct SidebarView: View {
         }
     }
 
+    /// 标签项：图标 + 文字单行横排；悬浮显示删除按钮，右键菜单也可删除。
     private func tagItem(_ tag: String) -> some View {
         let active = !showingTrash && selectedTag == tag
-        return sideItem(title: tag, icon: "tag", count: store.count(withTag: tag), active: active) {
+        let hovering = hoveredTag == tag
+        return HStack(spacing: isWide ? 9 : 6) {
+            Image(systemName: "tag")
+                .font(.system(size: isWide ? 14 : 12))
+                .foregroundColor(active ? Theme.accent : Theme.textTertiary)
+                .frame(width: isWide ? 18 : 14)
+            Text(tag)
+                .font(.system(size: isWide ? 13 : 11, weight: active ? .semibold : .regular))
+                .foregroundColor(active ? Theme.accentHover : Theme.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            if hovering {
+                Button(action: { pendingDeleteTag = tag }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.red)
+                }
+                .buttonStyle(.plain)
+                .help("删除标签「\(tag)」")
+            } else {
+                Text(verbatim: "\(store.count(withTag: tag))")
+                    .font(.system(size: isWide ? 11 : 10))
+                    .foregroundColor(Theme.textQuaternary)
+            }
+        }
+        .padding(.horizontal, 8).padding(.vertical, isWide ? 7 : 6)
+        .background(active ? Theme.accentTint : (hovering ? Color(hex: 0xEFEFF1) : Color.clear))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .contentShape(Rectangle())
+        .onTapGesture {
             selectedTag = tag
             selectedNotebook = Notebooks.all
             showingTrash = false
+        }
+        .onHover { hoveredTag = $0 ? tag : nil }
+        .contextMenu {
+            Button("删除标签「\(tag)」", role: .destructive) { pendingDeleteTag = tag }
         }
     }
 

@@ -10,6 +10,8 @@ struct TodoView: View {
 
     @State private var newTitle = ""
     @State private var expandedID: UUID?
+    /// 展开编辑期间冻结的列表顺序：避免一改截止时间就立刻跳到组内第一条
+    @State private var frozenIDs: [UUID]?
     @State private var hoveredID: UUID?
     @State private var filter: Filter = .all
     @State private var showCalendar = false
@@ -31,14 +33,14 @@ struct TodoView: View {
                     if store.todos.isEmpty {
                         emptyState
                     } else {
-                        group("待完成", color: Theme.red, items: store.pending,
+                        group("待完成", color: Theme.red, items: displayItems(store.pending),
                               showStart: true, showTerminate: true)
-                        group("进行中", color: Theme.amber, items: store.doing,
+                        group("进行中", color: Theme.amber, items: displayItems(store.doing),
                               showComplete: true, showTerminate: true)
                         if filter == .all {
-                            group("已完成", color: Theme.accent, items: store.done)
-                            group("已终止", color: Theme.textTertiary, items: store.terminated,
-                                  showRestore: true)
+                            group("已完成", color: Theme.accent, items: displayItems(store.done))
+                            group("已终止", color: Theme.textTertiary,
+                                  items: displayItems(store.terminated), showRestore: true)
                         }
                     }
                 }
@@ -309,8 +311,33 @@ struct TodoView: View {
 
     private func toggleExpand(_ id: UUID) {
         withAnimation(.easeInOut(duration: 0.14)) {
-            expandedID = expandedID == id ? nil : id
+            if expandedID == id {
+                finishEditing()
+            } else {
+                expandedID = id
+                frozenIDs = currentOrder()
+            }
         }
+    }
+
+    /// 展开那一刻的全局任务顺序，用于编辑期间保持行位置不动。
+    private func currentOrder() -> [UUID] {
+        (store.pending + store.doing + store.done + store.terminated).map(\.id)
+    }
+
+    /// 收起 / 保存：解除顺序冻结，让新的截止时间、备注等重新参与排序（置顶），并同步。
+    private func finishEditing() {
+        expandedID = nil
+        frozenIDs = nil
+        scheduleAutoSync()
+    }
+
+    /// 编辑期间按冻结顺序渲染；未冻结时直接用仓库的排序结果。
+    private func displayItems(_ items: [Todo]) -> [Todo] {
+        guard let frozen = frozenIDs else { return items }
+        var rank: [UUID: Int] = [:]
+        for (i, id) in frozen.enumerated() { rank[id] = i }
+        return items.sorted { (rank[$0.id] ?? Int.max) < (rank[$1.id] ?? Int.max) }
     }
 
     private func checkbox(for todo: Todo) -> some View {
@@ -386,10 +413,7 @@ struct TodoView: View {
     @ViewBuilder
     private func deadlineSection(_ todo: Todo) -> some View {
         HStack(spacing: 9) {
-            Button("保存") {
-                expandedID = nil
-                scheduleAutoSync()
-            }
+            Button("保存") { finishEditing() }
             .buttonStyle(.plain)
             .font(.system(size: 12, weight: .semibold))
             .foregroundColor(Theme.accent)
