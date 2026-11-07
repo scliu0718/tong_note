@@ -276,6 +276,11 @@ struct SidebarView: View {
 
     /// 删除目录：先把笔记转移到「全部笔记」，再从自建分类里移除。
     private func confirmDeleteNotebook(_ name: String) {
+        // 双保险：即便弹窗状态被异常触发，也不允许删掉「全部笔记」这个兜底容器。
+        guard name != Notebooks.all, notebooks.custom.contains(name) else {
+            activeDialog = nil
+            return
+        }
         store.moveNotes(from: name, to: Notebooks.all)
         notebooks.remove(name)
         if selectedNotebook == name { selectedNotebook = Notebooks.all }
@@ -293,7 +298,10 @@ struct SidebarView: View {
     // MARK: 笔记本/标签项
     private func notebookItem(_ name: String, icon: String) -> some View {
         let active = !showingTrash && selectedTag == nil && selectedNotebook == name
-        let isCustom = notebooks.custom.contains(name)
+        // 「全部笔记」是虚拟汇总项，也是删除其它目录时笔记的兜底归属，永远不可删除；
+        // 内置四个分类同样不可删除，只有用户自建分类才提供「删除该目录」。
+        let isProtected = name == Notebooks.all
+        let isDeletable = !isProtected && notebooks.custom.contains(name)
         return sideItem(title: name, icon: icon,
                         count: store.count(inNotebook: name), active: active) {
             selectedNotebook = name
@@ -302,7 +310,7 @@ struct SidebarView: View {
         }
         .contextMenu {
             Button("新建笔记分类") { activeDialog = .newNotebook }
-            if isCustom {
+            if isDeletable {
                 Divider()
                 Button("删除该目录", role: .destructive) { activeDialog = .deleteNotebook(name) }
             }
@@ -475,29 +483,43 @@ private struct AvatarBadge: View {
 // MARK: - 标签项图标（按用户提供样式重绘）
 
 /// 圆角书页框：上边中部浅凹、下边中部向下凸出，四角为圆角。
+/// 凹/凸用两段三次曲线拼接，保证与水平边相接处切线连续，不会形成生硬的折角。
 private struct BookFrameShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width
         let h = rect.height
-        let r = min(w, h) * 0.20
-        let top = h * 0.06
-        let bottom = h * 0.86
+        let cx = w / 2
+        // 参考图里外框偏方，圆角半径约为框宽的 15%
+        let r = min(w, h) * 0.15
+        let top = h * 0.05
+        let bottom = h * 0.87
         let notchW = w * 0.30
-        // 二次曲线的实际偏移是控制点偏移的一半，因此控制点取 2 倍。
-        // 凹/凸都保持浅一些，避免小尺寸下变成明显的「V」字。
-        let notch = h * 0.065
+        let notch = h * 0.085
+        let shoulder = notchW * 0.30
+        let waist = notchW * 0.20
+
         var p = Path()
         p.move(to: CGPoint(x: r, y: top))
-        p.addLine(to: CGPoint(x: w / 2 - notchW / 2, y: top))
-        p.addQuadCurve(to: CGPoint(x: w / 2 + notchW / 2, y: top),
-                       control: CGPoint(x: w / 2, y: top + notch * 2))
+        p.addLine(to: CGPoint(x: cx - notchW / 2, y: top))
+        // 顶部凹口：左半段下沉、右半段回升，两端与中点切线均保持水平
+        p.addCurve(to: CGPoint(x: cx, y: top + notch),
+                   control1: CGPoint(x: cx - notchW / 2 + shoulder, y: top),
+                   control2: CGPoint(x: cx - waist, y: top + notch))
+        p.addCurve(to: CGPoint(x: cx + notchW / 2, y: top),
+                   control1: CGPoint(x: cx + waist, y: top + notch),
+                   control2: CGPoint(x: cx + notchW / 2 - shoulder, y: top))
         p.addLine(to: CGPoint(x: w - r, y: top))
         p.addQuadCurve(to: CGPoint(x: w, y: top + r), control: CGPoint(x: w, y: top))
         p.addLine(to: CGPoint(x: w, y: bottom - r))
         p.addQuadCurve(to: CGPoint(x: w - r, y: bottom), control: CGPoint(x: w, y: bottom))
-        p.addLine(to: CGPoint(x: w / 2 + notchW / 2, y: bottom))
-        p.addQuadCurve(to: CGPoint(x: w / 2 - notchW / 2, y: bottom),
-                       control: CGPoint(x: w / 2, y: bottom + notch * 2))
+        p.addLine(to: CGPoint(x: cx + notchW / 2, y: bottom))
+        // 底部凸出：路径方向从右往左，与顶部镜像
+        p.addCurve(to: CGPoint(x: cx, y: bottom + notch),
+                   control1: CGPoint(x: cx + notchW / 2 - shoulder, y: bottom),
+                   control2: CGPoint(x: cx + waist, y: bottom + notch))
+        p.addCurve(to: CGPoint(x: cx - notchW / 2, y: bottom),
+                   control1: CGPoint(x: cx - waist, y: bottom + notch),
+                   control2: CGPoint(x: cx - notchW / 2 + shoulder, y: bottom))
         p.addLine(to: CGPoint(x: r, y: bottom))
         p.addQuadCurve(to: CGPoint(x: 0, y: bottom - r), control: CGPoint(x: 0, y: bottom))
         p.addLine(to: CGPoint(x: 0, y: top + r))
@@ -515,18 +537,19 @@ private struct BookTagIcon: View {
     var body: some View {
         ZStack {
             BookFrameShape()
-                .stroke(color, style: StrokeStyle(lineWidth: size * 0.11,
+                .stroke(color, style: StrokeStyle(lineWidth: size * 0.10,
                                                   lineCap: .round,
                                                   lineJoin: .round))
-                .padding(size * 0.06)
-            // 三条竖线之间留出明显间隙，否则窄版小尺寸下会糊成一块灰方块
-            HStack(spacing: size * 0.105) {
-                Capsule().fill(color.opacity(0.5))
-                    .frame(width: size * 0.07, height: size * 0.24)
-                Capsule().fill(color.opacity(0.5))
-                    .frame(width: size * 0.07, height: size * 0.40)
-                Capsule().fill(color.opacity(0.5))
-                    .frame(width: size * 0.07, height: size * 0.24)
+                // 给描边与底部凸出留出余量，避免被 frame 裁掉
+                .padding(size * 0.07)
+            // 三条竖线紧凑排布：略粗一点更贴近参考图，间隙仍能把三条分开
+            HStack(spacing: size * 0.07) {
+                Capsule().fill(color.opacity(0.6))
+                    .frame(width: size * 0.085, height: size * 0.24)
+                Capsule().fill(color.opacity(0.6))
+                    .frame(width: size * 0.085, height: size * 0.40)
+                Capsule().fill(color.opacity(0.6))
+                    .frame(width: size * 0.085, height: size * 0.24)
             }
         }
         .frame(width: size, height: size)
