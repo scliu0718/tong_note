@@ -30,9 +30,9 @@ public final class NotebookStore: ObservableObject {
         return nil
     }
 
-    /// 删除自建分类（内置分类不可删除）。
+    /// 删除自建分类。「全部笔记」是虚拟汇总项与笔记迁移兜底，内置分类也不可删除。
     public func remove(_ name: String) {
-        guard custom.contains(name) else { return }
+        guard name != Notebooks.all, custom.contains(name) else { return }
         custom.removeAll { $0 == name }
         UserDefaults.standard.set(custom, forKey: defaultsKey)
     }
