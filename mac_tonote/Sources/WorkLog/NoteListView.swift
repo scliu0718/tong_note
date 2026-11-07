@@ -52,13 +52,20 @@ struct NoteListView: View {
             Button("彻底删除", role: .destructive) {
                 if let id = confirmDeleteID {
                     store.permanentlyDelete(id)
-                    if selectedID == id { selectedID = NoteStore.quickSyncNoteID }
+                    selectFirstNote(afterRemoving: id)
                 }
                 confirmDeleteID = nil
             }
         } message: {
-            Text("此操作不可恢复。")
+            Text("此操作不可恢复，笔记将被永久移除。")
         }
+    }
+
+    /// 删除 / 彻底删除 / 恢复后，选中当前分类里的第一条笔记；分类空了才回退「快同步」。
+    private func selectFirstNote(afterRemoving removedID: UUID) {
+        guard selectedID == removedID else { return }
+        selectedID = notes.filter { $0.id != removedID }.first?.id
+            ?? NoteStore.quickSyncNoteID
     }
 
     private var emptyState: some View {
@@ -74,18 +81,35 @@ struct NoteListView: View {
         .padding(.top, 60)
     }
 
+    /// 右键浮动菜单：文案统一带「笔记」二字，配 SF Symbol 图标与分组，视觉更规整。
     @ViewBuilder
     private func contextMenu(for note: Note) -> some View {
         if showingTrash {
-            Button("恢复") { store.restore(note.id) }
+            Button {
+                store.restore(note.id)
+                selectFirstNote(afterRemoving: note.id)
+            } label: {
+                Label("恢复笔记", systemImage: "arrow.uturn.backward")
+            }
             Divider()
-            Button("彻底删除", role: .destructive) { confirmDeleteID = note.id }
+            Button(role: .destructive) {
+                confirmDeleteID = note.id
+            } label: {
+                Label("彻底删除笔记", systemImage: "trash.slash")
+            }
         } else {
-            Button(note.pinned ? "取消置顶" : "置顶") { store.togglePin(note.id) }
+            Button {
+                store.togglePin(note.id)
+            } label: {
+                Label(note.pinned ? "取消置顶笔记" : "置顶笔记",
+                      systemImage: note.pinned ? "pin.slash" : "pin")
+            }
             Divider()
-            Button("删除", role: .destructive) {
+            Button(role: .destructive) {
                 store.moveToTrash(note.id)
-                if selectedID == note.id { selectedID = NoteStore.quickSyncNoteID }
+                selectFirstNote(afterRemoving: note.id)
+            } label: {
+                Label("删除笔记", systemImage: "trash")
             }
         }
     }
