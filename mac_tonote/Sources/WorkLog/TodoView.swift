@@ -37,7 +37,7 @@ struct TodoView: View {
                               showComplete: true, showTerminate: true)
                         if filter == .all {
                             group("已完成", color: Theme.accent, items: store.done)
-                            group("终止", color: Theme.textTertiary, items: store.terminated,
+                            group("已终止", color: Theme.textTertiary, items: store.terminated,
                                   showRestore: true)
                         }
                     }
@@ -99,18 +99,19 @@ struct TodoView: View {
                 if sync.status.isSyncing {
                     ProgressView()
                         .controlSize(.small)
-                        .scaleEffect(0.55)
+                        .scaleEffect(0.6)
                 } else {
                     Image(systemName: isSyncFailed ? "exclamationmark.triangle" : "arrow.triangle.2.circlepath")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                 }
                 Text(sync.status.isSyncing ? "同步中" : "同步")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
             }
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundColor(.white)
-            .padding(.horizontal, 10).padding(.vertical, 3)
+            // 与「快同步」篇右上角的同步按钮完全一致：h10 / v4 / 12pt / 圆角 6
+            .padding(.horizontal, 10).padding(.vertical, 4)
             .background(isSyncFailed ? Theme.red : Theme.accent)
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
@@ -199,7 +200,8 @@ struct TodoView: View {
     private func todoRow(_ todo: Todo, showStart: Bool, showComplete: Bool,
                          showTerminate: Bool, showRestore: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 11) {
+            // spacing 11→6：标题与进度圆圈之间的间距缩小一半
+            HStack(spacing: 6) {
                 checkbox(for: todo)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(todo.title)
@@ -279,7 +281,8 @@ struct TodoView: View {
                 }
                 .buttonStyle(.plain).help("删除任务")
             }
-            .padding(.horizontal, 8).padding(.vertical, 9)
+            // 左内边距 26 + checkbox 内圆圈偏移 2.5 ≈ 29，正好对齐分类标题「待完成」的「待」字
+            .padding(.leading, 26).padding(.trailing, 8).padding(.vertical, 9)
             .background(hoveredID == todo.id ? Color(hex: 0xF7FAF8) : Color.clear)
             .contentShape(Rectangle())
             .onHover { inside in
@@ -290,7 +293,7 @@ struct TodoView: View {
 
             if expandedID == todo.id {
                 detail(todo)
-                    .padding(.horizontal, 8)
+                    .padding(.leading, 26).padding(.trailing, 8)
                     .padding(.bottom, 10)
             }
         }
@@ -340,9 +343,10 @@ struct TodoView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     sectionLabel("备注")
-                    Text("创建于 \(Self.createdFmt.string(from: todo.createdAt))")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundColor(Color(hex: 0x3A8FD9))
+                    // 「最近修改」用极淡的灰色，不再用蓝色抢视线
+                    Text("最近修改 \(Self.createdFmt.string(from: todo.updatedAt))")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(Theme.textQuaternary)
                     Spacer(minLength: 0)
                 }
                 TextEditor(text: notesBinding(todo))

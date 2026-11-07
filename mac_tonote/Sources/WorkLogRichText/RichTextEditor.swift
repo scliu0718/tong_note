@@ -15,17 +15,21 @@ public struct RichTextEditor: NSViewRepresentable {
     public var attachments: AttachmentStore
     /// 编辑器错误回调（由上层展示）
     public var onEditorError: ((String) -> Void)?
+    /// 只读模式（回收站笔记）：仍可选中复制文字，但不能修改正文
+    public var readOnly: Bool = false
 
     public init(noteID: UUID,
                 content: Binding<NoteContent>,
                 controller: RichTextEditorController,
                 attachments: AttachmentStore,
-                onEditorError: ((String) -> Void)? = nil) {
+                onEditorError: ((String) -> Void)? = nil,
+                readOnly: Bool = false) {
         self.noteID = noteID
         self._content = content
         self.controller = controller
         self.attachments = attachments
         self.onEditorError = onEditorError
+        self.readOnly = readOnly
     }
 
     public func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -43,6 +47,8 @@ public struct RichTextEditor: NSViewRepresentable {
 
         tv.delegate = context.coordinator
         tv.isRichText = true
+        tv.isEditable = !readOnly
+        tv.isSelectable = true
         tv.allowsUndo = true
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.isAutomaticDashSubstitutionEnabled = false
@@ -78,6 +84,9 @@ public struct RichTextEditor: NSViewRepresentable {
         controller.textView = tv
         controller.attachments = attachments
         controller.noteID = noteID
+        // 视图复用时 readOnly 可能随「进入/退出回收站」变化，每次更新都同步
+        tv.isEditable = !readOnly
+        tv.isSelectable = true
 
         // 粘贴回调要随笔记切换重新绑定，避免指向旧笔记的附件目录
         if let richTextView = tv as? RichTextNSTextView {
