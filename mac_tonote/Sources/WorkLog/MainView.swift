@@ -165,10 +165,13 @@ struct ResizeHandle: View {
     @Binding var width: CGFloat
     @State private var initialWidth: CGFloat = 0
     @State private var hovering = false
+    @State private var dragging = false
+    @State private var didSwitch = false
 
     var body: some View {
         Rectangle()
-            .fill(hovering ? Theme.accent : Color.clear)
+            // 拖动期间分隔条可能因跳档移出鼠标位置，保持高亮避免忽明忽暗
+            .fill(hovering || dragging ? Theme.accent : Color.clear)
             .frame(width: 2)
             .contentShape(Rectangle().inset(by: -3))
             .frame(width: 6)
@@ -177,14 +180,24 @@ struct ResizeHandle: View {
                 DragGesture()
                     .onChanged { value in
                         if initialWidth == 0 { initialWidth = width }
+                        dragging = true
+                        // 一次拖动最多切换一次：跨过阈值后立即锁定，
+                        // 否则鼠标在阈值附近来回移动会让两档反复跳变、界面闪烁
+                        guard !didSwitch else { return }
                         let projected = initialWidth + value.translation.width
-                        // 只吸附到两档，不再产生中间宽度
+                        // 小于阈值 → 窄版；大于阈值 → 宽版，只有这两档
                         let target = projected >= SidebarWidth.threshold
                             ? SidebarWidth.expanded : SidebarWidth.compact
-                        // 瞬间切换，不产生任何中间宽度的过渡帧
-                        if width != target { width = target }
+                        if width != target {
+                            width = target
+                            didSwitch = true
+                        }
                     }
-                    .onEnded { _ in initialWidth = 0 }
+                    .onEnded { _ in
+                        initialWidth = 0
+                        didSwitch = false
+                        dragging = false
+                    }
             )
             .onTapGesture {
                 width = width >= SidebarWidth.threshold
