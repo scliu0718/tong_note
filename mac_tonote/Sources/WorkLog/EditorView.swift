@@ -30,6 +30,7 @@ struct EditorView: View {
     var showingTrash: Bool
 
     @EnvironmentObject private var sync: SyncEngine
+    @ObservedObject private var notebooks = NotebookStore.shared
     @StateObject private var controller = RichTextEditorController()
     @State private var newTag = ""
     @State private var showAddTag = false
@@ -184,7 +185,7 @@ struct EditorView: View {
                         .font(.system(size: 12)).foregroundColor(Theme.textQuaternary)
                 } else {
                     Menu {
-                        ForEach(Notebooks.list, id: \.self) { nb in
+                        ForEach(notebooks.list, id: \.self) { nb in
                             Button(nb) { note.notebook = nb }
                         }
                     } label: {

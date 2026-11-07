@@ -275,12 +275,13 @@ struct QuickSyncCard: View {
         .background(Theme.accentTint)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.accentTint2, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .help("在任意一台电脑的「快同步」笔记里编辑内容并同步，另一台电脑再同步一次就能看到相同内容，实现多设备快速共享。")
     }
 
     private var statusSubtitle: String {
         switch status {
         case .idle:
-            return "点击同步到百度网盘"
+            return "多设备共享 · 一处编辑处处可见"
         case .syncing:
             return "正在拉取云端并对比…"
         case .success(let date):
