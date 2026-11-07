@@ -349,6 +349,8 @@ struct SidebarView: View {
                     .lineLimit(1)
             }
         }
+        // 宽版：外层已有 8，再补 8 → 左内边距 16，与回收站图标（8+8）对齐
+        .padding(.leading, isWide ? 8 : 0)
         .help("本地有效笔记数，不含回收站与「快同步」独立笔记")
     }
 }
