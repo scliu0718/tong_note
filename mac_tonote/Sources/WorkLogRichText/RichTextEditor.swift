@@ -42,7 +42,8 @@ public struct RichTextEditor: NSViewRepresentable {
 
     public func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        let tv = RichTextNSTextView(frame: .zero)
+        // 表格用 NSTextTable，只有 TextKit 1 会画边框并让单元格横排。
+        let tv = RichTextNSTextView.makeTextKit1()
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = false
         tv.autoresizingMask = [.width]
@@ -184,7 +185,9 @@ public struct RichTextEditor: NSViewRepresentable {
                 }
             }
             tv.onTabInList = { [weak self] delta in
-                self?.parent.controller.changeListLevel(by: delta) ?? false
+                guard let self else { return false }
+                if self.parent.controller.handleTabInTable(shift: delta < 0) { return true }
+                return self.parent.controller.changeListLevel(by: delta)
             }
             tv.onPasteFailure = { [weak self] message in
                 NSLog("%@", "[TNPaste] onPasteFailure → \(message)")
@@ -224,9 +227,11 @@ public struct RichTextEditor: NSViewRepresentable {
         /// - 内容最前面按退格：退出列表变正文（飞书行为）
         public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == NSSelectorFromString("insertTab:") {
+                if parent.controller.handleTabInTable(shift: false) { return true }
                 return parent.controller.changeListLevel(by: 1)
             }
             if commandSelector == NSSelectorFromString("insertBacktab:") {
+                if parent.controller.handleTabInTable(shift: true) { return true }
                 return parent.controller.changeListLevel(by: -1)
             }
             if commandSelector == NSSelectorFromString("deleteBackward:") {
@@ -239,6 +244,11 @@ public struct RichTextEditor: NSViewRepresentable {
         public func textView(_ textView: NSTextView,
                              shouldChangeTextIn affectedCharRange: NSRange,
                              replacementString: String?) -> Bool {
+            if !RichTextTableLayout.shouldAllowChange(in: textView,
+                                                     range: affectedCharRange,
+                                                     replacement: replacementString) {
+                return false
+            }
             clearMarkerTypingAttribute(in: textView)
             return true
         }
@@ -276,6 +286,7 @@ public struct RichTextEditor: NSViewRepresentable {
                 let undo = tv.undoManager
                 isUpdatingProgrammatically = true
                 undo?.disableUndoRegistration()
+                RichTextTableLayout.repairIdentity(in: storage)
                 RichTextBridge.normalizeListMarkers(in: storage)
                 undo?.enableUndoRegistration()
                 isUpdatingProgrammatically = false

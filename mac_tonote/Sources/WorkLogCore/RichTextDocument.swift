@@ -30,6 +30,8 @@ public enum RichTextBlockStyle: String, Codable, CaseIterable, Sendable {
     case code
     case bulletItem
     case orderedItem
+    /// 表格。单元格在 `table` 里，`runs` 为空。
+    case table
 }
 
 /// 内嵌图片（相对路径，跨平台同步友好）
@@ -86,23 +88,31 @@ public struct RichTextRun: Equatable, Sendable {
 }
 
 /// 一个段落 = 一行。段落样式 + 段内格式片段。
+/// 样式为 `.table` 时，格子内容在 `table` 里，`runs` 留空。
 public struct RichTextBlock: Equatable, Sendable {
     public var style: RichTextBlockStyle
     public var runs: [RichTextRun]
     /// 列表缩进层级：0 = 第一级（1. / a. 之前的层级），1 = 子级（a. b. c.）。
     /// 只影响展示，不影响正文内容，随受控 HTML 的 `data-level` 持久化。
     public var listLevel: Int
+    /// 仅 `.table` 使用。单元格内仍是普通段落，不再嵌套表格。
+    public var table: RichTextTable?
 
     public init(style: RichTextBlockStyle = .paragraph,
                 runs: [RichTextRun] = [],
-                listLevel: Int = 0) {
+                listLevel: Int = 0,
+                table: RichTextTable? = nil) {
         self.style = style
         self.runs = runs
         self.listLevel = listLevel
+        self.table = table
     }
 
     public var plainText: String {
-        runs.map { $0.image != nil ? "" : $0.text }.joined()
+        if style == .table, let table {
+            return table.plainText
+        }
+        return runs.map { $0.image != nil ? "" : $0.text }.joined()
     }
 }
 

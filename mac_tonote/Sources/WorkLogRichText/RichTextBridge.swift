@@ -146,7 +146,7 @@ enum RichTextBridge {
                 NSTextTab(textAlignment: .left, location: textIndent),
                 NSTextTab(textAlignment: .left, location: textIndent + 14)
             ]
-        case .paragraph:
+        case .paragraph, .table:
             paragraph.lineSpacing = 4
             paragraph.paragraphSpacing = 2
         }
@@ -434,6 +434,13 @@ enum RichTextBridge {
             let separator = separatorLength(in: text, range: paragraph)
             let content = NSRange(location: paragraph.location,
                                   length: max(0, paragraph.length - separator))
+            // 单元格的段落样式上挂着 NSTextTableBlock。重写列表标记会把这个属性冲掉，表格就散了。
+            if RichTextTableLayout.containsTable(storage, at: probe) {
+                let next = NSMaxRange(paragraph)
+                if next <= location { break }
+                location = next
+                continue
+            }
             let style: RichTextBlockStyle
             if let raw = storage.attribute(RichTextKeys.blockStyle, at: probe, effectiveRange: nil) as? String,
                let resolved = RichTextBlockStyle(rawValue: raw) {
@@ -527,86 +534,110 @@ enum RichTextBridge {
         let plan = markerPlan(for: blocks.map { (style: $0.style, level: $0.listLevel) })
 
         for (index, block) in blocks.enumerated() {
-            let level = min(max(block.listLevel, 0), 7)
-            let baseSize = baseFontSize(for: block.style)
-            let paragraph = NSMutableAttributedString()
-            let paragraphAttributes: [NSAttributedString.Key: Any] = [
-                .font: block.style == .code
-                    ? monoFont(size: baseSize, bold: false)
-                    : font(size: baseSize, bold: isHeading(block.style), italic: false),
-                .foregroundColor: defaultTextColor,
-                .paragraphStyle: paragraphStyle(for: block.style, level: level),
-                RichTextKeys.blockStyle: block.style.rawValue,
-                RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize)),
-                RichTextKeys.listLevel: NSNumber(value: level)
-            ]
-
-            // 视图层标记前缀：蓝色序号 / 小圆点，序列化回文档时会被跳过
-            if let marker = plan[index] {
-                paragraph.append(markerAttributedString(marker,
-                                                        style: block.style,
-                                                        level: level,
-                                                        baseSize: baseSize))
+            if block.style == .table, let table = block.table {
+                result.append(RichTextTableLayout.attributedString(for: table, attachments: attachments))
+                if index == blocks.count - 1 {
+                    result.append(RichTextTableLayout.trailingParagraph())
+                }
+                continue
             }
 
-            // 列表正文曾误继承标记的蓝色粗体（历史 bug 产物），载入时恢复为正文样式
-            let markerHex = hexString(from: listMarkerColor).uppercased()
-            let isListBlock = block.style == .bulletItem || block.style == .orderedItem
-
-            for run in block.runs {
-                if let image = run.image {
-                    let attachment = NSTextAttachment()
-                    let absolute = attachments.absoluteURL(for: image.path)
-                    if let loaded = NSImage(contentsOf: absolute) {
-                        attachment.image = loaded
-                        attachment.bounds = fittedBounds(image: loaded, declared: image)
-                    } else {
-                        // 附件缺失：显示占位框，避免整篇正文被一个坏图带崩
-                        let placeholder = NSImage(size: NSSize(width: 160, height: 90))
-                        attachment.image = placeholder
-                        attachment.bounds = NSRect(x: 0, y: 0, width: 160, height: 90)
-                    }
-                    let holder = NSMutableAttributedString(attachment: attachment)
-                    holder.addAttributes(paragraphAttributes, range: NSRange(location: 0, length: holder.length))
-                    holder.addAttribute(RichTextKeys.imagePath, value: image.path, range: NSRange(location: 0, length: holder.length))
-                    paragraph.append(holder)
-                    continue
-                }
-
-                let runSize = run.fontSize.map { CGFloat($0) } ?? baseSize
-                var attributes = paragraphAttributes
-                let polluted = isListBlock && run.isBold
-                    && run.colorHex?.uppercased() == markerHex
-                let bold = polluted ? false : (run.isBold || isHeading(block.style))
-                let italic = run.isItalic
-                attributes[.font] = block.style == .code
-                    ? monoFont(size: runSize, bold: bold)
-                    : font(size: runSize, bold: bold, italic: italic)
-                if let hex = run.colorHex, !polluted, let color = color(fromHex: hex) {
-                    attributes[.foregroundColor] = color
-                }
-                if let hex = run.backgroundHex, let color = color(fromHex: hex) {
-                    attributes[.backgroundColor] = color
-                }
-                if run.isUnderline {
-                    attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-                }
-                if run.isStrike {
-                    attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-                }
-                if let link = run.link, let url = URL(string: link) {
-                    attributes[.link] = url
-                }
-                paragraph.append(NSAttributedString(string: run.text, attributes: attributes))
-            }
-
-            result.append(paragraph)
+            let rendered = renderBlock(block, marker: plan[index], attachments: attachments)
+            result.append(rendered.content)
             if index < blocks.count - 1 {
-                result.append(NSAttributedString(string: "\n", attributes: paragraphAttributes))
+                result.append(NSAttributedString(string: "\n", attributes: rendered.attributes))
             }
         }
 
         return result
+    }
+
+    struct RenderedParagraph {
+        var content: NSAttributedString
+        var attributes: [NSAttributedString.Key: Any]
+    }
+
+    /// 把一个段落画成属性文本，不含段尾换行。
+    /// `paragraphStyle` 非空时整段改用它（表格单元格要把 NSTextTableBlock 盖到标记和正文上）。
+    static func renderBlock(_ block: RichTextBlock,
+                            marker: String?,
+                            attachments: AttachmentStore,
+                            paragraphStyle override: NSParagraphStyle? = nil) -> RenderedParagraph {
+        let level = min(max(block.listLevel, 0), 7)
+        let baseSize = baseFontSize(for: block.style)
+        let resolvedStyle = override ?? paragraphStyle(for: block.style, level: level)
+        let paragraphAttributes: [NSAttributedString.Key: Any] = [
+            .font: block.style == .code
+                ? monoFont(size: baseSize, bold: false)
+                : font(size: baseSize, bold: isHeading(block.style), italic: false),
+            .foregroundColor: defaultTextColor,
+            .paragraphStyle: resolvedStyle,
+            RichTextKeys.blockStyle: block.style.rawValue,
+            RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize)),
+            RichTextKeys.listLevel: NSNumber(value: level)
+        ]
+
+        let paragraph = NSMutableAttributedString()
+        if let marker {
+            paragraph.append(markerAttributedString(marker,
+                                                    style: block.style,
+                                                    level: level,
+                                                    baseSize: baseSize))
+        }
+
+        let markerHex = hexString(from: listMarkerColor).uppercased()
+        let isListBlock = block.style == .bulletItem || block.style == .orderedItem
+
+        for run in block.runs {
+            if let image = run.image {
+                let attachment = NSTextAttachment()
+                let absolute = attachments.absoluteURL(for: image.path)
+                if let loaded = NSImage(contentsOf: absolute) {
+                    attachment.image = loaded
+                    attachment.bounds = fittedBounds(image: loaded, declared: image)
+                } else {
+                    let placeholder = NSImage(size: NSSize(width: 160, height: 90))
+                    attachment.image = placeholder
+                    attachment.bounds = NSRect(x: 0, y: 0, width: 160, height: 90)
+                }
+                let holder = NSMutableAttributedString(attachment: attachment)
+                holder.addAttributes(paragraphAttributes, range: NSRange(location: 0, length: holder.length))
+                holder.addAttribute(RichTextKeys.imagePath, value: image.path, range: NSRange(location: 0, length: holder.length))
+                paragraph.append(holder)
+                continue
+            }
+
+            let runSize = run.fontSize.map { CGFloat($0) } ?? baseSize
+            var attributes = paragraphAttributes
+            let polluted = isListBlock && run.isBold
+                && run.colorHex?.uppercased() == markerHex
+            let bold = polluted ? false : (run.isBold || isHeading(block.style))
+            let italic = run.isItalic
+            attributes[.font] = block.style == .code
+                ? monoFont(size: runSize, bold: bold)
+                : font(size: runSize, bold: bold, italic: italic)
+            if let hex = run.colorHex, !polluted, let color = color(fromHex: hex) {
+                attributes[.foregroundColor] = color
+            }
+            if let hex = run.backgroundHex, let color = color(fromHex: hex) {
+                attributes[.backgroundColor] = color
+            }
+            if run.isUnderline {
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            if run.isStrike {
+                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+            }
+            if let link = run.link, let url = URL(string: link) {
+                attributes[.link] = url
+            }
+            paragraph.append(NSAttributedString(string: run.text, attributes: attributes))
+        }
+
+        if override != nil, paragraph.length > 0 {
+            paragraph.addAttribute(.paragraphStyle, value: resolvedStyle, range: NSRange(location: 0, length: paragraph.length))
+        }
+        return RenderedParagraph(content: paragraph, attributes: paragraphAttributes)
     }
 
     private static func fittedBounds(image: NSImage, declared: RichTextImage) -> NSRect {
@@ -634,15 +665,23 @@ enum RichTextBridge {
 
         var location = 0
         while location < nsString.length {
+            if let table = RichTextTableLayout.read(from: attributed, at: location), table.next > location {
+                blocks.append(RichTextBlock(style: .table, runs: [], table: table.table))
+                location = table.next
+                continue
+            }
             let paragraph = nsString.paragraphRange(for: NSRange(location: location, length: 0))
             var content = paragraph
             content.length = max(0, paragraph.length - separatorLength(in: nsString, range: paragraph))
             blocks.append(block(from: attributed, range: content))
-            location = NSMaxRange(paragraph)
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
         }
 
-        // 末尾若只有一个空段落（结尾多敲了一次回车），不额外产生一个空块
-        if let last = blocks.last, last.runs.isEmpty, blocks.count > 1 {
+        // 末尾若只有一个空段落（结尾多敲了一次回车），不额外产生一个空块。
+        // 表格的 runs 也是空的，不能把它当成这个尾随空段删掉。
+        if let last = blocks.last, last.style != .table, last.runs.isEmpty, blocks.count > 1 {
             blocks.removeLast()
         }
 
@@ -663,7 +702,7 @@ enum RichTextBridge {
         return 0
     }
 
-    private static func block(from attributed: NSAttributedString, range: NSRange) -> RichTextBlock {
+    static func block(from attributed: NSAttributedString, range: NSRange) -> RichTextBlock {
         let safeLocation = min(range.location, max(0, attributed.length - 1))
         let style = resolveStyle(attributed: attributed, location: safeLocation, hasContent: range.length > 0)
         let baseSize = (attributed.attribute(RichTextKeys.baseFontSize, at: safeLocation, effectiveRange: nil) as? NSNumber)

@@ -4,15 +4,31 @@ import WorkLogCore
 
 /// 支持「粘贴即成图」的富文本视图。
 ///
-/// 覆盖三类来源：
+/// 覆盖四类来源：
 /// 1. 剪贴板里是图片文件 URL（访达复制图片文件、微信「复制文件」）
 /// 2. 剪贴板里是**原始位图数据**（系统截图 Ctrl+Cmd+Shift+4、微信/QQ 截图、
 ///    浏览器复制图片）——按剪贴板实际声明的类型逐个尝试，直接落盘
 /// 3. 剪贴板里是图片路径文本（微信「复制路径」、手动复制的路径）
+/// 4. 剪贴板里是 **RTFD 富文本包**——从 App 笔记里右键「拷贝」图片时，
+///    AppKit 只写 `com.apple.flat-rtfd` / `NeXT RTFD pasteboard type`，
+///    完全没有 public.png / public.tiff，需要把包内附件还原成图片文件。
 ///
-/// 三种情况都会把图片写入临时目录，再由上层导入附件仓库并插入正文。
+/// 四种情况都会把图片写入临时目录，再由上层导入附件仓库并插入正文。
 /// 全链路带 `[TNPaste]` 日志，便于排查「粘贴没反应」时确认到底断在哪一步。
 final class RichTextNSTextView: NSTextView {
+
+    /// 用经典 NSLayoutManager 建视图。NSTextTable 只在 TextKit 1 里横排并画边框。
+    static func makeTextKit1() -> RichTextNSTextView {
+        let container = NSTextContainer()
+        container.widthTracksTextView = true
+        container.heightTracksTextView = false
+        container.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        let layoutManager = NSLayoutManager()
+        layoutManager.addTextContainer(container)
+        let storage = NSTextStorage()
+        storage.addLayoutManager(layoutManager)
+        return RichTextNSTextView(frame: .zero, textContainer: container)
+    }
 
     /// 回调：把一张图片（本地文件）导入附件仓库并插入正文
     var onPasteImage: ((URL) -> Void)?
@@ -27,7 +43,24 @@ final class RichTextNSTextView: NSTextView {
     private static let logTag = "[TNPaste]"
 
     private static func log(_ message: String) {
-        NSLog("%@", "\(logTag) \(message)")
+        let line = "\(logTag) \(message)"
+        NSLog("%@", line)
+        // 系统 `log show` 在沙盒化终端里不可用（Cannot run while sandboxed），
+        // 同步落一份到可读文件，方便直接读取粘贴链路的诊断记录。
+        let fm = FileManager.default
+        guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let directory = base.appendingPathComponent("tonote", isDirectory: true)
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("paste-debug.log")
+        let entry = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        guard let data = entry.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            try? handle.write(contentsOf: data)
+            handle.closeFile()
+        } else {
+            try? data.write(to: url, options: .atomic)
+        }
     }
 
     override func keyDown(with event: NSEvent) {
@@ -52,6 +85,46 @@ final class RichTextNSTextView: NSTextView {
         }
 
         super.keyDown(with: event)
+    }
+
+    /// 从笔记里「拷贝」一张图片时，直接往剪贴板写标准 PNG。
+    /// 否则 AppKit 只放 RTFD 包，粘贴端识别不到任何位图类型。
+    override func copy(_ sender: Any?) {
+        if let png = standaloneImagePNGInSelection() {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setData(png, forType: .png)
+            Self.log("copy：选区是纯图片，写入 public.png \(png.count) bytes")
+            return
+        }
+        super.copy(sender)
+    }
+
+    /// 选区里全是图片附件（U+FFFC 占位符）时返回其 PNG 数据；
+    /// 混合文字、纯文字、无选中都返回 nil，交给系统默认拷贝保留原有格式。
+    private func standaloneImagePNGInSelection() -> Data? {
+        let range = selectedRange()
+        guard range.length > 0,
+              let storage = textStorage,
+              NSMaxRange(range) <= storage.length else { return nil }
+        let text = (storage.string as NSString).substring(with: range)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty,
+              text.unicodeScalars.allSatisfy({ $0.value == 0xFFFC }) else { return nil }
+
+        var result: Data?
+        storage.enumerateAttribute(.attachment, in: range, options: []) { value, _, stop in
+            guard let attachment = value as? NSTextAttachment else { return }
+            if let contents = attachment.fileWrapper?.regularFileContents,
+               let bitmap = NSBitmapImageRep(data: contents),
+               let png = bitmap.representation(using: .png, properties: [:]) {
+                result = png
+            } else if let image = attachment.image {
+                result = pngData(from: image)
+            }
+            if result != nil { stop.pointee = true }
+        }
+        return result
     }
 
     /// 编辑菜单里的「粘贴」和「粘贴并匹配样式」走的是两个不同入口，统一拦截。
@@ -90,7 +163,7 @@ final class RichTextNSTextView: NSTextView {
         // 剪贴板里确实有图片但前面全失败了：明确报错，不要静默回落到
         // NSTextView 默认粘贴（那会插入 file:///Attachment.tiff 临时引用，
         // 序列化后图片会丢）。
-        if hasImageOnPasteboard {
+        if hasImageOnPasteboard || hasRTFDImageOnPasteboard {
             let message = "未能读取剪贴板中的图片。剪贴板类型：\(names.joined(separator: "、"))。"
                 + "可改用工具栏「插入图片」选择截图文件。"
             Self.log("读取失败：\(message)")
@@ -112,6 +185,11 @@ final class RichTextNSTextView: NSTextView {
 
     private var hasImageOnPasteboard: Bool {
         (NSPasteboard.general.types ?? []).contains { Self.isImageType($0) }
+    }
+
+    /// 剪贴板里是 RTFD 且包内确实含图片附件（用于失败时给出明确提示）
+    private var hasRTFDImageOnPasteboard: Bool {
+        rtfdImageData() != nil
     }
 
     private static func fileExtension(for type: NSPasteboard.PasteboardType) -> String {
@@ -169,6 +247,49 @@ final class RichTextNSTextView: NSTextView {
             return url
         }
 
+        // 4) RTFD 富文本包：从笔记正文里右键「拷贝」图片时剪贴板的唯一内容。
+        //    不还原就会回落到系统默认粘贴，只插入一个空的附件占位符。
+        if let (imageData, name) = rtfdImageData() {
+            let ext = (name as NSString).pathExtension.lowercased()
+            if let url = writeTemporaryImage(imageData, ext: ext.isEmpty ? "png" : ext) {
+                Self.log("分支 4：RTFD 还原图片（\(name)）→ \(url.lastPathComponent)")
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    /// 从 RTFD 包里取出第一张图片附件的原始数据与文件名。
+    /// `com.apple.flat-rtfd` 是 RTFD 的扁平序列化格式，
+    /// 用 `NSAttributedString(.rtfd)` 解析后附件在 `fileWrapper.regularFileContents` 里。
+    private func rtfdImageData() -> (Data, String)? {
+        let pasteboard = NSPasteboard.general
+        let candidates = [
+            NSPasteboard.PasteboardType("com.apple.flat-rtfd"),
+            NSPasteboard.PasteboardType("NeXT RTFD pasteboard type"),
+            NSPasteboard.PasteboardType.rtfd,
+            NSPasteboard.PasteboardType("public.rtf"),
+            NSPasteboard.PasteboardType("NeXT Rich Text Format v1.0 pasteboard type")
+        ]
+        for type in candidates {
+            guard let data = pasteboard.data(forType: type), !data.isEmpty else { continue }
+            guard let attributed = try? NSAttributedString(
+                data: data,
+                options: [.documentType: NSAttributedString.DocumentType.rtfd],
+                documentAttributes: nil) else { continue }
+            var found: (Data, String)?
+            attributed.enumerateAttribute(
+                .attachment,
+                in: NSRange(location: 0, length: attributed.length),
+                options: []) { value, _, stop in
+                guard let attachment = value as? NSTextAttachment,
+                      let contents = attachment.fileWrapper?.regularFileContents else { return }
+                found = (contents, attachment.fileWrapper?.preferredFilename ?? "Attachment.png")
+                stop.pointee = true
+            }
+            if let found { return found }
+        }
         return nil
     }
 

@@ -93,10 +93,7 @@ public enum MarkdownConverter {
     /// 富文本文档 → 纯文本（列表摘要、字数统计、搜索用）
     public static func plainText(fromDocument document: RichTextDocument) -> String {
         document.blocks.map { block in
-            let text = block.runs.map { run in
-                if run.image != nil { return "" }
-                return run.text
-            }.joined()
+            let text = block.plainText
             switch block.style {
             case .bulletItem: return "• " + text
             case .orderedItem: return text

@@ -70,6 +70,11 @@ public enum RichTextHTMLCodec {
         case .quote:     return "<blockquote>\(inner)</blockquote>"
         case .code:      return "<pre>\(inner)</pre>"
         case .bulletItem, .orderedItem: return "<p>\(inner)</p>"
+        case .table:
+            if let table = block.table {
+                return RichTextTableCodec.encode(table)
+            }
+            return "<p></p>"
         }
     }
 
@@ -140,14 +145,27 @@ public enum RichTextHTMLCodec {
         return RichTextDocument(blocks: blocks)
     }
 
+    /// 把一组已解析节点还原成段落。表格单元格复用这条路径。
+    static func blocks(from nodes: [HTMLNode]) -> [RichTextBlock] {
+        var blocks: [RichTextBlock] = []
+        for node in nodes {
+            blocks.append(contentsOf: blocksFrom(node: node))
+        }
+        return blocks
+    }
+
     private static func blocksFrom(node: HTMLNode) -> [RichTextBlock] {
         switch node {
         case .text(let text):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return [] }
             return [RichTextBlock(style: .paragraph, runs: [RichTextRun(text: text)])]
-        case .element(let tag, _, let children):
+        case .element(let tag, let attrs, let children):
             switch tag {
+            case "table":
+                return [RichTextBlock(style: .table,
+                                      runs: [],
+                                      table: RichTextTableCodec.decode(attributes: attrs, children: children))]
             case "p":
                 return paragraphBlocks(from: children)
             case "h1":
@@ -323,7 +341,7 @@ public enum RichTextHTMLCodec {
 
 // MARK: - 极简 HTML 解析器
 
-private indirect enum HTMLNode {
+indirect enum HTMLNode {
     case text(String)
     case element(tag: String, attrs: [String: String], children: [HTMLNode])
 }

@@ -23,6 +23,8 @@ public final class RichTextEditorController: ObservableObject {
     @Published public private(set) var currentBlockStyle: RichTextBlockStyle = .paragraph
     /// 当前光标所在列表的层级，供「T」菜单显示 1. / a. / i. 的编号体系。
     @Published public private(set) var currentListLevel: Int = 0
+    /// 光标在表格单元格内时非空，供工具栏显示增删行列。
+    @Published public private(set) var tableCaret: RichTextTableCaret?
 
     public init() {}
 
@@ -152,6 +154,7 @@ public final class RichTextEditorController: ObservableObject {
         guard let tv = textView, let storage = tv.textStorage, storage.length > 0 else {
             currentBlockStyle = .paragraph
             currentListLevel = 0
+            if tableCaret != nil { tableCaret = nil }
             return
         }
         let location = min(tv.selectedRange().location, storage.length - 1)
@@ -159,6 +162,56 @@ public final class RichTextEditorController: ObservableObject {
         if currentBlockStyle != style { currentBlockStyle = style }
         let level = (storage.attribute(RichTextKeys.listLevel, at: location, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
         if currentListLevel != level { currentListLevel = level }
+        let caret = RichTextTableLayout.caret(in: tv)
+        if tableCaret != caret { tableCaret = caret }
+        RichTextTableLayout.adoptTypingAttributes(in: tv)
+    }
+
+    // MARK: - 表格
+
+    public func insertTable(rows: Int, columns: Int) {
+        guard let tv = textView else { return }
+        RichTextTableEditor.insertTable(rows: rows, columns: columns, in: tv, attachments: attachments)
+        refreshCurrentStyle()
+    }
+
+    public func insertTableRowBelow() {
+        guard let tv = textView else { return }
+        RichTextTableEditor.insertRowBelow(in: tv, attachments: attachments)
+        refreshCurrentStyle()
+    }
+
+    public func insertTableColumnAfter() {
+        guard let tv = textView else { return }
+        RichTextTableEditor.insertColumnAfter(in: tv, attachments: attachments)
+        refreshCurrentStyle()
+    }
+
+    public func deleteTableRow() {
+        guard let tv = textView else { return }
+        RichTextTableEditor.deleteRow(in: tv, attachments: attachments)
+        refreshCurrentStyle()
+    }
+
+    public func deleteTableColumn() {
+        guard let tv = textView else { return }
+        RichTextTableEditor.deleteColumn(in: tv, attachments: attachments)
+        refreshCurrentStyle()
+    }
+
+    public func deleteTable() {
+        guard let tv = textView else { return }
+        RichTextTableEditor.deleteTable(in: tv)
+        refreshCurrentStyle()
+    }
+
+    /// 光标在表格里时 Tab / Shift+Tab 跳单元格。不在表格里返回 false。
+    @discardableResult
+    public func handleTabInTable(shift: Bool) -> Bool {
+        guard let tv = textView else { return false }
+        let handled = RichTextTableEditor.handleTab(in: tv, shift: shift, attachments: attachments)
+        if handled { refreshCurrentStyle() }
+        return handled
     }
 
     /// 切换无序列表 / 有序列表。
@@ -167,6 +220,8 @@ public final class RichTextEditorController: ObservableObject {
         guard let tv = textView, let storage = tv.textStorage else { return }
         let ranges = paragraphRanges(in: storage, range: tv.selectedRange())
         guard !ranges.isEmpty else { return }
+        // 单元格里先不做列表：列表标记和表格边框抢同一套段落样式。
+        guard !ranges.contains(where: { RichTextTableLayout.containsTable(storage, at: $0.location) }) else { return }
         let allMatch = ranges.allSatisfy { resolveStyle(storage: storage, range: $0) == style }
         guard allMatch else {
             applyBlockStyle(style, to: storage, in: tv, level: 0)
@@ -199,9 +254,10 @@ public final class RichTextEditorController: ObservableObject {
             let current = (storage.attribute(RichTextKeys.listLevel, at: range.location, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
             let next = min(max(current + delta, 0), 3)
             storage.addAttribute(RichTextKeys.listLevel, value: NSNumber(value: next), range: range)
-            storage.addAttribute(.paragraphStyle,
-                                 value: RichTextBridge.paragraphStyle(for: style, level: next),
-                                 range: range)
+            let existing = storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
+            let merged = RichTextTableLayout.keepingTable(RichTextBridge.paragraphStyle(for: style, level: next),
+                                                          from: existing)
+            storage.addAttribute(.paragraphStyle, value: merged, range: range)
         }
         storage.endEditing()
         commitChanges()
@@ -296,12 +352,15 @@ public final class RichTextEditorController: ObservableObject {
 
         storage.beginEditing()
         for range in ranges {
+            let inTable = RichTextTableLayout.containsTable(storage, at: range.location)
+            if inTable && (style == .bulletItem || style == .orderedItem) { continue }
             storage.addAttribute(RichTextKeys.blockStyle, value: style.rawValue, range: range)
             storage.addAttribute(RichTextKeys.baseFontSize, value: NSNumber(value: Double(baseSize)), range: range)
             storage.addAttribute(RichTextKeys.listLevel, value: NSNumber(value: level), range: range)
-            storage.addAttribute(.paragraphStyle,
-                                 value: RichTextBridge.paragraphStyle(for: style, level: level),
-                                 range: range)
+            let existing = storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
+            let merged = RichTextTableLayout.keepingTable(RichTextBridge.paragraphStyle(for: style, level: level),
+                                                          from: existing)
+            storage.addAttribute(.paragraphStyle, value: merged, range: range)
 
             for runRange in runRanges(in: storage, range: range) {
                 let font = storage.attribute(.font, at: runRange.location, effectiveRange: nil) as? NSFont

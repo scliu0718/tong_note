@@ -477,6 +477,7 @@ struct EditorView: View {
                 activeDialog = .insertLink
             }
             formatButton("photo", .image, "插入图片") { insertImage() }
+            TableInsertButton(controller: controller)
 
             Spacer()
 
