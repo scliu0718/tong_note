@@ -22,12 +22,23 @@ final class RichTextNSTextView: NSTextView {
         let container = NSTextContainer()
         container.widthTracksTextView = true
         container.heightTracksTextView = false
-        container.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        container.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         let layoutManager = NSLayoutManager()
         layoutManager.addTextContainer(container)
         let storage = NSTextStorage()
         storage.addLayoutManager(layoutManager)
-        return RichTextNSTextView(frame: .zero, textContainer: container)
+
+        // frame 不能用 .zero：手动 init(frame:textContainer:) 不会像默认 init 那样
+        // 配置好 min/maxSize，NSTextView 就没法在内容变长时自动撑高，滚动范围失效。
+        let tv = RichTextNSTextView(frame: NSRect(x: 0, y: 0, width: 640, height: 0),
+                                    textContainer: container)
+        tv.minSize = NSSize(width: 0, height: 0)
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                            height: CGFloat.greatestFiniteMagnitude)
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+        return tv
     }
 
     /// 回调：把一张图片（本地文件）导入附件仓库并插入正文
