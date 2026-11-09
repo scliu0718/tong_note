@@ -238,6 +238,9 @@ public struct RichTextEditor: NSViewRepresentable {
             guard tv.typingAttributes[RichTextKeys.listMarker] != nil else { return }
             var typing = tv.typingAttributes
             typing.removeValue(forKey: RichTextKeys.listMarker)
+            // 空心圆的纯描边属性也不能被正文继承
+            typing.removeValue(forKey: .strokeWidth)
+            typing.removeValue(forKey: .strokeColor)
             // 属性确实是从蓝色标记派生来的，才把字重与颜色恢复成正文；
             // 用户手动设过颜色时不动，保留可手动修改的能力。
             let inherited = (typing[.foregroundColor] as? NSColor)?

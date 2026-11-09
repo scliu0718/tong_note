@@ -177,12 +177,11 @@ enum RichTextBridge {
     /// 标记到正文的距离；制表位与续行缩进都用它（按要求由 30 缩小一半）
     static let listTextOffset: CGFloat = 15
 
-    /// 无序列表层级符号：父级实心、子级空心，再深继续交替。
-    /// 两者都是 bullet 系列、用同一字号，视觉尺寸一致；
-    /// 不用全角大圆 ○ —— 那会比实心点大一圈，看着不协调。
+    /// 无序列表：父级实心、子级空心，再深继续交替。
+    /// 父子**共用同一个 `•` 字形**，只靠「填充 / 纯描边」区分，
+    /// 因此宽高天然完全一致；不再用 `◦` / `○`，它们的字形外径与 `•` 对不上。
     static func bulletSymbol(for level: Int) -> String {
-        let clamped = min(max(level, 0), 7)
-        return clamped % 2 == 0 ? "•" : "◦"
+        "•"
     }
 
     /// 第一级 1...n；存在上一层级时切到 a...z；再深一级用 i...，之后循环。
@@ -285,14 +284,10 @@ enum RichTextBridge {
             size = max(9, baseSize - 2) * 1.5
         default: size = baseSize
         }
-        // 空心圆用细字重：粗体会把环形边线画得很厚，看起来像实心点带白心。
-        // 实心点 / 有序编号仍用粗体保持醒目。
+        // 父子同一个字形、同一个粗体，尺寸完全一致；只靠描边模式区分实心 / 空心
         let isHollowBullet = style == .bulletItem && level % 2 == 1
-        let markerFont: NSFont = isHollowBullet
-            ? NSFont.systemFont(ofSize: size, weight: .light)
-            : font(size: size, bold: true, italic: false)
-        return [
-            .font: markerFont,
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font(size: size, bold: true, italic: false),
             .foregroundColor: listMarkerColor,
             .paragraphStyle: paragraphStyle(for: style, level: level),
             RichTextKeys.listMarker: NSNumber(value: true),
@@ -300,6 +295,13 @@ enum RichTextBridge {
             RichTextKeys.blockStyle: style.rawValue,
             RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize))
         ]
+        if isHollowBullet {
+            // strokeWidth 正值 = 只描边不填充，同一个 • 就变成空心圆。
+            // 数值是字号的百分比：2.5% × 18pt ≈ 0.45pt，边线细、外径与实心一致。
+            attributes[.strokeWidth] = NSNumber(value: 2.5)
+            attributes[.strokeColor] = listMarkerColor
+        }
+        return attributes
     }
 
     /// 生成标记前缀。
@@ -320,6 +322,10 @@ enum RichTextBridge {
                             value: font(size: baseSize, bold: false, italic: false),
                             range: tabRange)
         result.addAttribute(.foregroundColor, value: defaultTextColor, range: tabRange)
+        // 描边属性绝不能留到 \t 上：光标会从它派生 typingAttributes，
+        // 后面输入的正文会变成空心描边字
+        result.removeAttribute(.strokeWidth, range: tabRange)
+        result.removeAttribute(.strokeColor, range: tabRange)
         return result
     }
 
@@ -330,11 +336,15 @@ enum RichTextBridge {
         guard let color = current[.foregroundColor] as? NSColor,
               let wantedColor = expected[.foregroundColor] as? NSColor,
               color.isEqual(wantedColor) else { return true }
-        // 字体名也要比：空心圆由 bold 改为 light 后，旧标记必须重建
+        // 字体名也要比，旧标记才会在样式变化后重建
         guard let font = current[.font] as? NSFont,
               let wantedFont = expected[.font] as? NSFont,
               abs(font.pointSize - wantedFont.pointSize) < 0.01,
               font.fontName == wantedFont.fontName else { return true }
+        // 父 / 子字形相同，只靠描边模式区分，必须比较 strokeWidth
+        let currentStroke = (current[.strokeWidth] as? NSNumber)?.doubleValue ?? 0
+        let wantedStroke = (expected[.strokeWidth] as? NSNumber)?.doubleValue ?? 0
+        guard abs(currentStroke - wantedStroke) < 0.001 else { return true }
         guard let level = current[RichTextKeys.listLevel] as? NSNumber,
               let wantedLevel = expected[RichTextKeys.listLevel] as? NSNumber,
               level.intValue == wantedLevel.intValue else { return true }
