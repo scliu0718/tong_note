@@ -61,30 +61,36 @@ struct NoteListView: View {
         }
     }
 
-    /// 笔记条目之间用细线分隔；间距由分割线的上下留白承担，不再依赖 VStack 的 spacing。
+    /// 每篇笔记下面都有一条细分割线（含最后一篇）；
+    /// 间距由分割线的上下留白承担，不再依赖 VStack 的 spacing。
     private var noteRows: some View {
         VStack(spacing: 0) {
             ForEach(notes) { note in
-                noteRow(note, showDivider: note.id != notes.last?.id)
+                noteRow(note)
             }
         }
     }
 
-    private func noteRow(_ note: Note, showDivider: Bool) -> some View {
+    private func noteRow(_ note: Note) -> some View {
         VStack(spacing: 0) {
             NoteCard(note: note, selected: note.id == selectedID)
                 .contentShape(Rectangle())
                 .onTapGesture { selectedID = note.id }
                 .contextMenu { contextMenu(for: note) }
-            if showDivider {
-                Rectangle()
-                    // 更浅的线色 + 半磅线宽，只做轻量分组，不抢笔记内容
-                    .fill(Theme.lineSoft)
-                    .frame(height: 0.5)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 4)
-            }
+            noteDivider
         }
+    }
+
+    /// 发丝线：线色比上一轮更浅。
+    /// 这里必须给足 1pt 高度——0.5pt 的填充线落在半像素上时会被抗锯齿抹掉，
+    /// 卡片高度不同就会造成「有的笔记有线、有的没有」。
+    /// 1pt 保证任意位置都能覆盖到物理像素，再用更浅的色值让它看起来更细。
+    private var noteDivider: some View {
+        Rectangle()
+            .fill(Color(hex: 0xEFEFF2))
+            .frame(height: 1)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
     }
 
     /// 删除 / 彻底删除 / 恢复后，选中当前分类里的第一条笔记；分类空了才回退「快同步」。

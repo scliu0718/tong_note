@@ -248,20 +248,14 @@ struct ResizeHandle: View {
         return Button {
             width = SidebarWidth.next(after: width)
         } label: {
+            // 只留箭头本体：不要白色圆角方块底、边框和阴影
             Image(systemName: pointsRight ? "chevron.right" : "chevron.left")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(Theme.textTertiary)
-                .frame(width: 18, height: 18)
+                .foregroundColor(hovering ? Theme.accentHover : Theme.textQuaternary)
+                .frame(width: 16, height: 18)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color.white.opacity(hovering ? 0.98 : 0.88))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.line, lineWidth: 0.5))
-        )
-        .shadow(color: Color.black.opacity(hovering ? 0.12 : 0.06), radius: 3, y: 1)
-        .opacity(hovering || dragging ? 1 : 0.75)
         .onHover { hoveringSwitch = $0 }
         .help(pointsRight ? "点一下放宽侧栏" : "点一下收起侧栏到极窄")
     }
