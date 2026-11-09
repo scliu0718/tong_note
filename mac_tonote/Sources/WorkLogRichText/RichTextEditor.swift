@@ -181,6 +181,9 @@ public struct RichTextEditor: NSViewRepresentable {
             tv.onTabInList = { [weak self] delta in
                 self?.parent.controller.changeListLevel(by: delta) ?? false
             }
+            tv.onPasteFailure = { [weak self] message in
+                self?.parent.onEditorError?(message)
+            }
         }
 
         /// 载入正文到编辑器
