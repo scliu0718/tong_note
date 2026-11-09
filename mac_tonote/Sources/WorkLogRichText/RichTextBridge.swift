@@ -285,8 +285,14 @@ enum RichTextBridge {
             size = max(9, baseSize - 2) * 1.5
         default: size = baseSize
         }
+        // 空心圆用细字重：粗体会把环形边线画得很厚，看起来像实心点带白心。
+        // 实心点 / 有序编号仍用粗体保持醒目。
+        let isHollowBullet = style == .bulletItem && level % 2 == 1
+        let markerFont: NSFont = isHollowBullet
+            ? NSFont.systemFont(ofSize: size, weight: .light)
+            : font(size: size, bold: true, italic: false)
         return [
-            .font: font(size: size, bold: true, italic: false),
+            .font: markerFont,
             .foregroundColor: listMarkerColor,
             .paragraphStyle: paragraphStyle(for: style, level: level),
             RichTextKeys.listMarker: NSNumber(value: true),
@@ -324,9 +330,11 @@ enum RichTextBridge {
         guard let color = current[.foregroundColor] as? NSColor,
               let wantedColor = expected[.foregroundColor] as? NSColor,
               color.isEqual(wantedColor) else { return true }
+        // 字体名也要比：空心圆由 bold 改为 light 后，旧标记必须重建
         guard let font = current[.font] as? NSFont,
               let wantedFont = expected[.font] as? NSFont,
-              abs(font.pointSize - wantedFont.pointSize) < 0.01 else { return true }
+              abs(font.pointSize - wantedFont.pointSize) < 0.01,
+              font.fontName == wantedFont.fontName else { return true }
         guard let level = current[RichTextKeys.listLevel] as? NSNumber,
               let wantedLevel = expected[RichTextKeys.listLevel] as? NSNumber,
               level.intValue == wantedLevel.intValue else { return true }
