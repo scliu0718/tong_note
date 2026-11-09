@@ -234,6 +234,13 @@ struct ResizeHandle: View {
                 }
                 .help("拖动或点击切换侧栏宽度：极窄 / 窄 / 宽")
 
+            // 箭头背后的纯白遮罩：把 hover/dragging 时那条高亮竖线在箭头处断开。
+            // 只要一块矩形底色，不要圆角、边框、阴影（上一轮已明确去掉卡片样式）；
+            // 宽度尽量收窄，只盖住 2pt 的线，不越界压到侧栏和笔记列表。
+            Color.white
+                .frame(width: 8, height: 20)
+                .allowsHitTesting(false)
+
             widthSwitch
         }
         .frame(width: 6)
@@ -248,7 +255,7 @@ struct ResizeHandle: View {
         return Button {
             width = SidebarWidth.next(after: width)
         } label: {
-            // 只留箭头本体：不要白色圆角方块底、边框和阴影
+            // 箭头本体不带任何装饰；遮线用的纯白底由外层 ZStack 提供
             Image(systemName: pointsRight ? "chevron.right" : "chevron.left")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundColor(hovering ? Theme.accentHover : Theme.textQuaternary)
