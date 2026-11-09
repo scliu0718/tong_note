@@ -177,11 +177,12 @@ enum RichTextBridge {
     /// 标记到正文的距离；制表位与续行缩进都用它（按要求由 30 缩小一半）
     static let listTextOffset: CGFloat = 15
 
-    /// 无序列表层级符号：父级实心、子级**大**空心圆，再深继续交替。
-    /// 用 U+25CB WHITE CIRCLE 而不是小 WHITE BULLET：圆更大、边线更细，中空一眼可见。
+    /// 无序列表层级符号：父级实心、子级空心，再深继续交替。
+    /// 两者都是 bullet 系列、用同一字号，视觉尺寸一致；
+    /// 不用全角大圆 ○ —— 那会比实心点大一圈，看着不协调。
     static func bulletSymbol(for level: Int) -> String {
         let clamped = min(max(level, 0), 7)
-        return clamped % 2 == 0 ? "•" : "○"
+        return clamped % 2 == 0 ? "•" : "◦"
     }
 
     /// 第一级 1...n；存在上一层级时切到 a...z；再深一级用 i...，之后循环。
@@ -279,14 +280,9 @@ enum RichTextBridge {
         switch style {
         case .orderedItem: size = baseSize + 1
         case .bulletItem:
-            if level % 2 == 0 {
-                // 实心圆点放大 1.5 倍
-                size = max(9, baseSize - 2) * 1.5
-            } else {
-                // 大空心圆是全角字符，字号必须压在标记间距以内，
-                // 否则 \t 会跳到备用制表位、子级正文与父级对不齐
-                size = min(12, baseSize)
-            }
+            // 实心与空心用同一个字号（比正文放大 1.5 倍），大小一致；
+            // 放大后空心点中间的孔也更容易辨认
+            size = max(9, baseSize - 2) * 1.5
         default: size = baseSize
         }
         return [
@@ -350,10 +346,10 @@ enum RichTextBridge {
         return cursor > start ? NSRange(location: start, length: cursor - start) : nil
     }
 
-    /// 合法标记字符：1. / a. / iii. 与 • / ○，其余一律视为正文
+    /// 合法标记字符：1. / a. / iii. 与 • / ◦（兼容 ○），其余一律视为正文
     private static func isMarkerCharacter(_ ch: unichar) -> Bool {
         switch ch {
-        case 0x2022, 0x25CB, 0x2E: return true          // • ○ .
+        case 0x2022, 0x25CB, 0x25E6, 0x2E: return true  // • ○ ◦ .
         case 48...57: return true                        // 0-9
         case 65...90: return true                        // A-Z
         case 97...122: return true                       // a-z
