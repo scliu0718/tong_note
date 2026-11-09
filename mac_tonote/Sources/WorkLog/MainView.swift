@@ -32,6 +32,23 @@ enum SidebarWidth {
         if current < expandedThreshold { return expanded }
         return tiny
     }
+
+    /// 右箭头：向右放宽一档，到最宽档为止（不循环）。
+    static func grow(from current: CGFloat) -> CGFloat {
+        if current < compactThreshold { return compact }
+        if current < expandedThreshold { return expanded }
+        return expanded
+    }
+
+    /// 左箭头：向左收窄一档，到极窄档为止（不循环）。
+    static func shrink(from current: CGFloat) -> CGFloat {
+        if current >= expandedThreshold { return compact }
+        if current >= compactThreshold { return tiny }
+        return tiny
+    }
+
+    static func canGrow(_ current: CGFloat) -> Bool { current < expandedThreshold }
+    static func canShrink(_ current: CGFloat) -> Bool { current >= compactThreshold }
 }
 
 struct MainView: View {
@@ -60,6 +77,8 @@ struct MainView: View {
                         onNewNote: newNote,
                         onSettings: { showSync = true })
                 .frame(width: sidebarWidth)
+                // 极窄档的 hover 名称浮窗会伸到侧栏右侧，需要盖在笔记列表之上
+                .zIndex(1)
 
             ResizeHandle(width: $sidebarWidth)
 
@@ -184,43 +203,94 @@ struct MainView: View {
 struct ResizeHandle: View {
     @Binding var width: CGFloat
     @State private var initialWidth: CGFloat = 0
-    @State private var hovering = false
+    @State private var hoveringBar = false
+    @State private var hoveringSwitch = false
     @State private var dragging = false
     @State private var didSwitch = false
 
+    private var hovering: Bool { hoveringBar || hoveringSwitch }
+
     var body: some View {
-        Rectangle()
-            // 拖动期间分隔条可能因跳档移出鼠标位置，保持高亮避免忽明忽暗
-            .fill(hovering || dragging ? Theme.accent : Color.clear)
-            .frame(width: 2)
-            .contentShape(Rectangle().inset(by: -3))
-            .frame(width: 6)
-            .onHover { hovering = $0 }
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        if initialWidth == 0 { initialWidth = width }
-                        dragging = true
-                        // 一次拖动最多切换一次：跨过阈值后立即锁定，
-                        // 否则鼠标在阈值附近来回移动会让两档反复跳变、界面闪烁
-                        guard !didSwitch else { return }
-                        let projected = initialWidth + value.translation.width
-                        // 三档吸附：极窄 / 窄 / 宽，跨档后立即锁定，避免来回跳变闪烁
-                        let target = SidebarWidth.snapped(projected)
-                        if width != target {
-                            width = target
-                            didSwitch = true
+        ZStack {
+            Rectangle()
+                // 拖动期间分隔条可能因跳档移出鼠标位置，保持高亮避免忽明忽暗
+                .fill(hovering || dragging ? Theme.accent : Color.clear)
+                .frame(width: 2)
+                .contentShape(Rectangle().inset(by: -3))
+                .frame(width: 6)
+                .onHover { hoveringBar = $0 }
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if initialWidth == 0 { initialWidth = width }
+                            dragging = true
+                            // 一次拖动最多切换一次：跨过阈值后立即锁定，
+                            // 否则鼠标在阈值附近来回移动会让两档反复跳变、界面闪烁
+                            guard !didSwitch else { return }
+                            let projected = initialWidth + value.translation.width
+                            // 三档吸附：极窄 / 窄 / 宽，跨档后立即锁定，避免来回跳变闪烁
+                            let target = SidebarWidth.snapped(projected)
+                            if width != target {
+                                width = target
+                                didSwitch = true
+                            }
                         }
-                    }
-                    .onEnded { _ in
-                        initialWidth = 0
-                        didSwitch = false
-                        dragging = false
-                    }
-            )
-            .onTapGesture {
-                width = SidebarWidth.next(after: width)
+                        .onEnded { _ in
+                            initialWidth = 0
+                            didSwitch = false
+                            dragging = false
+                        }
+                )
+                .onTapGesture {
+                    width = SidebarWidth.next(after: width)
+                }
+                .help("拖动或点击切换侧栏宽度：极窄 / 窄 / 宽")
+
+            widthSwitch
+        }
+        .frame(width: 6)
+        .frame(maxHeight: .infinity)
+        .zIndex(2)
+    }
+
+    /// 分隔条中部的左右尖括号：左收窄一档、右放宽一档。
+    /// 两个括号成对出现，直观表示这条分隔线可以向两边切换宽度。
+    private var widthSwitch: some View {
+        HStack(spacing: 0) {
+            Button {
+                width = SidebarWidth.shrink(from: width)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(SidebarWidth.canShrink(width) ? Theme.textTertiary : Theme.textQuaternary)
+                    .frame(width: 15, height: 18)
+                    .contentShape(Rectangle())
             }
-            .help("拖动或点击切换侧栏宽度：极窄 / 窄 / 宽")
+            .disabled(!SidebarWidth.canShrink(width))
+            .help("向左：侧栏收窄一档")
+
+            Rectangle().fill(Theme.line).frame(width: 1, height: 10)
+
+            Button {
+                width = SidebarWidth.grow(from: width)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(SidebarWidth.canGrow(width) ? Theme.textTertiary : Theme.textQuaternary)
+                    .frame(width: 15, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .disabled(!SidebarWidth.canGrow(width))
+            .help("向右：侧栏放宽一档")
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color.white.opacity(hovering ? 0.98 : 0.88))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.line, lineWidth: 0.5))
+        )
+        .shadow(color: Color.black.opacity(hovering ? 0.12 : 0.06), radius: 3, y: 1)
+        .opacity(hovering || dragging ? 1 : 0.75)
+        .onHover { hoveringSwitch = $0 }
     }
 }

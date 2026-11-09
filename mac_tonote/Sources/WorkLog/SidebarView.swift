@@ -14,6 +14,8 @@ struct SidebarView: View {
     @ObservedObject private var notebooks = NotebookStore.shared
     @State private var showAvatarPicker = false
     @State private var hoveredTag: String?
+    /// 极窄档当前 hover 的行 ID，用于把行位置上报给外层名称浮窗。
+    @State private var hoveredItemID: String?
     @State private var newNotebookName = ""
     /// 侧栏所有弹窗统一走一个状态：多个 .alert 串在同一视图上时容易只有一个生效。
     @State private var activeDialog: SidebarDialog?
@@ -66,6 +68,24 @@ struct SidebarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.sidebarBg)
+        .coordinateSpace(name: "sidebar")
+        // 切档时立刻收掉浮窗，避免名称悬停在已经变成文字版的行旁边
+        .onChange(of: width) { _, _ in hoveredItemID = nil }
+        // 极窄档的名称浮窗画在侧栏右侧（会盖到笔记列表上），
+        // 上层 MainView 给侧栏加了 zIndex 保证不被列表白底遮住。
+        .overlayPreferenceValue(SidebarTipKey.self) { tip in
+            GeometryReader { outer in
+                ZStack(alignment: .topLeading) {
+                    if let tip {
+                        SidebarTipLabel(title: tip.title, detail: tip.detail)
+                            .offset(x: width + 7,
+                                    y: tipY(tip.frame.midY, in: outer.size.height))
+                            .allowsHitTesting(false)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
         .alert(dialogTitle,
                isPresented: Binding(get: { activeDialog != nil },
                                     set: { if !$0 { activeDialog = nil } })) {
@@ -117,6 +137,27 @@ struct SidebarView: View {
         case "投资研究": return "chart.line.uptrend.xyaxis"
         case "灵感速记": return "lightbulb"
         default: return "folder"
+        }
+    }
+
+    /// 浮窗垂直位置跟随所指向的图标行，并夹在侧栏可见范围内。
+    private func tipY(_ midY: CGFloat, in height: CGFloat) -> CGFloat {
+        min(max(midY - 13, 4), max(4, height - 30))
+    }
+
+    /// 极窄档通用行底：hover 时给一点选中态背景，同时把行位置上报给外层浮窗。
+    private func tinyRowBackground(id: String, title: String, detail: String,
+                                   active: Bool) -> some View {
+        let hovering = hoveredItemID == id
+        return GeometryReader { geo in
+            RoundedRectangle(cornerRadius: 7)
+                .fill(active ? Theme.accentTint
+                      : (hovering ? Theme.accentTint.opacity(0.55) : Color.clear))
+                .preference(key: SidebarTipKey.self,
+                            value: hovering
+                                ? SidebarTip(id: id, title: title, detail: detail,
+                                             frame: geo.frame(in: .named("sidebar")))
+                                : nil)
         }
     }
 
@@ -337,41 +378,42 @@ struct SidebarView: View {
         }
     }
 
-    /// 极窄档笔记本项：只显示图标，完整名称与计数交给 hover 浮窗。
+    /// 极窄档笔记本项：只显示图标，hover 时浮出完整名称 + 轻微选中背景。
     private func tinySideItem(title: String, icon: String, count: Int, active: Bool,
                               action: @escaping () -> Void) -> some View {
-        Image(systemName: icon)
+        let id = "nb:" + title
+        return Image(systemName: icon)
             .font(.system(size: 16))
             .foregroundColor(active ? Theme.accent : Theme.textTertiary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 9)
-            .background(active ? Theme.accentTint : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .background(tinyRowBackground(id: id, title: title,
+                                          detail: "\(count) 篇笔记", active: active))
             .contentShape(Rectangle())
             .onTapGesture(perform: action)
-            .help("\(title) · \(count) 篇笔记")
+            .onHover { hoveredItemID = $0 ? id : nil }
     }
 
     /// 极窄档标签项：只显示书页图标，hover 浮窗显示标签名与笔记数。
     private func tinyTagItem(_ tag: String) -> some View {
         let active = !showingTrash && selectedTag == tag
-        let hovering = hoveredTag == tag
+        let id = "tag:" + tag
         return BookTagIcon(size: 15, color: active ? Theme.accent : Theme.textTertiary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
-            .background(active ? Theme.accentTint : (hovering ? Color(hex: 0xEFEFF1) : Color.clear))
-            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .background(tinyRowBackground(id: id, title: tag,
+                                          detail: "\(store.count(withTag: tag)) 篇笔记",
+                                          active: active))
             .contentShape(Rectangle())
             .onTapGesture {
                 selectedTag = tag
                 selectedNotebook = Notebooks.all
                 showingTrash = false
             }
-            .onHover { hoveredTag = $0 ? tag : nil }
+            .onHover { hoveredItemID = $0 ? id : nil }
             .contextMenu {
                 Button("删除标签", role: .destructive) { activeDialog = .deleteTag(tag) }
             }
-            .help("标签 \(tag) · \(store.count(withTag: tag)) 篇笔记")
     }
 
     /// 标签项：图标 + 文字单行横排；删除只走右键菜单，保持行内简洁。
@@ -453,11 +495,12 @@ struct SidebarView: View {
                     .foregroundColor(showingTrash ? Theme.accent : Theme.textTertiary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 9)
-                    .background(showingTrash ? Theme.accentTint : Color.clear)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .background(tinyRowBackground(id: "trash", title: "回收站",
+                                                  detail: "\(store.trashNotes.count) 篇笔记",
+                                                  active: showingTrash))
                     .contentShape(Rectangle())
                     .onTapGesture { showingTrash.toggle(); selectedTag = nil }
-                    .help("回收站 · \(store.trashNotes.count) 篇笔记")
+                    .onHover { hoveredItemID = $0 ? "trash" : nil }
             } else if isWide {
                 HStack(spacing: 9) {
                     Image(systemName: "trash").font(.system(size: 14))
@@ -546,6 +589,53 @@ private struct AvatarBadge: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+    }
+}
+
+// MARK: - 极窄档 hover 名称浮窗
+
+/// 当前 hover 的图标行信息：名称、附加说明、以及该行在侧栏坐标系里的位置。
+private struct SidebarTip: Equatable {
+    let id: String
+    let title: String
+    let detail: String
+    let frame: CGRect
+}
+
+/// 同一时刻最多只有一个 hover 行上报数据，reduce 取最后一个非空值。
+private struct SidebarTipKey: PreferenceKey {
+    static let defaultValue: SidebarTip? = nil
+    static func reduce(value: inout SidebarTip?, nextValue: () -> SidebarTip?) {
+        if let next = nextValue() { value = next }
+    }
+}
+
+/// 浮窗本体：完整名称 + 笔记数，淡绿选中底色与细边框，避免用系统 tooltip 的长延迟。
+private struct SidebarTipLabel: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.textPrimary)
+                .lineLimit(1)
+            Text(detail)
+                .font(.system(size: 10))
+                .foregroundColor(Theme.textTertiary)
+                .lineLimit(1)
+        }
+        .fixedSize()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Theme.accentTint)
+                .overlay(RoundedRectangle(cornerRadius: 7)
+                    .stroke(Theme.accentTint2, lineWidth: 1))
+        )
+        .shadow(color: Color.black.opacity(0.09), radius: 6, y: 2)
     }
 }
 

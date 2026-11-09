@@ -38,12 +38,7 @@ struct NoteListView: View {
                     if notes.isEmpty {
                         emptyState
                     } else {
-                        ForEach(notes) { note in
-                            NoteCard(note: note, selected: note.id == selectedID)
-                                .contentShape(Rectangle())
-                                .onTapGesture { selectedID = note.id }
-                                .contextMenu { contextMenu(for: note) }
-                        }
+                        noteRows
                     }
                 }
                 .padding(8)
@@ -63,6 +58,31 @@ struct NoteListView: View {
             }
         } message: {
             Text("此操作不可恢复，笔记将被永久移除。")
+        }
+    }
+
+    /// 笔记条目之间用细线分隔；间距由分割线的上下留白承担，不再依赖 VStack 的 spacing。
+    private var noteRows: some View {
+        VStack(spacing: 0) {
+            ForEach(notes) { note in
+                noteRow(note, showDivider: note.id != notes.last?.id)
+            }
+        }
+    }
+
+    private func noteRow(_ note: Note, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            NoteCard(note: note, selected: note.id == selectedID)
+                .contentShape(Rectangle())
+                .onTapGesture { selectedID = note.id }
+                .contextMenu { contextMenu(for: note) }
+            if showDivider {
+                Rectangle()
+                    .fill(Theme.line)
+                    .frame(height: 1)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 4)
+            }
         }
     }
 
