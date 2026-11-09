@@ -214,23 +214,39 @@ enum RichTextBridge {
     }
 
     /// 按 (段落样式, 层级) 序列为每个段落算出应有的 marker。
-    /// 连续的有序项共用计数；中间插入非有序段落时重新从 1 开始。
+    ///
+    /// 编号规则（飞书式）：
+    /// - 连续有序项共用一个计数，按层级分别编号；
+    /// - 中间只隔 1 段正文（典型的「退格退出列表 → 手动再设回来」）时编号顺延上方；
+    /// - 隔了多段正文、标题、引用、代码块或无序列表时视为新列表，重新从 1 开始。
     static func markerPlan(for styles: [(style: RichTextBlockStyle, level: Int)]) -> [String?] {
         var counters = Array(repeating: 0, count: 8)
         var plan: [String?] = []
+        var paragraphGap = 0
+
         for entry in styles {
             let level = min(max(entry.level, 0), 7)
             switch entry.style {
             case .orderedItem:
+                if paragraphGap > 1 {
+                    counters = Array(repeating: 0, count: counters.count)
+                }
+                paragraphGap = 0
                 if level + 1 < counters.count {
                     for i in (level + 1)..<counters.count { counters[i] = 0 }
                 }
                 counters[level] += 1
                 plan.append(markerString(for: .orderedItem, level: level, index: counters[level]))
             case .bulletItem:
+                counters = Array(repeating: 0, count: counters.count)
+                paragraphGap = 0
                 plan.append(markerString(for: .bulletItem, level: level, index: 0))
+            case .paragraph:
+                paragraphGap += 1
+                plan.append(nil)
             default:
                 counters = Array(repeating: 0, count: counters.count)
+                paragraphGap = 0
                 plan.append(nil)
             }
         }

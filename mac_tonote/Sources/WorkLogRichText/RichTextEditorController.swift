@@ -209,6 +209,39 @@ public final class RichTextEditorController: ObservableObject {
         return true
     }
 
+    /// 光标停在列表项内容最前面时按退格：取消这一行的列表样式，变成正文。
+    /// 对应飞书文档「在编号后按 Backspace 退出列表」：该行不会再自动变回列表，
+    /// 只有手动重新指定有序 / 无序列表才会继续（编号顺延上方列表）。
+    @discardableResult
+    public func cancelListAtCaret() -> Bool {
+        guard let tv = textView, let storage = tv.textStorage, storage.length > 0 else { return false }
+        let caret = tv.selectedRange()
+        guard caret.length == 0, caret.location > 0 else { return false }
+
+        let text = storage.string as NSString
+        let paragraph = text.paragraphRange(for: NSRange(location: min(caret.location, text.length - 1), length: 0))
+        let style = resolveStyle(storage: storage, range: paragraph)
+        guard style == .orderedItem || style == .bulletItem else { return false }
+
+        // 段落开头连续带 listMarker 的字符即编号 / 圆点前缀
+        let probe = min(paragraph.location, max(0, storage.length - 1))
+        var effective = NSRange(location: 0, length: 0)
+        let markerEnd: Int
+        if storage.attribute(RichTextKeys.listMarker, at: probe, effectiveRange: &effective) != nil {
+            markerEnd = min(NSMaxRange(effective), NSMaxRange(paragraph))
+        } else {
+            markerEnd = paragraph.location
+        }
+        // 光标必须在编号后、正文前；正文中间的普通退格不拦截
+        guard caret.location <= markerEnd else { return false }
+
+        applyBlockStyle(.paragraph, to: storage, in: tv, level: 0)
+        // 前缀已被 persist 里的 normalize 删除，光标回到该行开头
+        tv.setSelectedRange(NSRange(location: min(paragraph.location, storage.length), length: 0))
+        refreshCurrentStyle()
+        return true
+    }
+
     private func applyBlockStyle(_ style: RichTextBlockStyle,
                                  to storage: NSTextStorage,
                                  in tv: NSTextView,

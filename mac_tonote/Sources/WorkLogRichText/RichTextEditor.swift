@@ -207,13 +207,18 @@ public struct RichTextEditor: NSViewRepresentable {
             persist(from: tv)
         }
 
-        /// 列表段落里用 Tab / Shift+Tab 切换编号体系（1. ↔ a. ↔ i.）。
+        /// 列表段落里的键盘命令：
+        /// - Tab / Shift+Tab：切换编号体系（1. ↔ a. ↔ i.）
+        /// - 内容最前面按退格：退出列表变正文（飞书行为）
         public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == NSSelectorFromString("insertTab:") {
                 return parent.controller.changeListLevel(by: 1)
             }
             if commandSelector == NSSelectorFromString("insertBacktab:") {
                 return parent.controller.changeListLevel(by: -1)
+            }
+            if commandSelector == NSSelectorFromString("deleteBackward:") {
+                return parent.controller.cancelListAtCaret()
             }
             return false
         }
