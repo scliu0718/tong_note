@@ -238,6 +238,15 @@ public struct RichTextEditor: NSViewRepresentable {
             guard tv.typingAttributes[RichTextKeys.listMarker] != nil else { return }
             var typing = tv.typingAttributes
             typing.removeValue(forKey: RichTextKeys.listMarker)
+            // 属性确实是从蓝色标记派生来的，才把字重与颜色恢复成正文；
+            // 用户手动设过颜色时不动，保留可手动修改的能力。
+            let inherited = (typing[.foregroundColor] as? NSColor)?
+                .isEqual(RichTextBridge.listMarkerColor) ?? false
+            if inherited {
+                typing[.font] = RichTextBridge.font(size: RichTextBridge.defaultFontSize,
+                                                    bold: false, italic: false)
+                typing[.foregroundColor] = RichTextBridge.defaultTextColor
+            }
             tv.typingAttributes = typing
         }
 

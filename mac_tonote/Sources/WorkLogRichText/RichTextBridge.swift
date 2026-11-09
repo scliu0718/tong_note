@@ -296,6 +296,27 @@ enum RichTextBridge {
         ]
     }
 
+    /// 生成标记前缀。
+    ///
+    /// 标签字符用蓝色粗体，但**末尾的 \t 必须是正文属性**：
+    /// 光标紧贴 \t 后面输入时，NSTextView 会从 \t 派生 typingAttributes，
+    /// 若 \t 还是蓝色粗体，列表后面的内容就会跟着变蓝加粗。
+    static func markerAttributedString(_ text: String,
+                                       style: RichTextBlockStyle,
+                                       level: Int,
+                                       baseSize: CGFloat) -> NSMutableAttributedString {
+        let result = NSMutableAttributedString(string: text)
+        guard result.length > 0 else { return result }
+        result.setAttributes(markerAttributes(for: style, level: level, baseSize: baseSize),
+                             range: NSRange(location: 0, length: result.length))
+        let tabRange = NSRange(location: result.length - 1, length: 1)
+        result.addAttribute(.font,
+                            value: font(size: baseSize, bold: false, italic: false),
+                            range: tabRange)
+        result.addAttribute(.foregroundColor, value: defaultTextColor, range: tabRange)
+        return result
+    }
+
     private static func markerNeedsRefresh(_ storage: NSMutableAttributedString,
                                            range: NSRange,
                                            expected: [NSAttributedString.Key: Any]) -> Bool {
@@ -312,6 +333,16 @@ enum RichTextBridge {
         guard let style = current[.paragraphStyle] as? NSParagraphStyle,
               let wantedStyle = expected[.paragraphStyle] as? NSParagraphStyle,
               abs(style.headIndent - wantedStyle.headIndent) < 0.01 else { return true }
+        // 末尾 \t 若是旧版的蓝色粗体，也要重建，否则后续输入仍会继承错误样式
+        let baseSize = (expected[RichTextKeys.baseFontSize] as? NSNumber)
+            .map { CGFloat(truncating: $0) } ?? defaultFontSize
+        let tabIndex = NSMaxRange(range) - 1
+        if tabIndex >= range.location, tabIndex < storage.length {
+            guard let tabColor = storage.attribute(.foregroundColor, at: tabIndex, effectiveRange: nil) as? NSColor,
+                  tabColor.isEqual(defaultTextColor),
+                  let tabFont = storage.attribute(.font, at: tabIndex, effectiveRange: nil) as? NSFont,
+                  abs(tabFont.pointSize - baseSize) < 0.01 else { return true }
+        }
         return false
     }
 
@@ -439,22 +470,25 @@ enum RichTextBridge {
                                    level: segment.level,
                                    baseSize: baseFontSize(for: segment.style))
 
+            let markerContent = desiredText.isEmpty
+                ? NSMutableAttributedString()
+                : markerAttributedString(desiredText,
+                                         style: segment.style,
+                                         level: segment.level,
+                                         baseSize: baseFontSize(for: segment.style))
+
             if existingText != desiredText {
-                let replacement = NSMutableAttributedString(string: desiredText)
-                if let attributes, !desiredText.isEmpty {
-                    replacement.setAttributes(attributes,
-                                              range: NSRange(location: 0, length: replacement.length))
-                }
                 let target = segment.markerRange
                     ?? NSRange(location: segment.contentRange.location, length: 0)
                 storage.beginEditing()
-                storage.replaceCharacters(in: target, with: replacement)
+                storage.replaceCharacters(in: target, with: markerContent)
                 storage.endEditing()
                 changed = true
-            } else if let range = segment.markerRange, let attributes, !desiredText.isEmpty,
+            } else if let range = segment.markerRange, !desiredText.isEmpty, let attributes,
                       markerNeedsRefresh(storage, range: range, expected: attributes) {
+                // 文本一致但属性过期：整体重建，保证末尾 \t 也是正文属性
                 storage.beginEditing()
-                storage.setAttributes(attributes, range: range)
+                storage.replaceCharacters(in: range, with: markerContent)
                 storage.endEditing()
                 changed = true
             }
@@ -489,11 +523,15 @@ enum RichTextBridge {
 
             // 视图层标记前缀：蓝色序号 / 小圆点，序列化回文档时会被跳过
             if let marker = plan[index] {
-                let prefix = NSMutableAttributedString(string: marker)
-                prefix.setAttributes(markerAttributes(for: block.style, level: level, baseSize: baseSize),
-                                     range: NSRange(location: 0, length: prefix.length))
-                paragraph.append(prefix)
+                paragraph.append(markerAttributedString(marker,
+                                                        style: block.style,
+                                                        level: level,
+                                                        baseSize: baseSize))
             }
+
+            // 列表正文曾误继承标记的蓝色粗体（历史 bug 产物），载入时恢复为正文样式
+            let markerHex = hexString(from: listMarkerColor).uppercased()
+            let isListBlock = block.style == .bulletItem || block.style == .orderedItem
 
             for run in block.runs {
                 if let image = run.image {
@@ -517,12 +555,14 @@ enum RichTextBridge {
 
                 let runSize = run.fontSize.map { CGFloat($0) } ?? baseSize
                 var attributes = paragraphAttributes
-                let bold = run.isBold || isHeading(block.style)
+                let polluted = isListBlock && run.isBold
+                    && run.colorHex?.uppercased() == markerHex
+                let bold = polluted ? false : (run.isBold || isHeading(block.style))
                 let italic = run.isItalic
                 attributes[.font] = block.style == .code
                     ? monoFont(size: runSize, bold: bold)
                     : font(size: runSize, bold: bold, italic: italic)
-                if let hex = run.colorHex, let color = color(fromHex: hex) {
+                if let hex = run.colorHex, !polluted, let color = color(fromHex: hex) {
                     attributes[.foregroundColor] = color
                 }
                 if let hex = run.backgroundHex, let color = color(fromHex: hex) {
