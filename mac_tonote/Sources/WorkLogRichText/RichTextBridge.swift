@@ -284,10 +284,12 @@ enum RichTextBridge {
             size = max(9, baseSize - 2) * 1.5
         default: size = baseSize
         }
-        // 父子同一个字形、同一个粗体，尺寸完全一致；只靠描边模式区分实心 / 空心
+        // 有序序号（1. / a. / i.）固定常规字重、不允许手动改粗；
+        // 无序圆点父子共用同一个粗体字形，尺寸完全一致，只靠描边区分实心 / 空心。
+        // markerNeedsRefresh 会比较 fontName，任何误改的字重都会在写回时自动重建还原。
         let isHollowBullet = style == .bulletItem && level % 2 == 1
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: font(size: size, bold: true, italic: false),
+            .font: font(size: size, bold: style != .orderedItem, italic: false),
             .foregroundColor: listMarkerColor,
             .paragraphStyle: paragraphStyle(for: style, level: level),
             RichTextKeys.listMarker: NSNumber(value: true),
