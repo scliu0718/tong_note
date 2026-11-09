@@ -131,13 +131,16 @@ enum RichTextBridge {
             paragraph.paragraphSpacingBefore = 2
             paragraph.paragraphSpacing = 2
         case .bulletItem, .orderedItem:
-            // 标记写在段落开头（marker + \t），缩进按层级递增
-            let indent = listIndent(for: level)
-            paragraph.headIndent = indent
-            paragraph.firstLineHeadIndent = 0
+            // 标记写在段落开头（marker + \t）；第一行从 markerIndent 起，
+            // \t 跳到 textIndent，换行后的续行也对齐到 textIndent。
+            // 这样层级切换时编号 / 圆点本身也会右移，而不是只有正文动。
+            let markerIndent = listIndent(for: level)
+            let textIndent = markerIndent + listTextOffset
+            paragraph.firstLineHeadIndent = markerIndent
+            paragraph.headIndent = textIndent
             paragraph.paragraphSpacingBefore = 1
             paragraph.paragraphSpacing = 1
-            paragraph.tabStops = [NSTextTab(textAlignment: .left, location: indent)]
+            paragraph.tabStops = [NSTextTab(textAlignment: .left, location: textIndent)]
         case .paragraph:
             paragraph.lineSpacing = 4
             paragraph.paragraphSpacing = 2
@@ -161,8 +164,21 @@ enum RichTextBridge {
 
     // MARK: - 列表标记（视图层前缀，不写入正文）
 
+    /// 列表标记自身的起点：每深一层右移 32pt，编号 / 圆点与正文一起缩进
     static func listIndent(for level: Int) -> CGFloat {
-        24 + CGFloat(min(max(level, 0), 7)) * 20
+        4 + CGFloat(min(max(level, 0), 7)) * 32
+    }
+
+    /// 标记到正文的距离；制表位与续行缩进都用它
+    static let listTextOffset: CGFloat = 30
+
+    /// 无序列表层级符号：实心圆 → 空心圆 → 小方块，更深循环
+    static func bulletSymbol(for level: Int) -> String {
+        switch ((level % 3) + 3) % 3 {
+        case 1: return "◦"
+        case 2: return "▪"
+        default: return "•"
+        }
     }
 
     /// 第一级 1...n；存在上一层级时切到 a...z；再深一级用 i...，之后循环。
@@ -208,7 +224,7 @@ enum RichTextBridge {
     static func markerString(for style: RichTextBlockStyle, level: Int, index: Int) -> String? {
         switch style {
         case .orderedItem: return orderedLabel(index, level: level) + ".\t"
-        case .bulletItem: return "•\t"
+        case .bulletItem: return bulletSymbol(for: level) + "\t"
         default: return nil
         }
     }
@@ -259,7 +275,9 @@ enum RichTextBridge {
         let size: CGFloat
         switch style {
         case .orderedItem: size = baseSize + 1
-        case .bulletItem: size = max(9, baseSize - 2)
+        case .bulletItem:
+            // 空心圆 / 小方块比第一级实心点再小一点，贴近参考图
+            size = level % 3 == 0 ? max(9, baseSize - 2) : max(8, baseSize - 3)
         default: size = baseSize
         }
         return [

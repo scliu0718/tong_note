@@ -205,6 +205,11 @@ public final class RichTextEditorController: ObservableObject {
         }
         storage.endEditing()
         commitChanges()
+        if let last = listRanges.last {
+            syncTypingAttributes(in: tv, storage: storage,
+                                 paragraph: last,
+                                 style: resolveStyle(storage: storage, range: last))
+        }
         refreshCurrentStyle()
         return true
     }
@@ -242,6 +247,51 @@ public final class RichTextEditorController: ObservableObject {
         return true
     }
 
+    /// 让回车产生的新列表项继承当前层级与编号体系。
+    /// probe 从段落末尾往前取，避开蓝色的标记前缀；整段都是前缀时用段落默认字体。
+    private func syncTypingAttributes(in tv: NSTextView,
+                                      storage: NSTextStorage,
+                                      paragraph: NSRange,
+                                      style: RichTextBlockStyle) {
+        guard storage.length > 0 else { return }
+        let lower = min(max(paragraph.location, 0), storage.length - 1)
+        var probe = min(max(NSMaxRange(paragraph) - 1, 0), storage.length - 1)
+        while probe > lower,
+              storage.attribute(RichTextKeys.listMarker, at: probe, effectiveRange: nil) != nil {
+            probe -= 1
+        }
+        let hitMarker = storage.attribute(RichTextKeys.listMarker,
+                                          at: probe, effectiveRange: nil) != nil
+
+        var typing = tv.typingAttributes
+        if hitMarker {
+            typing[.font] = RichTextBridge.font(size: RichTextBridge.baseFontSize(for: style),
+                                                bold: RichTextBridge.isHeading(style),
+                                                italic: false)
+            typing[.foregroundColor] = RichTextBridge.defaultTextColor
+        } else {
+            if let font = storage.attribute(.font, at: probe, effectiveRange: nil) as? NSFont {
+                typing[.font] = font
+            }
+            if let color = storage.attribute(.foregroundColor, at: probe, effectiveRange: nil) as? NSColor {
+                typing[.foregroundColor] = color
+            }
+        }
+        if let paragraphStyle = storage.attribute(.paragraphStyle, at: probe, effectiveRange: nil) as? NSParagraphStyle {
+            typing[.paragraphStyle] = paragraphStyle
+        }
+        for key in [RichTextKeys.blockStyle, RichTextKeys.baseFontSize, RichTextKeys.listLevel] {
+            if let value = storage.attribute(key, at: probe, effectiveRange: nil) {
+                typing[key] = value
+            } else {
+                typing.removeValue(forKey: key)
+            }
+        }
+        // 前缀属性绝不能进入后续输入，否则新文字会被当成 marker 而在序列化时被跳过
+        typing.removeValue(forKey: RichTextKeys.listMarker)
+        tv.typingAttributes = typing
+    }
+
     private func applyBlockStyle(_ style: RichTextBlockStyle,
                                  to storage: NSTextStorage,
                                  in tv: NSTextView,
@@ -273,15 +323,9 @@ public final class RichTextEditorController: ObservableObject {
         storage.endEditing()
         commitChanges()
 
-        // 让后续输入继承新的段落样式
-        if let last = ranges.last, last.length > 0 {
-            let sample = storage.attribute(.font, at: last.location, effectiveRange: nil) as? NSFont
-            if let sample {
-                var typing = tv.typingAttributes
-                typing[.font] = sample
-                typing[.paragraphStyle] = storage.attribute(.paragraphStyle, at: last.location, effectiveRange: nil)
-                tv.typingAttributes = typing
-            }
+        // 让后续输入（尤其列表里按回车的新项）继承当前层级与编号体系
+        if let last = ranges.last {
+            syncTypingAttributes(in: tv, storage: storage, paragraph: last, style: style)
         }
 
         refreshCurrentStyle()

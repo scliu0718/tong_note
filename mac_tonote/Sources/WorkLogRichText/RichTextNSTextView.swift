@@ -15,6 +15,19 @@ final class RichTextNSTextView: NSTextView {
     var onPasteImage: ((URL) -> Void)?
     /// 回调：粘贴的文本里含有本地图片路径，由上层按段落替换成内联图片
     var onPasteText: ((String) -> Void)?
+    /// 回调：列表段落里按 Tab / Shift+Tab 切换层级。
+    /// 参数为 +1 / -1；返回 true 表示该按键已被消费，不再传给系统（避免焦点跳走）。
+    var onTabInList: ((Int) -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        // keyCode 48 = Tab。直接在最底层拦截，避免窗口的 key-view loop
+        // 把 Tab 当成「切换焦点」而 NSTextView 根本收不到 insertTab:。
+        if event.keyCode == 48, let handler = onTabInList {
+            let delta = event.modifierFlags.contains(.shift) ? -1 : 1
+            if handler(delta) { return }
+        }
+        super.keyDown(with: event)
+    }
 
     override func paste(_ sender: Any?) {
         // 1) 图片文件 / 2) 位图数据
