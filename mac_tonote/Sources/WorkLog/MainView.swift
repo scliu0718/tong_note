@@ -33,22 +33,10 @@ enum SidebarWidth {
         return tiny
     }
 
-    /// 右箭头：向右放宽一档，到最宽档为止（不循环）。
-    static func grow(from current: CGFloat) -> CGFloat {
-        if current < compactThreshold { return compact }
-        if current < expandedThreshold { return expanded }
-        return expanded
+    /// 单个括号的箭头方向：窄档/中档点下去会变宽（>），最宽档点下去回到极窄（<）。
+    static func bracketPointsRight(_ current: CGFloat) -> Bool {
+        current < expandedThreshold
     }
-
-    /// 左箭头：向左收窄一档，到极窄档为止（不循环）。
-    static func shrink(from current: CGFloat) -> CGFloat {
-        if current >= expandedThreshold { return compact }
-        if current >= compactThreshold { return tiny }
-        return tiny
-    }
-
-    static func canGrow(_ current: CGFloat) -> Bool { current < expandedThreshold }
-    static func canShrink(_ current: CGFloat) -> Bool { current >= compactThreshold }
 }
 
 struct MainView: View {
@@ -253,35 +241,18 @@ struct ResizeHandle: View {
         .zIndex(2)
     }
 
-    /// 分隔条中部的左右尖括号：左收窄一档、右放宽一档。
-    /// 两个括号成对出现，直观表示这条分隔线可以向两边切换宽度。
+    /// 分隔条中部只放一个括号：窄档/中档显示 `>`（点下去放宽），最宽档显示 `<`（点下去回到极窄）。
+    /// 三档用同一个按钮循环：极窄 → 窄 → 宽 → 极窄。
     private var widthSwitch: some View {
-        HStack(spacing: 0) {
-            Button {
-                width = SidebarWidth.shrink(from: width)
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(SidebarWidth.canShrink(width) ? Theme.textTertiary : Theme.textQuaternary)
-                    .frame(width: 15, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .disabled(!SidebarWidth.canShrink(width))
-            .help("向左：侧栏收窄一档")
-
-            Rectangle().fill(Theme.line).frame(width: 1, height: 10)
-
-            Button {
-                width = SidebarWidth.grow(from: width)
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(SidebarWidth.canGrow(width) ? Theme.textTertiary : Theme.textQuaternary)
-                    .frame(width: 15, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .disabled(!SidebarWidth.canGrow(width))
-            .help("向右：侧栏放宽一档")
+        let pointsRight = SidebarWidth.bracketPointsRight(width)
+        return Button {
+            width = SidebarWidth.next(after: width)
+        } label: {
+            Image(systemName: pointsRight ? "chevron.right" : "chevron.left")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Theme.textTertiary)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
@@ -292,5 +263,6 @@ struct ResizeHandle: View {
         .shadow(color: Color.black.opacity(hovering ? 0.12 : 0.06), radius: 3, y: 1)
         .opacity(hovering || dragging ? 1 : 0.75)
         .onHover { hoveringSwitch = $0 }
+        .help(pointsRight ? "点一下放宽侧栏" : "点一下收起侧栏到极窄")
     }
 }

@@ -78,8 +78,9 @@ struct NoteListView: View {
                 .contextMenu { contextMenu(for: note) }
             if showDivider {
                 Rectangle()
-                    .fill(Theme.line)
-                    .frame(height: 1)
+                    // 更浅的线色 + 半磅线宽，只做轻量分组，不抢笔记内容
+                    .fill(Theme.lineSoft)
+                    .frame(height: 0.5)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 4)
             }
