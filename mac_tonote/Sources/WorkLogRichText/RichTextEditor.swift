@@ -199,6 +199,7 @@ public struct RichTextEditor: NSViewRepresentable {
             loadedBody = content.body
             // 载入会清空选区，浮窗也随之收起
             parent.onSelectionChange?(nil)
+            parent.controller.refreshCurrentStyle()
         }
 
         public func textDidChange(_ notification: Notification) {
@@ -226,6 +227,7 @@ public struct RichTextEditor: NSViewRepresentable {
 
         public func textViewDidChangeSelection(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView, tv === textView else { return }
+            parent.controller.refreshCurrentStyle()
             evaluateSelection(in: tv, debounce: true)
         }
 

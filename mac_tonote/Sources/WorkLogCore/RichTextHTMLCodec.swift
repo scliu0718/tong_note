@@ -49,13 +49,22 @@ public enum RichTextHTMLCodec {
 
     private static func encodeBlock(_ block: RichTextBlock) -> String {
         // 标题本身即为加粗，段落内再套 <strong> 属于语义冗余
-        let suppressBold = block.style == .heading1 || block.style == .heading2 || block.style == .heading3
+        let suppressBold: Bool
+        switch block.style {
+        case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
+            suppressBold = true
+        default:
+            suppressBold = false
+        }
         let inner = encodeInline(block.runs, suppressBold: suppressBold)
         switch block.style {
         case .paragraph: return "<p>\(inner)</p>"
         case .heading1:  return "<h1>\(inner)</h1>"
         case .heading2:  return "<h2>\(inner)</h2>"
         case .heading3:  return "<h3>\(inner)</h3>"
+        case .heading4:  return "<h4>\(inner)</h4>"
+        case .heading5:  return "<h5>\(inner)</h5>"
+        case .heading6:  return "<h6>\(inner)</h6>"
         case .quote:     return "<blockquote>\(inner)</blockquote>"
         case .code:      return "<pre>\(inner)</pre>"
         case .bulletItem, .orderedItem: return "<p>\(inner)</p>"
@@ -143,8 +152,14 @@ public enum RichTextHTMLCodec {
                 return [RichTextBlock(style: .heading1, runs: inlineRuns(children, context: InlineContext()))]
             case "h2":
                 return [RichTextBlock(style: .heading2, runs: inlineRuns(children, context: InlineContext()))]
-            case "h3", "h4", "h5", "h6":
+            case "h3":
                 return [RichTextBlock(style: .heading3, runs: inlineRuns(children, context: InlineContext()))]
+            case "h4":
+                return [RichTextBlock(style: .heading4, runs: inlineRuns(children, context: InlineContext()))]
+            case "h5":
+                return [RichTextBlock(style: .heading5, runs: inlineRuns(children, context: InlineContext()))]
+            case "h6":
+                return [RichTextBlock(style: .heading6, runs: inlineRuns(children, context: InlineContext()))]
             case "blockquote":
                 return [RichTextBlock(style: .quote, runs: inlineRuns(children, context: InlineContext()))]
             case "pre":

@@ -72,13 +72,21 @@ enum RichTextBridge {
         case .heading1: return 26
         case .heading2: return 20
         case .heading3: return 17
+        case .heading4: return 16
+        case .heading5: return 15.5
+        case .heading6: return 15
         case .code: return 13
         default: return defaultFontSize
         }
     }
 
     static func isHeading(_ style: RichTextBlockStyle) -> Bool {
-        style == .heading1 || style == .heading2 || style == .heading3
+        switch style {
+        case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
+            return true
+        default:
+            return false
+        }
     }
 
     static func paragraphStyle(for style: RichTextBlockStyle, textList: NSTextList?) -> NSParagraphStyle {
@@ -95,6 +103,10 @@ enum RichTextBridge {
         case .heading3:
             paragraph.paragraphSpacingBefore = 10
             paragraph.paragraphSpacing = 3
+            paragraph.lineSpacing = 1
+        case .heading4, .heading5, .heading6:
+            paragraph.paragraphSpacingBefore = 8
+            paragraph.paragraphSpacing = 2
             paragraph.lineSpacing = 1
         case .quote:
             paragraph.headIndent = 20

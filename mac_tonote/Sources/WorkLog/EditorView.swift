@@ -68,7 +68,9 @@ struct EditorView: View {
                            attachments: attachments,
                            onEditorError: { errorMessage = $0 },
                            readOnly: showingTrash,
-                           onSelectionChange: { rect in
+                           // 浮动格式窗口按需求临时关闭：开关置 false 后不注册选区回调，
+                           // SelectionFormatBar / SelectionFormatPanel 及选区监听代码全部保留。
+                           onSelectionChange: SelectionFormatPanel.isEnabled ? { rect in
                                guard !showingTrash, let rect else {
                                    SelectionFormatPanel.shared.hide()
                                    return
@@ -87,7 +89,7 @@ struct EditorView: View {
                                        }
                                    )
                                )
-                           })
+                           } : nil)
                 .background(Theme.panelBg)
         }
         .background(Theme.panelBg)
@@ -338,6 +340,11 @@ struct EditorView: View {
     // MARK: - 工具栏
     private var toolbar: some View {
         HStack(spacing: 2) {
+            // 「T」样式菜单：正文 / 一~三级标题 / 其他标题 / 有序·无序列表
+            TextStyleMenu(controller: controller)
+
+            toolbarDivider
+
             formatButton("bold", .bold, "加粗") { controller.toggleBold() }
             formatButton("italic", .italic, "斜体") { controller.toggleItalic() }
             formatButton("underline", .underline, "下划线") { controller.toggleUnderline() }
@@ -369,6 +376,7 @@ struct EditorView: View {
                 .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
             .help("设置字号")
 
@@ -426,33 +434,9 @@ struct EditorView: View {
                 )
             }
 
-            // 分段（段落样式）
-            Menu {
-                Button("正文") { controller.applyBlockStyle(.paragraph) }
-                Button("标题 1") { controller.applyBlockStyle(.heading1) }
-                Button("标题 2") { controller.applyBlockStyle(.heading2) }
-                Button("标题 3") { controller.applyBlockStyle(.heading3) }
-                Divider()
-                Button("引用") { controller.applyBlockStyle(.quote) }
-                Button("代码块") { controller.applyBlockStyle(.code) }
-            } label: {
-                HStack(spacing: 3) {
-                    Text("分段").font(.system(size: 12))
-                    Image(systemName: "chevron.down").font(.system(size: 8))
-                }
-                .foregroundColor(Theme.textSecondary)
-                .frame(height: 30)
-                .padding(.horizontal, 7)
-                .contentShape(Rectangle())
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("段落样式")
-
             toolbarDivider
 
-            formatButton("list.bullet", .bullet, "无序列表") { controller.toggleList(.bulletItem) }
-            formatButton("list.number", .ordered, "有序列表（序号）") { controller.toggleList(.orderedItem) }
+            // 有序 / 无序列表已收进左侧「T」样式菜单，这里只保留引用与代码块
             formatButton("text.quote", .quote, "引用") { controller.applyBlockStyle(.quote) }
             formatButton("chevron.left.forwardslash.chevron.right", .code, "代码块") { controller.applyBlockStyle(.code) }
 

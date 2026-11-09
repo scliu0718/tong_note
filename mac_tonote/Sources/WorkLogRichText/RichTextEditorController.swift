@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import WorkLogCore
 
 /// 富文本编辑命令控制器。
@@ -17,6 +18,9 @@ public final class RichTextEditorController: ObservableObject {
     /// `NSTextStorage` 的属性变更不保证触发 `NSTextView.textDidChange`，
     /// 因此由编辑器宿主显式把正文重新序列化写回，避免格式改了却没保存。
     public var onContentChanged: (() -> Void)?
+
+    /// 当前光标所在段落的样式，供工具栏「T」样式菜单显示勾选状态。
+    @Published public private(set) var currentBlockStyle: RichTextBlockStyle = .paragraph
 
     public init() {}
 
@@ -141,6 +145,17 @@ public final class RichTextEditorController: ObservableObject {
         applyBlockStyle(style, to: storage, in: tv)
     }
 
+    /// 由编辑器的选区变化回调驱动，刷新「T」菜单里的当前段落样式。
+    public func refreshCurrentStyle() {
+        guard let tv = textView, let storage = tv.textStorage, storage.length > 0 else {
+            currentBlockStyle = .paragraph
+            return
+        }
+        let location = min(tv.selectedRange().location, storage.length - 1)
+        let style = resolveStyle(storage: storage, range: NSRange(location: location, length: 0))
+        if currentBlockStyle != style { currentBlockStyle = style }
+    }
+
     /// 切换无序列表 / 有序列表
     public func toggleList(_ style: RichTextBlockStyle) {
         guard let tv = textView, let storage = tv.textStorage else { return }
@@ -191,6 +206,8 @@ public final class RichTextEditorController: ObservableObject {
                 tv.typingAttributes = typing
             }
         }
+
+        refreshCurrentStyle()
     }
 
     // MARK: - 链接

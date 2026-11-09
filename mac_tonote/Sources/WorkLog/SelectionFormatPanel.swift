@@ -8,6 +8,10 @@ import SwiftUI
 /// 2. 位置要能按选区的屏幕矩形精确摆放，并自动避开屏幕边缘。
 final class SelectionFormatPanel {
 
+    /// 「选中文字后浮出格式窗口」总开关。
+    /// 当前按需求临时关闭，代码与选区监听全部保留；改回 true 即可一键恢复。
+    static let isEnabled = false
+
     static let shared = SelectionFormatPanel()
 
     private static let barSize = NSSize(width: 332, height: 112)
@@ -45,6 +49,7 @@ final class SelectionFormatPanel {
 
     /// 在选区上方显示格式窗口；上方空间不够时自动改到下方。
     func show<V: View>(at screenRect: NSRect, bar: V) {
+        guard Self.isEnabled else { return }
         let panel = self.panel ?? makePanel()
         self.panel = panel
 
