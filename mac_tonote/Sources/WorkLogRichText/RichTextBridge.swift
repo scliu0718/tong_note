@@ -140,7 +140,12 @@ enum RichTextBridge {
             paragraph.headIndent = textIndent
             paragraph.paragraphSpacingBefore = 1
             paragraph.paragraphSpacing = 1
-            paragraph.tabStops = [NSTextTab(textAlignment: .left, location: textIndent)]
+            // 主制表位在标记后 15pt；长编号（iii. 等）超出时落到备用位，
+            // 免得跳到系统默认的 28pt 整数倍、间距反而更大
+            paragraph.tabStops = [
+                NSTextTab(textAlignment: .left, location: textIndent),
+                NSTextTab(textAlignment: .left, location: textIndent + 14)
+            ]
         case .paragraph:
             paragraph.lineSpacing = 4
             paragraph.paragraphSpacing = 2
@@ -169,16 +174,13 @@ enum RichTextBridge {
         4 + CGFloat(min(max(level, 0), 7)) * 32
     }
 
-    /// 标记到正文的距离；制表位与续行缩进都用它
-    static let listTextOffset: CGFloat = 30
+    /// 标记到正文的距离；制表位与续行缩进都用它（按要求由 30 缩小一半）
+    static let listTextOffset: CGFloat = 15
 
-    /// 无序列表层级符号：实心圆 → 空心圆 → 小方块，更深循环
+    /// 无序列表层级符号：父级实心、子级空心，再深继续交替
     static func bulletSymbol(for level: Int) -> String {
-        switch ((level % 3) + 3) % 3 {
-        case 1: return "◦"
-        case 2: return "▪"
-        default: return "•"
-        }
+        let clamped = min(max(level, 0), 7)
+        return clamped % 2 == 0 ? "•" : "◦"
     }
 
     /// 第一级 1...n；存在上一层级时切到 a...z；再深一级用 i...，之后循环。
@@ -276,8 +278,9 @@ enum RichTextBridge {
         switch style {
         case .orderedItem: size = baseSize + 1
         case .bulletItem:
-            // 空心圆 / 小方块比第一级实心点再小一点，贴近参考图
-            size = level % 3 == 0 ? max(9, baseSize - 2) : max(8, baseSize - 3)
+            // 圆点按要求整体放大 1.5 倍（10pt → 15pt / 9pt → 13.5pt）
+            let original = level % 2 == 0 ? max(9, baseSize - 2) : max(8, baseSize - 3)
+            size = original * 1.5
         default: size = baseSize
         }
         return [
