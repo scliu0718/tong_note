@@ -1,15 +1,17 @@
 import AppKit
+import UniformTypeIdentifiers
 import WorkLogCore
 
 /// 支持「粘贴即成图」的富文本视图。
 ///
-/// 覆盖三种来源：
-/// 1. 剪贴板里是图片文件 URL（从访达复制图片文件、微信「复制文件」）
+/// 覆盖三类来源：
+/// 1. 剪贴板里是图片文件 URL（访达复制图片文件、微信「复制文件」）
 /// 2. 剪贴板里是**原始位图数据**（系统截图 Ctrl+Cmd+Shift+4、微信/QQ 截图、
-///    浏览器复制图片）——优先按原始数据类型直接落盘，不做任何图像转换
+///    浏览器复制图片）——按剪贴板实际声明的类型逐个尝试，直接落盘
 /// 3. 剪贴板里是图片路径文本（微信「复制路径」、手动复制的路径）
 ///
-/// 三种情况都会把图片写入 WorkLog 附件目录，再以内联图片插入正文。
+/// 三种情况都会把图片写入临时目录，再由上层导入附件仓库并插入正文。
+/// 全链路带 `[TNPaste]` 日志，便于排查「粘贴没反应」时确认到底断在哪一步。
 final class RichTextNSTextView: NSTextView {
 
     /// 回调：把一张图片（本地文件）导入附件仓库并插入正文
@@ -22,18 +24,11 @@ final class RichTextNSTextView: NSTextView {
     /// 参数为 +1 / -1；返回 true 表示该按键已被消费，不再传给系统（避免焦点跳走）。
     var onTabInList: ((Int) -> Bool)?
 
-    /// 原始位图类型 → 落盘扩展名，按优先级排列。
-    /// 扩展名必须在 `AttachmentStore.allowedExtensions` 里。
-    private static let imageTypes: [(type: NSPasteboard.PasteboardType, ext: String)] = [
-        (.png, "png"),
-        (.tiff, "tiff"),
-        (NSPasteboard.PasteboardType("public.jpeg"), "jpg"),
-        (NSPasteboard.PasteboardType("public.heic"), "heic"),
-        (NSPasteboard.PasteboardType("public.heif"), "heif"),
-        (NSPasteboard.PasteboardType("com.compuserve.gif"), "gif"),
-        (NSPasteboard.PasteboardType("org.webmproject.webp"), "webp"),
-        (NSPasteboard.PasteboardType("com.microsoft.bmp"), "bmp")
-    ]
+    private static let logTag = "[TNPaste]"
+
+    private static func log(_ message: String) {
+        NSLog("%@", "\(logTag) \(message)")
+    }
 
     override func keyDown(with event: NSEvent) {
         // keyCode 48 = Tab。直接在最底层拦截，避免窗口的 key-view loop
@@ -42,19 +37,52 @@ final class RichTextNSTextView: NSTextView {
             let delta = event.modifierFlags.contains(.shift) ? -1 : 1
             if handler(delta) { return }
         }
-        super.keyDown(with: event)
-    }
 
-    override func paste(_ sender: Any?) {
-        // 1) 图片文件 / 2) 原始位图数据
-        if let imageURL = extractImageURLFromPasteboard() {
-            onPasteImage?(imageURL)
+        // Cmd+V 直接走我们的粘贴逻辑，不依赖编辑菜单 paste: action 的转发。
+        // NSViewRepresentable 嵌进 SwiftUI 后菜单 action 链并不总是可靠，
+        // 而只要正文视图是第一响应者，keyDown 一定会到这里。
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command),
+           !flags.contains(.control),
+           !flags.contains(.option),
+           event.charactersIgnoringModifiers?.lowercased() == "v" {
+            Self.log("keyDown 直接拦截 Cmd+V")
+            paste(nil)
             return
         }
 
-        // 3) 剪贴板里是图片路径文本（微信「复制路径」等）
-        if let text = NSPasteboard.general.string(forType: .string),
+        super.keyDown(with: event)
+    }
+
+    /// 编辑菜单里的「粘贴」和「粘贴并匹配样式」走的是两个不同入口，统一拦截。
+    override func paste(_ sender: Any?) {
+        handlePaste(fallback: { super.paste(sender) })
+    }
+
+    override func pasteAsPlainText(_ sender: Any?) {
+        handlePaste(fallback: { super.pasteAsPlainText(sender) })
+    }
+
+    private func handlePaste(fallback: () -> Void) {
+        let pasteboard = NSPasteboard.general
+        let names = (pasteboard.types ?? []).map(\.rawValue)
+        Self.log("paste 触发，剪贴板类型 = [\(names.joined(separator: ", "))]")
+
+        if let imageURL = extractImageURLFromPasteboard() {
+            Self.log("命中图片文件：\(imageURL.path)")
+            // 回调丢失时也不能静默吞掉，否则又变成「粘贴没反应」
+            guard let onPasteImage else {
+                Self.log("onPasteImage 未绑定")
+                onPasteFailure?("粘贴回调未就绪，请切换一次笔记后重试。")
+                return
+            }
+            onPasteImage(imageURL)
+            return
+        }
+
+        if let text = pasteboard.string(forType: .string),
            ImagePathScanner.containsImagePath(in: text) {
+            Self.log("命中图片路径文本")
             onPasteText?(text)
             return
         }
@@ -63,16 +91,40 @@ final class RichTextNSTextView: NSTextView {
         // NSTextView 默认粘贴（那会插入 file:///Attachment.tiff 临时引用，
         // 序列化后图片会丢）。
         if hasImageOnPasteboard {
-            onPasteFailure?("未能读取剪贴板中的图片，请改用工具栏「插入图片」选择截图文件")
+            let message = "未能读取剪贴板中的图片。剪贴板类型：\(names.joined(separator: "、"))。"
+                + "可改用工具栏「插入图片」选择截图文件。"
+            Self.log("读取失败：\(message)")
+            onPasteFailure?(message)
             return
         }
 
-        super.paste(sender)
+        Self.log("剪贴板没有图片，回落系统默认粘贴")
+        fallback()
+    }
+
+    /// 宽松识别：既认标准 UTType，也认各家用自定义名字塞进来的图片类型。
+    private static func isImageType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        if let ut = UTType(type.rawValue), ut.conforms(to: .image) { return true }
+        let raw = type.rawValue.lowercased()
+        let keywords = ["png", "tiff", "jpeg", "jpg", "heic", "heif", "gif", "webp", "bmp", "image"]
+        return keywords.contains { raw.contains($0) }
     }
 
     private var hasImageOnPasteboard: Bool {
-        let types = Set(NSPasteboard.general.types ?? [])
-        return Self.imageTypes.contains { types.contains($0.type) }
+        (NSPasteboard.general.types ?? []).contains { Self.isImageType($0) }
+    }
+
+    private static func fileExtension(for type: NSPasteboard.PasteboardType) -> String {
+        let raw = type.rawValue.lowercased()
+        if raw.contains("jpeg") || raw.contains("jpg") { return "jpg" }
+        if raw.contains("png") { return "png" }
+        if raw.contains("tiff") { return "tiff" }
+        if raw.contains("heic") { return "heic" }
+        if raw.contains("heif") { return "heif" }
+        if raw.contains("gif") { return "gif" }
+        if raw.contains("webp") { return "webp" }
+        if raw.contains("bmp") { return "bmp" }
+        return "png"
     }
 
     /// 从剪贴板拿到一个可导入的图片文件 URL
@@ -85,38 +137,75 @@ final class RichTextNSTextView: NSTextView {
            let imageURL = urls.first(where: {
                AttachmentStore.allowedExtensions.contains($0.pathExtension.lowercased())
            }) {
+            Self.log("分支 1：文件 URL \(imageURL.path)")
             return imageURL
         }
 
-        // 2) 原始位图数据：直接写盘，绕开 NSImage 转换。
-        //    旧实现依赖 `NSImage(pasteboard:)` + `tiffRepresentation`，
-        //    部分截图工具给出的 image 拿不到 TIFF，就会静默失败。
-        for entry in Self.imageTypes {
-            guard let data = pasteboard.data(forType: entry.type), !data.isEmpty else { continue }
-            if let url = writeTemporaryImage(data, ext: entry.ext) { return url }
+        // 1b) 老式 NSFilenamesPboardType：部分截图工具只写这个，不写 public.file-url
+        let filenameType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+        if let paths = pasteboard.propertyList(forType: filenameType) as? [String],
+           let path = paths.first(where: {
+               AttachmentStore.allowedExtensions.contains(($0 as NSString).pathExtension.lowercased())
+           }) {
+            Self.log("分支 1b：NSFilenamesPboardType \(path)")
+            return URL(fileURLWithPath: path)
         }
 
-        // 3) 兜底：类型不在上表、但 pasteboard 能构造 NSImage
-        if let image = NSImage(pasteboard: pasteboard),
-           let png = pngData(from: image) {
-            return writeTemporaryImage(png, ext: "png")
+        // 2) 按剪贴板实际声明的图片类型逐个取原始数据直接落盘。
+        //    旧实现只查固定类型表，遇到工具自定义类型就整条链路静默失效。
+        for type in pasteboard.types ?? [] where Self.isImageType(type) {
+            guard let data = pasteboard.data(forType: type), !data.isEmpty else { continue }
+            let ext = Self.fileExtension(for: type)
+            if let url = writeTemporaryImage(data, ext: ext) {
+                Self.log("分支 2：\(type.rawValue) → \(url.lastPathComponent)")
+                return url
+            }
+        }
+
+        // 3) 兜底：类型完全陌生、但 pasteboard 能构造 NSImage
+        if let image = NSImage(pasteboard: pasteboard), let png = pngData(from: image),
+           let url = writeTemporaryImage(png, ext: "png") {
+            Self.log("分支 3：NSImage 兜底 → \(url.lastPathComponent)")
+            return url
         }
 
         return nil
     }
 
-    /// 把剪贴板数据写成临时图片文件，供附件仓库导入
+    /// 把剪贴板数据写成临时图片文件，并**验证真的能读出图片**。
+    /// 有些工具把 PNG 数据声明成 TIFF，按声明扩展名落盘会读不出来，
+    /// 这时统一转成 PNG 再试一次。
     private func writeTemporaryImage(_ data: Data, ext: String) -> URL? {
-        let directory = FileManager.default.temporaryDirectory
+        let fm = FileManager.default
+        let directory = fm.temporaryDirectory
             .appendingPathComponent("tonotePaste", isDirectory: true)
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
             let url = directory.appendingPathComponent("paste-\(UUID().uuidString).\(ext)")
             try data.write(to: url, options: .atomic)
-            return url
+            if NSImage(contentsOf: url) != nil { return url }
+
+            try? fm.removeItem(at: url)
+            if let normalized = normalizedPNG(data) {
+                let pngURL = directory.appendingPathComponent("paste-\(UUID().uuidString).png")
+                try normalized.write(to: pngURL, options: .atomic)
+                if NSImage(contentsOf: pngURL) != nil { return pngURL }
+                try? fm.removeItem(at: pngURL)
+            }
         } catch {
-            return nil
+            Self.log("临时图片落盘失败：\(error.localizedDescription)")
         }
+        return nil
+    }
+
+    private func normalizedPNG(_ data: Data) -> Data? {
+        if let bitmap = NSBitmapImageRep(data: data) {
+            return bitmap.representation(using: .png, properties: [:])
+        }
+        if let image = NSImage(data: data) {
+            return pngData(from: image)
+        }
+        return nil
     }
 
     /// NSImage → PNG，多种 representation 都试一遍

@@ -356,7 +356,11 @@ public final class RichTextEditorController: ObservableObject {
 
     /// 导入本地图片并插入到当前选区
     public func insertImage(from sourceURL: URL) throws {
-        guard let tv = textView else { return }
+        guard let tv = textView else {
+            // 旧实现在这里静默 return，用户看到的就是「粘贴没反应」且没有任何提示。
+            NSLog("%@", "[TNPaste] insertImage 失败：controller.textView 为空")
+            throw AttachmentError.copyFailed("编辑器尚未就绪，请先在正文里点一下再粘贴")
+        }
         let (attachment, relativePath) = try makeAttachment(from: sourceURL)
 
         let holder = NSMutableAttributedString(attachment: attachment)
@@ -364,6 +368,10 @@ public final class RichTextEditorController: ObservableObject {
 
         let selection = tv.selectedRange()
         tv.insertText(holder, replacementRange: selection)
+        // 编程式 insertText 不保证触发 textDidChange，显式写回一次，
+        // 否则图片当下能看到、切走笔记后再回来就没了。
+        commitChanges()
+        NSLog("%@", "[TNPaste] insertImage 成功：\(relativePath)")
     }
 
     /// 粘贴含图片路径的文本：路径位置替换成内联图片，其余文字原样保留。

@@ -33,16 +33,32 @@ struct EditorView: View {
     @ObservedObject private var notebooks = NotebookStore.shared
     @StateObject private var controller = RichTextEditorController()
     @State private var newTag = ""
-    @State private var showAddTag = false
-    @State private var pendingDelete: DeleteAction?
-    @State private var errorMessage: String?
+    /// 编辑器所有弹窗统一走一个状态：多个 .alert 串在同一视图上时只有部分会生效，
+    /// 之前「操作失败」提示因此完全弹不出来，粘贴失败表现为「没反应」。
+    @State private var activeDialog: EditorDialog?
 
     /// 右上角删除按钮的两种确认：移入回收站 / 永久删除（回收站内）
     private enum DeleteAction: String {
         case trash
         case permanent
     }
-    @State private var showLinkPrompt = false
+
+    private enum EditorDialog: Identifiable {
+        case addTag
+        case insertLink
+        case failure(String)
+        case deleteConfirm(DeleteAction)
+
+        var id: String {
+            switch self {
+            case .addTag: return "addTag"
+            case .insertLink: return "insertLink"
+            case .failure(let message): return "failure-\(message)"
+            case .deleteConfirm(let action): return "delete-\(action.rawValue)"
+            }
+        }
+    }
+
     @State private var linkURL = "https://"
     @State private var linkText = ""
     @State private var showTextPalette = false
@@ -66,7 +82,7 @@ struct EditorView: View {
                            content: $content,
                            controller: controller,
                            attachments: attachments,
-                           onEditorError: { errorMessage = $0 },
+                           onEditorError: { activeDialog = .failure($0) },
                            readOnly: showingTrash,
                            // 浮动格式窗口按需求临时关闭：开关置 false 后不注册选区回调，
                            // SelectionFormatBar / SelectionFormatPanel 及选区监听代码全部保留。
@@ -82,7 +98,7 @@ struct EditorView: View {
                                        onLink: {
                                            linkURL = "https://"
                                            linkText = ""
-                                           showLinkPrompt = true
+                                           activeDialog = .insertLink
                                        },
                                        onImage: {
                                            insertImage()
@@ -96,44 +112,57 @@ struct EditorView: View {
         .onDisappear { SelectionFormatPanel.shared.hide() }
         .onChange(of: note.id) { _, _ in SelectionFormatPanel.shared.hide() }
         .onChange(of: showingTrash) { _, _ in SelectionFormatPanel.shared.hide() }
-        .alert("添加标签", isPresented: $showAddTag) {
-            TextField("标签名", text: $newTag)
-            Button("添加") { addTag() }
-            Button("取消", role: .cancel) { newTag = "" }
-        }
-        .alert("插入链接", isPresented: $showLinkPrompt) {
-            TextField("链接地址", text: $linkURL)
-            TextField("显示文字（可留空）", text: $linkText)
-            Button("插入") { insertLink() }
-            Button("取消", role: .cancel) { }
-        }
-        .alert("操作失败", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("好") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
-        }
-        // 删除二次确认：普通笔记移入回收站，回收站笔记永久删除
-        .alert(deleteAlertTitle,
-               isPresented: Binding(get: { pendingDelete != nil },
-                                    set: { if !$0 { pendingDelete = nil } })) {
-            Button("取消", role: .cancel) { pendingDelete = nil }
-            Button(pendingDelete == .permanent ? "彻底删除" : "移入回收站", role: .destructive) {
-                let action = pendingDelete
-                pendingDelete = nil
-                if action == .permanent { onPermanentDelete() } else { onDelete() }
+        // 单一 alert：添加标签 / 插入链接 / 操作失败 / 删除二次确认共用
+        .alert(dialogTitle,
+               isPresented: Binding(get: { activeDialog != nil },
+                                    set: { if !$0 { activeDialog = nil } })) {
+            if let dialog = activeDialog {
+                switch dialog {
+                case .addTag:
+                    TextField("标签名", text: $newTag)
+                    Button("添加") { addTag() }
+                    Button("取消", role: .cancel) { newTag = "" }
+                case .insertLink:
+                    TextField("链接地址", text: $linkURL)
+                    TextField("显示文字（可留空）", text: $linkText)
+                    Button("插入") { insertLink() }
+                    Button("取消", role: .cancel) { }
+                case .failure:
+                    Button("好") { activeDialog = nil }
+                case .deleteConfirm(let action):
+                    Button("取消", role: .cancel) { activeDialog = nil }
+                    Button(action == .permanent ? "彻底删除" : "移入回收站", role: .destructive) {
+                        activeDialog = nil
+                        if action == .permanent { onPermanentDelete() } else { onDelete() }
+                    }
+                }
             }
         } message: {
-            Text(pendingDelete == .permanent
-                 ? "此操作不可恢复，笔记将被永久移除。"
-                 : "笔记将移入回收站，可随时在回收站中恢复。")
+            Text(dialogMessage)
         }
     }
 
-    private var deleteAlertTitle: String {
-        pendingDelete == .permanent ? "彻底删除笔记？" : "删除笔记？"
+    private var dialogTitle: String {
+        guard let dialog = activeDialog else { return "" }
+        switch dialog {
+        case .addTag: return "添加标签"
+        case .insertLink: return "插入链接"
+        case .failure: return "操作失败"
+        case .deleteConfirm(let action):
+            return action == .permanent ? "彻底删除笔记？" : "删除笔记？"
+        }
+    }
+
+    private var dialogMessage: String {
+        guard let dialog = activeDialog else { return "" }
+        switch dialog {
+        case .failure(let message): return message
+        case .deleteConfirm(let action):
+            return action == .permanent
+                ? "此操作不可恢复，笔记将被永久移除。"
+                : "笔记将移入回收站，可随时在回收站中恢复。"
+        default: return ""
+        }
     }
 
     private var isQuickSync: Bool {
@@ -225,7 +254,7 @@ struct EditorView: View {
                         .background(Color(hex: 0xF2F2F4))
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
-                    Button(action: { showAddTag = true }) {
+                    Button(action: { activeDialog = .addTag }) {
                         Image(systemName: "plus").font(.system(size: 10, weight: .bold))
                             .foregroundColor(Theme.textTertiary)
                             .frame(width: 20, height: 20)
@@ -321,7 +350,7 @@ struct EditorView: View {
             .buttonStyle(.plain)
             .help("把笔记恢复到原笔记本")
 
-            Button(action: { pendingDelete = .permanent }) {
+            Button(action: { activeDialog = .deleteConfirm(.permanent) }) {
                 Label("彻底删除", systemImage: "trash.slash")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(Theme.red)
@@ -445,7 +474,7 @@ struct EditorView: View {
             formatButton("link", .link, "插入链接") {
                 linkURL = "https://"
                 linkText = ""
-                showLinkPrompt = true
+                activeDialog = .insertLink
             }
             formatButton("photo", .image, "插入图片") { insertImage() }
 
@@ -454,7 +483,7 @@ struct EditorView: View {
             Text("\(plainWordCount) 字").font(.system(size: 12)).foregroundColor(Theme.textTertiary)
             // 删除按钮回到单个图标，功能靠悬浮说明 + 二次确认交代
             if !isQuickSync {
-                Button(action: { pendingDelete = .trash }) {
+                Button(action: { activeDialog = .deleteConfirm(.trash) }) {
                     Image(systemName: "trash")
                         .font(.system(size: 14))
                         .foregroundColor(Theme.textTertiary)
@@ -514,14 +543,14 @@ struct EditorView: View {
         do {
             try controller.insertImage(from: url)
         } catch {
-            errorMessage = error.localizedDescription
+            activeDialog = .failure(error.localizedDescription)
         }
     }
 
     private func insertLink() {
         let trimmed = linkURL.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, let url = URL(string: trimmed), url.scheme != nil else {
-            errorMessage = "请输入有效的链接地址"
+            activeDialog = .failure("请输入有效的链接地址")
             return
         }
         let text = linkText.trimmingCharacters(in: .whitespaces)

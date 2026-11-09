@@ -162,10 +162,15 @@ public struct RichTextEditor: NSViewRepresentable {
         /// 绑定粘贴回调（始终指向当前笔记）
         func installPasteHandler(on tv: RichTextNSTextView) {
             tv.onPasteImage = { [weak tv] url in
-                guard tv != nil else { return }
+                guard tv != nil else {
+                    NSLog("%@", "[TNPaste] onPasteImage 触发但 textView 已释放")
+                    return
+                }
+                NSLog("%@", "[TNPaste] onPasteImage 触发：\(url.lastPathComponent)")
                 do {
                     try self.parent.controller.insertImage(from: url)
                 } catch {
+                    NSLog("%@", "[TNPaste] insertImage 抛错：\(error.localizedDescription)")
                     self.parent.onEditorError?(error.localizedDescription)
                 }
             }
@@ -182,6 +187,7 @@ public struct RichTextEditor: NSViewRepresentable {
                 self?.parent.controller.changeListLevel(by: delta) ?? false
             }
             tv.onPasteFailure = { [weak self] message in
+                NSLog("%@", "[TNPaste] onPasteFailure → \(message)")
                 self?.parent.onEditorError?(message)
             }
         }
