@@ -5,7 +5,7 @@ import WorkLogRichText
 
 /// 工具栏「T」样式入口。
 ///
-/// 层级固定为 1 个正文（12pt）+ 4 个标题（18 / 24 / 32 / 40pt，全部加粗），
+/// 层级固定为 1 个正文（14pt 常规字重）+ 4 个标题（18 / 24 / 32 / 40pt，全部加粗），
 /// 有序列表与无序列表也从原来的两个独立图标收进这里。
 /// 用浮窗而不是原生 Menu：可以精确控制左侧字形、字号提示、右侧勾选，
 /// 也不会出现 NSMenu 不渲染自定义 View、系统额外补一个下拉箭头的问题。
@@ -55,7 +55,7 @@ private struct TextStylePopover: View {
 
     /// 1 个正文 + 4 个标题；右侧数字与字号一一对应
     private let items: [StyleItem] = [
-        StyleItem(style: .paragraph, glyph: "T", title: "正文", sizeHint: "12"),
+        StyleItem(style: .paragraph, glyph: "T", title: "正文", sizeHint: "14"),
         StyleItem(style: .heading1, glyph: "H1", title: "一级标题", sizeHint: "40"),
         StyleItem(style: .heading2, glyph: "H2", title: "二级标题", sizeHint: "32"),
         StyleItem(style: .heading3, glyph: "H3", title: "三级标题", sizeHint: "24"),

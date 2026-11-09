@@ -228,15 +228,9 @@ public final class RichTextEditorController: ObservableObject {
         let style = resolveStyle(storage: storage, range: paragraph)
         guard style == .orderedItem || style == .bulletItem else { return false }
 
-        // 段落开头连续带 listMarker 的字符即编号 / 圆点前缀
-        let probe = min(paragraph.location, max(0, storage.length - 1))
-        var effective = NSRange(location: 0, length: 0)
-        let markerEnd: Int
-        if storage.attribute(RichTextKeys.listMarker, at: probe, effectiveRange: &effective) != nil {
-            markerEnd = min(NSMaxRange(effective), NSMaxRange(paragraph))
-        } else {
-            markerEnd = paragraph.location
-        }
+        // 结构化扫描取标记范围：正文若误继承 listMarker，也不会把整段当成前缀
+        let markerEnd = RichTextBridge.markerRange(in: storage, paragraph: paragraph)
+            .map { NSMaxRange($0) } ?? paragraph.location
         // 光标必须在编号后、正文前；正文中间的普通退格不拦截
         guard caret.location <= markerEnd else { return false }
 
@@ -312,7 +306,9 @@ public final class RichTextEditorController: ObservableObject {
             for runRange in runRanges(in: storage, range: range) {
                 let font = storage.attribute(.font, at: runRange.location, effectiveRange: nil) as? NSFont
                     ?? NSFont.systemFont(ofSize: baseSize)
-                let bold = RichTextBridge.isHeading(style) ? true : RichTextBridge.isBold(font)
+                // 正文与列表内容默认常规字重、正文字号；只有标题强制加粗。
+                // 用户之后仍可手动用 B / 字号 / 颜色修改这些文字。
+                let bold = RichTextBridge.isHeading(style)
                 let italic = RichTextBridge.isItalic(font)
                 let newFont = style == .code
                     ? RichTextBridge.monoFont(size: baseSize, bold: bold)

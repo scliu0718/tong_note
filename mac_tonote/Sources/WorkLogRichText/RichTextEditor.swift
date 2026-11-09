@@ -226,6 +226,21 @@ public struct RichTextEditor: NSViewRepresentable {
             return false
         }
 
+        /// 输入前的最后一道保险：不让标记前缀属性被后续输入的字继承。
+        public func textView(_ textView: NSTextView,
+                             shouldChangeTextIn affectedCharRange: NSRange,
+                             replacementString: String?) -> Bool {
+            clearMarkerTypingAttribute(in: textView)
+            return true
+        }
+
+        private func clearMarkerTypingAttribute(in tv: NSTextView) {
+            guard tv.typingAttributes[RichTextKeys.listMarker] != nil else { return }
+            var typing = tv.typingAttributes
+            typing.removeValue(forKey: RichTextKeys.listMarker)
+            tv.typingAttributes = typing
+        }
+
         /// 把当前 NSTextStorage 序列化回正文（输入与格式命令共用）。
         func persist(from tv: NSTextView) {
             guard !isUpdatingProgrammatically,
@@ -244,6 +259,10 @@ public struct RichTextEditor: NSViewRepresentable {
                 undo?.enableUndoRegistration()
                 isUpdatingProgrammatically = false
             }
+
+            // 光标紧贴标记后面时，NSTextView 会把标记属性派生进 typingAttributes，
+            // 接下来输入的字就会被当成前缀而丢失；每次写回后清一次。
+            clearMarkerTypingAttribute(in: tv)
 
             let document = RichTextBridge.document(from: tv.textStorage ?? NSAttributedString())
             let html = RichTextHTMLCodec.encode(document)

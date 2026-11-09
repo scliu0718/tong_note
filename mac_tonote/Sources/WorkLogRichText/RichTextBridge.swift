@@ -22,8 +22,8 @@ enum RichTextKeys {
 /// 绝不允许写入 Cocoa HTML Writer 生成的 `file:///Attachment.tiff` 临时引用。
 enum RichTextBridge {
 
-    /// 正文字号 12pt；标题按 18 / 24 / 32 / 40 递进
-    static let defaultFontSize: CGFloat = 12
+    /// 正文字号 14pt；标题按 18 / 24 / 32 / 40 递进
+    static let defaultFontSize: CGFloat = 14
     static let defaultTextColor = NSColor(srgbRed: 0.28, green: 0.28, blue: 0.29, alpha: 1)
     static let maxImageWidth: CGFloat = 480
     /// 列表编号 / 圆点的蓝色，与工具栏样式菜单的强调色一致
@@ -85,7 +85,7 @@ enum RichTextBridge {
         case .heading4: return 18
         case .heading5: return 16
         case .heading6: return 14
-        case .code: return 12
+        case .code: return defaultFontSize
         default: return defaultFontSize
         }
     }
@@ -177,10 +177,11 @@ enum RichTextBridge {
     /// 标记到正文的距离；制表位与续行缩进都用它（按要求由 30 缩小一半）
     static let listTextOffset: CGFloat = 15
 
-    /// 无序列表层级符号：父级实心、子级空心，再深继续交替
+    /// 无序列表层级符号：父级实心、子级**大**空心圆，再深继续交替。
+    /// 用 U+25CB WHITE CIRCLE 而不是小 WHITE BULLET：圆更大、边线更细，中空一眼可见。
     static func bulletSymbol(for level: Int) -> String {
         let clamped = min(max(level, 0), 7)
-        return clamped % 2 == 0 ? "•" : "◦"
+        return clamped % 2 == 0 ? "•" : "○"
     }
 
     /// 第一级 1...n；存在上一层级时切到 a...z；再深一级用 i...，之后循环。
@@ -278,9 +279,14 @@ enum RichTextBridge {
         switch style {
         case .orderedItem: size = baseSize + 1
         case .bulletItem:
-            // 圆点按要求整体放大 1.5 倍（10pt → 15pt / 9pt → 13.5pt）
-            let original = level % 2 == 0 ? max(9, baseSize - 2) : max(8, baseSize - 3)
-            size = original * 1.5
+            if level % 2 == 0 {
+                // 实心圆点放大 1.5 倍
+                size = max(9, baseSize - 2) * 1.5
+            } else {
+                // 大空心圆是全角字符，字号必须压在标记间距以内，
+                // 否则 \t 会跳到备用制表位、子级正文与父级对不齐
+                size = min(12, baseSize)
+            }
         default: size = baseSize
         }
         return [
@@ -311,6 +317,48 @@ enum RichTextBridge {
               let wantedStyle = expected[.paragraphStyle] as? NSParagraphStyle,
               abs(style.headIndent - wantedStyle.headIndent) < 0.01 else { return true }
         return false
+    }
+
+    /// 段落开头属于标记前缀的范围。
+    ///
+    /// 不能用 `attribute(_:at:effectiveRange:)`：一旦新输入的字误继承了
+    /// listMarker 属性，effectiveRange 会一路延伸到整段，normalize 会把正文
+    /// 一起当成前缀替换掉 —— 正是子级 a. / b. 后面「输不进内容」的原因。
+    /// 这里按结构扫描：连续带标记属性、遇到第一个 \t 结束，且最多 8 个字符。
+    static func markerRange(in storage: NSAttributedString, paragraph: NSRange) -> NSRange? {
+        let text = storage.string as NSString
+        guard paragraph.length > 0, text.length > 0 else { return nil }
+        let start = min(max(paragraph.location, 0), text.length - 1)
+        let end = min(NSMaxRange(paragraph), text.length, start + 8)
+        guard storage.attribute(RichTextKeys.listMarker, at: start, effectiveRange: nil) != nil else {
+            return nil
+        }
+        var cursor = start
+        while cursor < end {
+            guard storage.attribute(RichTextKeys.listMarker, at: cursor, effectiveRange: nil) != nil else {
+                break
+            }
+            let ch = text.character(at: cursor)
+            if ch == 9 { // \t 是标记的最后一个字符
+                cursor += 1
+                break
+            }
+            // 正文（中文等）就算误继承了标记属性，也不算前缀的一部分
+            guard isMarkerCharacter(ch) else { break }
+            cursor += 1
+        }
+        return cursor > start ? NSRange(location: start, length: cursor - start) : nil
+    }
+
+    /// 合法标记字符：1. / a. / iii. 与 • / ○，其余一律视为正文
+    private static func isMarkerCharacter(_ ch: unichar) -> Bool {
+        switch ch {
+        case 0x2022, 0x25CB, 0x2E: return true          // • ○ .
+        case 48...57: return true                        // 0-9
+        case 65...90: return true                        // A-Z
+        case 97...122: return true                       // a-z
+        default: return false
+        }
     }
 
     /// 让每个列表段落开头的可见标记与样式、层级、序号保持一致。
@@ -352,15 +400,7 @@ enum RichTextBridge {
             let level = (storage.attribute(RichTextKeys.listLevel, at: probe, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
             let clamped = min(max(level, 0), 7)
 
-            var markerRange: NSRange?
-            if content.length > 0 {
-                var effective = NSRange(location: 0, length: 0)
-                if storage.attribute(RichTextKeys.listMarker, at: content.location,
-                                     effectiveRange: &effective) != nil {
-                    markerRange = NSRange(location: content.location,
-                                          length: min(effective.length, content.length))
-                }
-            }
+            let markerRange = RichTextBridge.markerRange(in: storage, paragraph: content)
 
             styles.append((style, clamped))
             segments.append(Segment(contentRange: content, style: style, level: clamped,
