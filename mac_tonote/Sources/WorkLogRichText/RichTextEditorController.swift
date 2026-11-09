@@ -13,7 +13,16 @@ public final class RichTextEditorController: ObservableObject {
     /// 当前笔记 ID（决定附件子目录）
     public var noteID: UUID?
 
+    /// 属性类命令（颜色 / 字号 / 段落样式）执行完后的回调。
+    /// `NSTextStorage` 的属性变更不保证触发 `NSTextView.textDidChange`，
+    /// 因此由编辑器宿主显式把正文重新序列化写回，避免格式改了却没保存。
+    public var onContentChanged: (() -> Void)?
+
     public init() {}
+
+    private func commitChanges() {
+        onContentChanged?()
+    }
 
     // MARK: - 基础开关
 
@@ -67,6 +76,7 @@ public final class RichTextEditorController: ObservableObject {
                                  range: range)
         }
         storage.endEditing()
+        commitChanges()
     }
 
     /// 设置文字颜色（无选区时作用于后续输入）
@@ -84,6 +94,7 @@ public final class RichTextEditorController: ObservableObject {
         storage.beginEditing()
         storage.addAttribute(.foregroundColor, value: color, range: selection)
         storage.endEditing()
+        commitChanges()
     }
 
     /// 设置文字背景色 / 高亮色（无选区时作用于后续输入）
@@ -101,6 +112,7 @@ public final class RichTextEditorController: ObservableObject {
         storage.beginEditing()
         storage.addAttribute(.backgroundColor, value: color, range: selection)
         storage.endEditing()
+        commitChanges()
     }
 
     /// 清除选区（或后续输入）的文字背景色
@@ -118,6 +130,7 @@ public final class RichTextEditorController: ObservableObject {
         storage.beginEditing()
         storage.removeAttribute(.backgroundColor, range: selection)
         storage.endEditing()
+        commitChanges()
     }
 
     // MARK: - 段落与列表
@@ -166,6 +179,7 @@ public final class RichTextEditorController: ObservableObject {
             }
         }
         storage.endEditing()
+        commitChanges()
 
         // 让后续输入继承新的段落样式
         if let last = ranges.last, last.length > 0 {
@@ -201,6 +215,7 @@ public final class RichTextEditorController: ObservableObject {
         tv.textStorage?.addAttribute(.link, value: url, range: selection)
         tv.textStorage?.addAttribute(.foregroundColor, value: linkColor, range: selection)
         tv.textStorage?.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: selection)
+        commitChanges()
     }
 
     // MARK: - 图片
@@ -293,6 +308,7 @@ public final class RichTextEditorController: ObservableObject {
             storage.addAttribute(.font, value: transform(font) ?? font, range: range)
         }
         storage.endEditing()
+        commitChanges()
     }
 
     private func toggleAttribute(_ key: NSAttributedString.Key, value: Int) {
@@ -314,6 +330,7 @@ public final class RichTextEditorController: ObservableObject {
             storage.addAttribute(key, value: allOn ? 0 : value, range: range)
         }
         storage.endEditing()
+        commitChanges()
     }
 
     private func runRanges(in storage: NSTextStorage, range: NSRange) -> [NSRange] {

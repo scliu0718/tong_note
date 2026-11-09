@@ -45,44 +45,13 @@ struct EditorView: View {
     @State private var showLinkPrompt = false
     @State private var linkURL = "https://"
     @State private var linkText = ""
-    @State private var showTextColorPicker = false
-    @State private var showBackgroundColorPicker = false
+    @State private var showTextPalette = false
+    @State private var showBackgroundPalette = false
     @State private var customTextColor = Color(hex: 0x1D1D1F)
     @State private var customBackgroundColor = Color(hex: 0xFFF3C4)
 
-    /// 常用字号
-    private let fontSizes: [CGFloat] = [11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32, 40]
-    /// 调色板
-    private struct PaletteColor: Identifiable {
-        let id: String
-        let name: String
-        let hex: UInt32
-    }
-
-    private let palette: [PaletteColor] = [
-        PaletteColor(id: "primary", name: "正文", hex: 0x1D1D1F),
-        PaletteColor(id: "secondary", name: "次级", hex: 0x48484A),
-        PaletteColor(id: "tertiary", name: "浅灰", hex: 0x86868B),
-        PaletteColor(id: "red", name: "强调红", hex: 0xE5484D),
-        PaletteColor(id: "amber", name: "琥珀", hex: 0xF5A623),
-        PaletteColor(id: "green", name: "绿色", hex: 0x1A9E5C),
-        PaletteColor(id: "greenDeep", name: "深绿", hex: 0x147A46),
-        PaletteColor(id: "baidu", name: "百度蓝", hex: 0x06A7FF),
-        PaletteColor(id: "baiduDeep", name: "深蓝", hex: 0x0084D6)
-    ]
-
-    /// 背景色调色板：以浅色为主，作为文字高亮底色，不会盖住正文。
-    private let backgroundPalette: [PaletteColor] = [
-        PaletteColor(id: "bgYellow", name: "浅黄", hex: 0xFFF3C4),
-        PaletteColor(id: "bgGreen", name: "浅绿", hex: 0xDFF5E7),
-        PaletteColor(id: "bgCyan", name: "浅青", hex: 0xD9F2F0),
-        PaletteColor(id: "bgBlue", name: "浅蓝", hex: 0xDCEEFF),
-        PaletteColor(id: "bgPurple", name: "浅紫", hex: 0xEFE4FA),
-        PaletteColor(id: "bgPink", name: "浅粉", hex: 0xFCE4EC),
-        PaletteColor(id: "bgOrange", name: "浅橙", hex: 0xFFE8D6),
-        PaletteColor(id: "bgGray", name: "浅灰", hex: 0xEFEFF1),
-        PaletteColor(id: "bgWhite", name: "白色", hex: 0xFFFFFF)
-    ]
+    /// 常用字号（与选中文字浮窗共用）
+    private let fontSizes = TextFormatPalette.fontSizes
 
     var body: some View {
         VStack(spacing: 0) {
@@ -98,10 +67,33 @@ struct EditorView: View {
                            controller: controller,
                            attachments: attachments,
                            onEditorError: { errorMessage = $0 },
-                           readOnly: showingTrash)
+                           readOnly: showingTrash,
+                           onSelectionChange: { rect in
+                               guard !showingTrash, let rect else {
+                                   SelectionFormatPanel.shared.hide()
+                                   return
+                               }
+                               SelectionFormatPanel.shared.show(
+                                   at: rect,
+                                   bar: SelectionFormatBar(
+                                       controller: controller,
+                                       onLink: {
+                                           linkURL = "https://"
+                                           linkText = ""
+                                           showLinkPrompt = true
+                                       },
+                                       onImage: {
+                                           insertImage()
+                                       }
+                                   )
+                               )
+                           })
                 .background(Theme.panelBg)
         }
         .background(Theme.panelBg)
+        .onDisappear { SelectionFormatPanel.shared.hide() }
+        .onChange(of: note.id) { _, _ in SelectionFormatPanel.shared.hide() }
+        .onChange(of: showingTrash) { _, _ in SelectionFormatPanel.shared.hide() }
         .alert("添加标签", isPresented: $showAddTag) {
             TextField("标签名", text: $newTag)
             Button("添加") { addTag() }
@@ -380,20 +372,9 @@ struct EditorView: View {
             .fixedSize()
             .help("设置字号")
 
-            // 文字颜色：菜单项只显示颜色对应的色块图标，颜色名交给 hover 浮窗
-            Menu {
-                ForEach(palette) { item in
-                    Button {
-                        if let color = NSColor(hex: item.hex) {
-                            controller.setTextColor(color)
-                        }
-                    } label: {
-                        ColorSwatch(hex: item.hex)
-                    }
-                    .help(item.name)
-                }
-                Divider()
-                Button("自定义颜色…") { showTextColorPicker = true }
+            // 文字颜色：自定义色板浮窗（原生菜单不会渲染自定义色块，会变透明空行）
+            Button {
+                showTextPalette = true
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "paintpalette").font(.system(size: 13))
@@ -403,33 +384,24 @@ struct EditorView: View {
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
             .fixedSize()
             .help("文字颜色")
-            .popover(isPresented: $showTextColorPicker, arrowEdge: .bottom) {
-                ColorPicker("文字颜色", selection: $customTextColor, supportsOpacity: false)
-                    .padding(10)
-                    .frame(width: 200)
-                    .onChange(of: customTextColor) { _, newValue in
-                        controller.setTextColor(NSColor(newValue))
-                    }
+            .popover(isPresented: $showTextPalette, arrowEdge: .bottom) {
+                ColorPalettePopover(
+                    title: "文字颜色",
+                    colors: TextFormatPalette.textColors,
+                    showsClear: false,
+                    onSelect: { controller.setTextColor($0) },
+                    onClear: {},
+                    customColor: $customTextColor,
+                    onCustom: { controller.setTextColor($0) }
+                )
             }
 
-            // 背景颜色：同样只用色块图标，额外支持自定义与清除
-            Menu {
-                ForEach(backgroundPalette) { item in
-                    Button {
-                        if let color = NSColor(hex: item.hex) {
-                            controller.setBackgroundColor(color)
-                        }
-                    } label: {
-                        ColorSwatch(hex: item.hex)
-                    }
-                    .help(item.name)
-                }
-                Divider()
-                Button("自定义颜色…") { showBackgroundColorPicker = true }
-                Button("清除背景色") { controller.clearBackgroundColor() }
+            // 背景颜色：默认 9 个浅色色块 + 自定义 + 清除
+            Button {
+                showBackgroundPalette = true
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "paintbrush.fill").font(.system(size: 13))
@@ -439,16 +411,19 @@ struct EditorView: View {
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
             .fixedSize()
             .help("背景颜色")
-            .popover(isPresented: $showBackgroundColorPicker, arrowEdge: .bottom) {
-                ColorPicker("背景颜色", selection: $customBackgroundColor, supportsOpacity: false)
-                    .padding(10)
-                    .frame(width: 200)
-                    .onChange(of: customBackgroundColor) { _, newValue in
-                        controller.setBackgroundColor(NSColor(newValue))
-                    }
+            .popover(isPresented: $showBackgroundPalette, arrowEdge: .bottom) {
+                ColorPalettePopover(
+                    title: "背景颜色",
+                    colors: TextFormatPalette.backgroundColors,
+                    showsClear: true,
+                    onSelect: { controller.setBackgroundColor($0) },
+                    onClear: { controller.clearBackgroundColor() },
+                    customColor: $customBackgroundColor,
+                    onCustom: { controller.setBackgroundColor($0) }
+                )
             }
 
             // 分段（段落样式）
@@ -616,31 +591,5 @@ private struct ToolbarIconButton: View {
     }
 }
 
-// MARK: - 颜色菜单里的纯色块图标
-/// 只显示颜色本身，不带文字；名称由菜单项的 hover 浮窗提供。
-private struct ColorSwatch: View {
-    let hex: UInt32
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .fill(Color(hex: hex))
-            .frame(width: 18, height: 18)
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.black.opacity(0.16), lineWidth: 0.5)
-            )
-            .padding(2)
-    }
-}
-
-// MARK: - NSColor 便捷构造
-extension NSColor {
-    convenience init?(hex: UInt32) {
-        self.init(
-            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
-        )
-    }
-}
+// 色板数据与色块控件已抽到 TextFormatPalette.swift，
+// 由工具栏色板浮窗与「选中文字」浮动格式窗口共用。
