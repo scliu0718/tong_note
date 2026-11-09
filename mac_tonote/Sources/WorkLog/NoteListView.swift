@@ -13,6 +13,8 @@ struct NoteListView: View {
 
     @EnvironmentObject private var sync: SyncEngine
     @State private var confirmDeleteID: UUID?
+    /// 固定卡片（快同步 / 快任务）是否展开。默认展开，仅本次运行有效，不持久化。
+    @State private var quickEntriesExpanded = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,13 +24,16 @@ struct NoteListView: View {
                 VStack(spacing: 8) {
                     // 「快同步」固定第一行：不随排序/搜索变化，始终置顶
                     if !showingTrash {
-                        QuickSyncCard(status: sync.status, message: sync.lastMessage)
-                            .contentShape(Rectangle())
-                            .onTapGesture { selectedID = NoteStore.quickSyncNoteID }
-                        // 「任务」固定第二行
-                        TodoEntryCard(todos: todos)
-                            .contentShape(Rectangle())
-                            .onTapGesture(perform: onOpenTodos)
+                        quickEntriesToggle
+                        if quickEntriesExpanded {
+                            QuickSyncCard(status: sync.status)
+                                .contentShape(Rectangle())
+                                .onTapGesture { selectedID = NoteStore.quickSyncNoteID }
+                            // 「任务」固定第二行
+                            TodoEntryCard(todos: todos)
+                                .contentShape(Rectangle())
+                                .onTapGesture(perform: onOpenTodos)
+                        }
                     }
                     if notes.isEmpty {
                         emptyState
@@ -66,6 +71,26 @@ struct NoteListView: View {
         guard selectedID == removedID else { return }
         selectedID = notes.filter { $0.id != removedID }.first?.id
             ?? NoteStore.quickSyncNoteID
+    }
+
+    /// 「线 - 收起图标 - 线」分组头：只影响本次运行中的固定卡片，App 重启后恢复展开。
+    private var quickEntriesToggle: some View {
+        HStack(spacing: 6) {
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { quickEntriesExpanded.toggle() }
+            } label: {
+                Image(systemName: quickEntriesExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(Theme.textQuaternary)
+                    .frame(width: 20, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(quickEntriesExpanded ? "收起快同步与快任务" : "展开快同步与快任务")
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+        }
+        .padding(.horizontal, 2)
     }
 
     private var emptyState: some View {
@@ -231,7 +256,6 @@ struct NoteCard: View {
 /// 列表顶部固定的「快同步」控制行：点击即触发一次拉取→对比→上传。
 struct QuickSyncCard: View {
     let status: SyncEngine.Status
-    let message: String?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -258,11 +282,17 @@ struct QuickSyncCard: View {
                         Text("同步中…")
                             .font(.system(size: 11))
                             .foregroundColor(Theme.accent)
+                    } else if case .failed = status {
+                        Text("同步失败")
+                            .font(.system(size: 11))
+                            .foregroundColor(Theme.red)
                     }
                 }
-                Text(statusSubtitle)
+                // 描述固定为功能介绍，不再随同步结果显示统计信息；
+                // 同步状态只在标题行用小标签提示，上次同步时间移到任务页头部。
+                Text("多设备共享 · 一处编辑处处可见")
                     .font(.system(size: 11))
-                    .foregroundColor(statusColor)
+                    .foregroundColor(Theme.textTertiary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -278,35 +308,6 @@ struct QuickSyncCard: View {
         .help("在任意一台电脑的「快同步」笔记里编辑内容并同步，另一台电脑再同步一次就能看到相同内容，实现多设备快速共享。")
     }
 
-    private var statusSubtitle: String {
-        switch status {
-        case .idle:
-            return "多设备共享 · 一处编辑处处可见"
-        case .syncing:
-            return "正在拉取云端并对比…"
-        case .success(let date):
-            let t = Self.timeFormatter.string(from: date)
-            let extra = message.map { " · \($0)" } ?? ""
-            return "上次同步 \(t)\(extra)"
-        case .failed(let msg):
-            return "同步失败：\(msg)"
-        }
-    }
-
-    private var statusColor: Color {
-        switch status {
-        case .idle: return Theme.textTertiary
-        case .syncing: return Theme.accent
-        case .success: return Theme.textTertiary
-        case .failed: return Theme.red
-        }
-    }
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
 }
 
 /// 列表顶部固定的「任务」入口行：显示未完成数量，点击进入任务面板。

@@ -1,8 +1,8 @@
 import Foundation
 import Combine
 
-/// 笔记本分类仓库：内置 4 个固定分类 + 用户自建分类。
-/// 用单例让侧栏与编辑器共享同一份可观察数据，新建分类后两处立即可选。
+/// 笔记本仓库：内置 4 个固定笔记本 + 用户自建笔记本。
+/// 用单例让侧栏与编辑器共享同一份可观察数据，新建笔记本后两处立即可选。
 public final class NotebookStore: ObservableObject {
     public static let shared = NotebookStore()
 
@@ -15,22 +15,22 @@ public final class NotebookStore: ObservableObject {
         custom = UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
     }
 
-    /// 内置分类在前，自建分类在后，顺序稳定。
+    /// 内置笔记本在前，自建笔记本在后，顺序稳定。
     public var list: [String] { Notebooks.list + custom }
 
-    /// 新建分类；返回 nil 表示成功，否则返回给用户的错误提示。
+    /// 新建笔记本；返回 nil 表示成功，否则返回给用户的错误提示。
     public func add(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "分类名称不能为空" }
-        guard trimmed != Notebooks.all else { return "「全部笔记」是内置项，不能用作分类名" }
-        guard !list.contains(trimmed) else { return "该分类已存在" }
-        guard trimmed.count <= maxNameLength else { return "分类名称最多 \(maxNameLength) 个字" }
+        guard !trimmed.isEmpty else { return "笔记本名称不能为空" }
+        guard trimmed != Notebooks.all else { return "「全部笔记」是内置项，不能用作笔记本名称" }
+        guard !list.contains(trimmed) else { return "该笔记本已存在" }
+        guard trimmed.count <= maxNameLength else { return "笔记本名称最多 \(maxNameLength) 个字" }
         custom.append(trimmed)
         UserDefaults.standard.set(custom, forKey: defaultsKey)
         return nil
     }
 
-    /// 删除自建分类。「全部笔记」是虚拟汇总项与笔记迁移兜底，内置分类也不可删除。
+    /// 删除自建笔记本。「全部笔记」是虚拟汇总项与笔记迁移兜底，内置笔记本也不可删除。
     public func remove(_ name: String) {
         guard name != Notebooks.all, custom.contains(name) else { return }
         custom.removeAll { $0 == name }

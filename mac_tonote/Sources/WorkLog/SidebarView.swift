@@ -25,7 +25,9 @@ struct SidebarView: View {
         case deleteNotebook(String)
     }
 
-    private var isWide: Bool { width >= SidebarWidth.threshold }
+    private var isWide: Bool { width >= SidebarWidth.expandedThreshold }
+    /// 极窄档：只显示图标，所有文字与计数交给 hover 浮窗。
+    private var isTiny: Bool { width < SidebarWidth.compactThreshold }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,13 +42,17 @@ struct SidebarView: View {
                         notebookItem(nb, icon: notebookIcon(nb))
                     }
 
-                    // 分类与标签之间的分割线：宽版也显示，避免两组混在一起
+                    // 笔记本与标签之间的分割线：三档都显示，避免两组混在一起
                     sectionDivider
 
                     ForEach(store.allTags, id: \.self) { tag in
-                        tagItem(tag)
+                        if isTiny {
+                            tinyTagItem(tag)
+                        } else {
+                            tagItem(tag)
+                        }
                     }
-                    if store.allTags.isEmpty {
+                    if store.allTags.isEmpty && !isTiny {
                         Text("暂无标签")
                             .font(.system(size: isWide ? 12 : 10))
                             .foregroundColor(Theme.textQuaternary)
@@ -54,7 +60,7 @@ struct SidebarView: View {
                             .padding(.vertical, 8)
                     }
                 }
-                .padding(.horizontal, isWide ? 8 : 10)
+                .padding(.horizontal, isWide ? 8 : (isTiny ? 6 : 10))
             }
             footerView
         }
@@ -66,7 +72,7 @@ struct SidebarView: View {
             if let dialog = activeDialog {
                 switch dialog {
                 case .newNotebook:
-                    TextField("分类名称", text: $newNotebookName)
+                    TextField("笔记本名称", text: $newNotebookName)
                     Button("创建") { createNotebook() }
                     Button("取消", role: .cancel) { newNotebookName = "" }
                 case .deleteTag(let tag):
@@ -74,7 +80,7 @@ struct SidebarView: View {
                     Button("删除标签", role: .destructive) { confirmDeleteTag(tag) }
                 case .deleteNotebook(let name):
                     Button("取消", role: .cancel) {}
-                    Button("删除该目录", role: .destructive) { confirmDeleteNotebook(name) }
+                    Button("删除该笔记本", role: .destructive) { confirmDeleteNotebook(name) }
                 case .notebookError:
                     Button("好") {}
                 }
@@ -88,9 +94,9 @@ struct SidebarView: View {
         guard let dialog = activeDialog else { return "" }
         switch dialog {
         case .deleteTag(let tag): return "删除标签「\(tag)」？"
-        case .newNotebook: return "新建笔记分类"
-        case .notebookError: return "无法新建分类"
-        case .deleteNotebook(let name): return "删除目录「\(name)」？"
+        case .newNotebook: return "新建笔记本"
+        case .notebookError: return "无法新建笔记本"
+        case .deleteNotebook(let name): return "删除笔记本「\(name)」？"
         }
     }
 
@@ -98,7 +104,7 @@ struct SidebarView: View {
         guard let dialog = activeDialog else { return "" }
         switch dialog {
         case .deleteTag: return "该标签会从所有笔记上移除，笔记本身不会被删除。"
-        case .newNotebook: return "新分类会出现在分类列表中，编辑器里也能把笔记切换过去。"
+        case .newNotebook: return "新笔记本会出现在笔记本列表中，编辑器里也能把笔记切换过去。"
         case .notebookError(let message): return message
         case .deleteNotebook(let name): return deleteNotebookMessage(name)
         }
@@ -135,14 +141,16 @@ struct SidebarView: View {
                 }
                 .padding(.horizontal, 14).padding(.vertical, 12)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: isTiny ? 4 : 6) {
                     avatar
                     Button(action: onSettings) {
-                        Image(systemName: "gearshape").font(.system(size: 12)).foregroundColor(Theme.textTertiary)
+                        Image(systemName: "gearshape")
+                            .font(.system(size: isTiny ? 11 : 12))
+                            .foregroundColor(Theme.textTertiary)
                     }
                     .buttonStyle(.plain).help("同步与存储设置")
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, isTiny ? 8 : 12)
             }
         }
     }
@@ -150,7 +158,7 @@ struct SidebarView: View {
     /// 可点击头像：点击弹出候选图标，更换后立即保存到本地并上传云端。
     private var avatar: some View {
         Button(action: { showAvatarPicker.toggle() }) {
-            AvatarBadge(preset: avatarStore.current, size: 32)
+            AvatarBadge(preset: avatarStore.current, size: isTiny ? 26 : 32)
         }
         .buttonStyle(.plain)
         .help("更换头像")
@@ -229,29 +237,32 @@ struct SidebarView: View {
             } else {
                 Button(action: onNewNote) {
                     Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: isTiny ? 15 : 18, weight: .bold))
                         .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
+                        .frame(width: isTiny ? 34 : 44, height: isTiny ? 34 : 44)
                         .background(Theme.accent)
                         .clipShape(Circle())
                         .shadow(color: Theme.accent.opacity(0.28), radius: 5, y: 2)
                 }
-                .buttonStyle(.plain).padding(.bottom, 14).help("新建笔记")
+                .buttonStyle(.plain)
+                .padding(.bottom, isTiny ? 10 : 14)
+                .help("新建笔记")
             }
         }
     }
 
     private var groupDivider: some View {
         if isWide { return AnyView(EmptyView()) }
-        return AnyView(Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 8).padding(.horizontal, 4))
+        return AnyView(Rectangle().fill(Theme.line).frame(height: 1)
+            .padding(.vertical, isTiny ? 6 : 8).padding(.horizontal, isTiny ? 2 : 4))
     }
 
-    /// 分类与标签之间的分隔线，宽窄两版都显示。
+    /// 笔记本与标签之间的分隔线，三档都显示。
     private var sectionDivider: some View {
         Rectangle()
             .fill(Theme.line)
             .frame(height: 1)
-            .padding(.horizontal, isWide ? 8 : 4)
+            .padding(.horizontal, isWide ? 8 : (isTiny ? 2 : 4))
             .padding(.vertical, isWide ? 10 : 8)
     }
 
@@ -274,7 +285,7 @@ struct SidebarView: View {
         activeDialog = nil
     }
 
-    /// 删除目录：先把笔记转移到「全部笔记」，再从自建分类里移除。
+    /// 删除笔记本：先把笔记转移到「全部笔记」，再从自建笔记本里移除。
     private func confirmDeleteNotebook(_ name: String) {
         // 双保险：即便弹窗状态被异常触发，也不允许删掉「全部笔记」这个兜底容器。
         guard name != Notebooks.all, notebooks.custom.contains(name) else {
@@ -290,31 +301,77 @@ struct SidebarView: View {
     private func deleteNotebookMessage(_ name: String) -> String {
         let count = store.count(inNotebook: name)
         if count > 0 {
-            return "该目录下有 \(count) 篇笔记，删除后会自动转移到「全部笔记」，笔记本身不会丢失。"
+            return "该笔记本下有 \(count) 篇笔记，删除后会自动转移到「全部笔记」，笔记本身不会丢失。"
         }
-        return "该目录下暂无笔记，删除后会从分类列表中移除。"
+        return "该笔记本下暂无笔记，删除后会从笔记本列表中移除。"
     }
 
     // MARK: 笔记本/标签项
     private func notebookItem(_ name: String, icon: String) -> some View {
         let active = !showingTrash && selectedTag == nil && selectedNotebook == name
-        // 「全部笔记」是虚拟汇总项，也是删除其它目录时笔记的兜底归属，永远不可删除；
-        // 内置四个分类同样不可删除，只有用户自建分类才提供「删除该目录」。
+        // 「全部笔记」是虚拟汇总项，也是删除其它笔记本时笔记的兜底归属，永远不可删除；
+        // 内置四个笔记本同样不可删除，只有用户自建笔记本才提供「删除该笔记本」。
         let isProtected = name == Notebooks.all
         let isDeletable = !isProtected && notebooks.custom.contains(name)
-        return sideItem(title: name, icon: icon,
-                        count: store.count(inNotebook: name), active: active) {
+        let count = store.count(inNotebook: name)
+        let action = {
             selectedNotebook = name
             selectedTag = nil
             showingTrash = false
         }
-        .contextMenu {
-            Button("新建笔记分类") { activeDialog = .newNotebook }
-            if isDeletable {
-                Divider()
-                Button("删除该目录", role: .destructive) { activeDialog = .deleteNotebook(name) }
+        return Group {
+            if isTiny {
+                tinySideItem(title: name, icon: icon, count: count,
+                             active: active, action: action)
+            } else {
+                sideItem(title: name, icon: icon, count: count,
+                         active: active, action: action)
             }
         }
+        .contextMenu {
+            Button("新建笔记本") { activeDialog = .newNotebook }
+            if isDeletable {
+                Divider()
+                Button("删除该笔记本", role: .destructive) { activeDialog = .deleteNotebook(name) }
+            }
+        }
+    }
+
+    /// 极窄档笔记本项：只显示图标，完整名称与计数交给 hover 浮窗。
+    private func tinySideItem(title: String, icon: String, count: Int, active: Bool,
+                              action: @escaping () -> Void) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 16))
+            .foregroundColor(active ? Theme.accent : Theme.textTertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(active ? Theme.accentTint : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+            .help("\(title) · \(count) 篇笔记")
+    }
+
+    /// 极窄档标签项：只显示书页图标，hover 浮窗显示标签名与笔记数。
+    private func tinyTagItem(_ tag: String) -> some View {
+        let active = !showingTrash && selectedTag == tag
+        let hovering = hoveredTag == tag
+        return BookTagIcon(size: 15, color: active ? Theme.accent : Theme.textTertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(active ? Theme.accentTint : (hovering ? Color(hex: 0xEFEFF1) : Color.clear))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedTag = tag
+                selectedNotebook = Notebooks.all
+                showingTrash = false
+            }
+            .onHover { hoveredTag = $0 ? tag : nil }
+            .contextMenu {
+                Button("删除标签", role: .destructive) { activeDialog = .deleteTag(tag) }
+            }
+            .help("标签 \(tag) · \(store.count(withTag: tag)) 篇笔记")
     }
 
     /// 标签项：图标 + 文字单行横排；删除只走右键菜单，保持行内简洁。
@@ -390,7 +447,18 @@ struct SidebarView: View {
     // MARK: 底部
     private var footerView: some View {
         VStack(spacing: 0) {
-            if isWide {
+            if isTiny {
+                Image(systemName: "trash")
+                    .font(.system(size: 16))
+                    .foregroundColor(showingTrash ? Theme.accent : Theme.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(showingTrash ? Theme.accentTint : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .contentShape(Rectangle())
+                    .onTapGesture { showingTrash.toggle(); selectedTag = nil }
+                    .help("回收站 · \(store.trashNotes.count) 篇笔记")
+            } else if isWide {
                 HStack(spacing: 9) {
                     Image(systemName: "trash").font(.system(size: 14))
                         .foregroundColor(showingTrash ? Theme.accent : Theme.textTertiary)
@@ -419,9 +487,10 @@ struct SidebarView: View {
                 .onTapGesture { showingTrash.toggle(); selectedTag = nil }
             }
 
-            storageMeter
+            // 极窄档隐藏「本地存储 / N 篇笔记」两行文字
+            if !isTiny { storageMeter }
         }
-        .padding(.horizontal, isWide ? 8 : 10)
+        .padding(.horizontal, isWide ? 8 : (isTiny ? 6 : 10))
         .padding(.vertical, 10)
         .background(Theme.sidebarBg)
     }

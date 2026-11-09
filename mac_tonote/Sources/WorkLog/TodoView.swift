@@ -77,19 +77,29 @@ struct TodoView: View {
 
                 syncButton
             }
-            if store.doneCount > 0 && filter == .all {
-                HStack {
-                    Spacer()
-                    Button("清空已完成") { mutate { store.clearCompleted() } }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundColor(Theme.textTertiary)
-                }
+            // 原「清空已完成」入口移除，改为常驻显示最近一次成功同步的时间
+            HStack {
+                Spacer()
+                Text(lastSyncText)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textQuaternary)
+                    .help("最近一次成功同步到百度网盘的时间")
             }
         }
         .padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 12)
         .overlay(Rectangle().fill(Theme.lineSoft).frame(height: 1), alignment: .bottom)
     }
+
+    private var lastSyncText: String {
+        guard let date = sync.lastSyncDate else { return "尚未同步" }
+        return "上次同步 \(Self.syncTimeFormatter.string(from: date))"
+    }
+
+    private static let syncTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm"
+        return f
+    }()
 
     /// 与「快同步」一致的绿色同步按钮，触发全量同步（笔记 + 任务）。
     private var syncButton: some View {

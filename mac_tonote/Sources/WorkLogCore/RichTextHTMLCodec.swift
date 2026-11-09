@@ -85,6 +85,9 @@ public enum RichTextHTMLCodec {
         if let color = run.colorHex {
             inner = "<span style=\"color:\(escapeAttribute(color))\">\(inner)</span>"
         }
+        if let background = run.backgroundHex {
+            inner = "<span style=\"background-color:\(escapeAttribute(background))\">\(inner)</span>"
+        }
         if run.isStrike { inner = "<s>\(inner)</s>" }
         if run.isUnderline { inner = "<u>\(inner)</u>" }
         if run.isItalic { inner = "<em>\(inner)</em>" }
@@ -203,6 +206,7 @@ public enum RichTextHTMLCodec {
         var isStrike = false
         var fontSize: Double?
         var colorHex: String?
+        var backgroundHex: String?
         var link: String?
     }
 
@@ -220,6 +224,7 @@ public enum RichTextHTMLCodec {
                                        isStrike: context.isStrike,
                                        fontSize: context.fontSize,
                                        colorHex: context.colorHex,
+                                       backgroundHex: context.backgroundHex,
                                        link: context.link))
             case .element(let tag, let attrs, let children):
                 switch tag {
@@ -271,6 +276,13 @@ public enum RichTextHTMLCodec {
                 if let size = Double(numeric), size > 0 { context.fontSize = size }
             case "color":
                 if !value.isEmpty { context.colorHex = value }
+            case "background-color", "background":
+                // transparent / none 视为清除背景色
+                if value.isEmpty || value == "transparent" || value == "none" {
+                    context.backgroundHex = nil
+                } else {
+                    context.backgroundHex = value
+                }
             default:
                 break
             }

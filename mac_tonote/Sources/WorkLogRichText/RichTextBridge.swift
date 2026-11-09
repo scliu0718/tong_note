@@ -201,6 +201,9 @@ enum RichTextBridge {
                 if let hex = run.colorHex, let color = color(fromHex: hex) {
                     attributes[.foregroundColor] = color
                 }
+                if let hex = run.backgroundHex, let color = color(fromHex: hex) {
+                    attributes[.backgroundColor] = color
+                }
                 if run.isUnderline {
                     attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
                 }
@@ -315,6 +318,12 @@ enum RichTextBridge {
                     if hex != hexString(from: defaultTextColor) { colorHex = hex }
                 }
 
+                var backgroundHex: String?
+                if let color = attributes[.backgroundColor] as? NSColor,
+                   color.alphaComponent > 0.01 {
+                    backgroundHex = hexString(from: color)
+                }
+
                 var link: String?
                 if let url = attributes[.link] as? URL {
                     link = url.absoluteString
@@ -329,6 +338,7 @@ enum RichTextBridge {
                                         isStrike: strike,
                                         fontSize: abs(size - baseSize) > 0.01 ? Double(size) : nil,
                                         colorHex: colorHex,
+                                        backgroundHex: backgroundHex,
                                         link: link))
             }
         }

@@ -7,11 +7,31 @@ enum SortMode: String, CaseIterable {
     case title = "按标题"
 }
 
-/// 侧栏只允许两档固定宽度，避免拖到中间宽度时两种排版混在一起、对不齐。
+/// 侧栏三档固定宽度：极窄（只有图标）/ 窄（图标+文字竖排）/ 宽（横排）。
+/// 固定档位可以避免拖到中间宽度时排版混在一起、对不齐。
 enum SidebarWidth {
+    static let tiny: CGFloat = 52
     static let compact: CGFloat = 112
     static let expanded: CGFloat = 200
-    static let threshold: CGFloat = (compact + expanded) / 2   // 156
+
+    /// 极窄 / 窄 的分界
+    static let compactThreshold: CGFloat = (tiny + compact) / 2      // 82
+    /// 窄 / 宽 的分界
+    static let expandedThreshold: CGFloat = (compact + expanded) / 2 // 156
+
+    /// 拖动时按投影宽度吸附到最近的一档。
+    static func snapped(_ projected: CGFloat) -> CGFloat {
+        if projected < compactThreshold { return tiny }
+        if projected < expandedThreshold { return compact }
+        return expanded
+    }
+
+    /// 点击分隔条：极窄 → 窄 → 宽 → 极窄，循环切换。
+    static func next(after current: CGFloat) -> CGFloat {
+        if current < compactThreshold { return compact }
+        if current < expandedThreshold { return expanded }
+        return tiny
+    }
 }
 
 struct MainView: View {
@@ -185,9 +205,8 @@ struct ResizeHandle: View {
                         // 否则鼠标在阈值附近来回移动会让两档反复跳变、界面闪烁
                         guard !didSwitch else { return }
                         let projected = initialWidth + value.translation.width
-                        // 小于阈值 → 窄版；大于阈值 → 宽版，只有这两档
-                        let target = projected >= SidebarWidth.threshold
-                            ? SidebarWidth.expanded : SidebarWidth.compact
+                        // 三档吸附：极窄 / 窄 / 宽，跨档后立即锁定，避免来回跳变闪烁
+                        let target = SidebarWidth.snapped(projected)
                         if width != target {
                             width = target
                             didSwitch = true
@@ -200,9 +219,8 @@ struct ResizeHandle: View {
                     }
             )
             .onTapGesture {
-                width = width >= SidebarWidth.threshold
-                    ? SidebarWidth.compact : SidebarWidth.expanded
+                width = SidebarWidth.next(after: width)
             }
-            .help("拖动或点击切换侧栏宽度")
+            .help("拖动或点击切换侧栏宽度：极窄 / 窄 / 宽")
     }
 }

@@ -86,6 +86,40 @@ public final class RichTextEditorController: ObservableObject {
         storage.endEditing()
     }
 
+    /// 设置文字背景色 / 高亮色（无选区时作用于后续输入）
+    public func setBackgroundColor(_ color: NSColor) {
+        guard let tv = textView, let storage = tv.textStorage else { return }
+        let selection = tv.selectedRange()
+
+        if selection.length == 0 {
+            var typing = tv.typingAttributes
+            typing[.backgroundColor] = color
+            tv.typingAttributes = typing
+            return
+        }
+
+        storage.beginEditing()
+        storage.addAttribute(.backgroundColor, value: color, range: selection)
+        storage.endEditing()
+    }
+
+    /// 清除选区（或后续输入）的文字背景色
+    public func clearBackgroundColor() {
+        guard let tv = textView, let storage = tv.textStorage else { return }
+        let selection = tv.selectedRange()
+
+        if selection.length == 0 {
+            var typing = tv.typingAttributes
+            typing.removeValue(forKey: .backgroundColor)
+            tv.typingAttributes = typing
+            return
+        }
+
+        storage.beginEditing()
+        storage.removeAttribute(.backgroundColor, range: selection)
+        storage.endEditing()
+    }
+
     // MARK: - 段落与列表
 
     /// 应用段落样式（正文/标题/引用/代码）

@@ -45,8 +45,10 @@ struct EditorView: View {
     @State private var showLinkPrompt = false
     @State private var linkURL = "https://"
     @State private var linkText = ""
-    @State private var showColorPicker = false
-    @State private var customColor = Color(hex: 0x1D1D1F)
+    @State private var showTextColorPicker = false
+    @State private var showBackgroundColorPicker = false
+    @State private var customTextColor = Color(hex: 0x1D1D1F)
+    @State private var customBackgroundColor = Color(hex: 0xFFF3C4)
 
     /// 常用字号
     private let fontSizes: [CGFloat] = [11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32, 40]
@@ -67,6 +69,19 @@ struct EditorView: View {
         PaletteColor(id: "greenDeep", name: "深绿", hex: 0x147A46),
         PaletteColor(id: "baidu", name: "百度蓝", hex: 0x06A7FF),
         PaletteColor(id: "baiduDeep", name: "深蓝", hex: 0x0084D6)
+    ]
+
+    /// 背景色调色板：以浅色为主，作为文字高亮底色，不会盖住正文。
+    private let backgroundPalette: [PaletteColor] = [
+        PaletteColor(id: "bgYellow", name: "浅黄", hex: 0xFFF3C4),
+        PaletteColor(id: "bgGreen", name: "浅绿", hex: 0xDFF5E7),
+        PaletteColor(id: "bgCyan", name: "浅青", hex: 0xD9F2F0),
+        PaletteColor(id: "bgBlue", name: "浅蓝", hex: 0xDCEEFF),
+        PaletteColor(id: "bgPurple", name: "浅紫", hex: 0xEFE4FA),
+        PaletteColor(id: "bgPink", name: "浅粉", hex: 0xFCE4EC),
+        PaletteColor(id: "bgOrange", name: "浅橙", hex: 0xFFE8D6),
+        PaletteColor(id: "bgGray", name: "浅灰", hex: 0xEFEFF1),
+        PaletteColor(id: "bgWhite", name: "白色", hex: 0xFFFFFF)
     ]
 
     var body: some View {
@@ -177,15 +192,15 @@ struct EditorView: View {
 
             HStack(spacing: 6) {
                 if isQuickSync {
-                    // 「快同步」和「快任务」一样是独立条目：不归属任何笔记本分类，
-                    // 因此不再显示分类下拉、标签和添加标签入口。
+                    // 「快同步」和「快任务」一样是独立条目：不归属任何笔记本，
+                    // 因此不再显示笔记本下拉、标签和添加标签入口。
                     independentBadge
                     Text("·").foregroundColor(Theme.textQuaternary)
                     Text("编辑于 \(note.timeText)")
                         .font(.system(size: 12)).foregroundColor(Theme.textQuaternary)
                 } else {
                     Menu {
-                        // 目录被删除后笔记会落到「全部笔记」（未分类），
+                        // 笔记本被删除后笔记会落到「全部笔记」（未归属），
                         // 此时把它也列入选项，避免下拉里当前选中项为空。
                         ForEach(notebookChoices, id: \.self) { nb in
                             Button(nb) { note.notebook = nb }
@@ -273,19 +288,19 @@ struct EditorView: View {
         .padding(.top, 16).padding(.bottom, 10)
     }
 
-    /// 分类下拉选项；当前分类已不存在时（例如目录被删除）额外保留它作为「未分类」项。
+    /// 笔记本下拉选项；当前笔记本已不存在时（例如被删除）额外保留它作为「未归属」项。
     private var notebookChoices: [String] {
         notebooks.list.contains(note.notebook)
             ? notebooks.list
             : [note.notebook] + notebooks.list
     }
 
-    /// 「快同步」独立条目标识：明确它不属于任何笔记本分类、也不参与分类筛选。
+    /// 「快同步」独立条目标识：明确它不属于任何笔记本、也不参与笔记本筛选。
     private var independentBadge: some View {
         HStack(spacing: 5) {
             Image(systemName: "square.dashed")
                 .font(.system(size: 10, weight: .medium))
-            Text("独立笔记 · 不归属任何分类")
+            Text("独立笔记 · 不归属任何笔记本")
                 .font(.system(size: 11, weight: .medium))
         }
         .foregroundColor(Theme.textTertiary)
@@ -293,7 +308,7 @@ struct EditorView: View {
         .background(Color(hex: 0xF2F2F4))
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .fixedSize(horizontal: true, vertical: false)
-        .help("「快同步」与「快任务」一样是独立条目，不参与笔记本分类筛选")
+        .help("「快同步」与「快任务」一样是独立条目，不参与笔记本筛选")
     }
 
     /// 回收站笔记的标题行操作区：两个按钮强制横排，不再挤进工具栏导致文字竖排。
@@ -310,7 +325,7 @@ struct EditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
-            .help("把笔记恢复到原分类")
+            .help("把笔记恢复到原笔记本")
 
             Button(action: { pendingDelete = .permanent }) {
                 Label("彻底删除", systemImage: "trash.slash")
@@ -365,7 +380,7 @@ struct EditorView: View {
             .fixedSize()
             .help("设置字号")
 
-            // 文字颜色
+            // 文字颜色：菜单项只显示颜色对应的色块图标，颜色名交给 hover 浮窗
             Menu {
                 ForEach(palette) { item in
                     Button {
@@ -373,17 +388,12 @@ struct EditorView: View {
                             controller.setTextColor(color)
                         }
                     } label: {
-                        HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color(hex: item.hex))
-                                .frame(width: 12, height: 12)
-                                .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.black.opacity(0.08)))
-                            Text(item.name)
-                        }
+                        ColorSwatch(hex: item.hex)
                     }
+                    .help(item.name)
                 }
                 Divider()
-                Button("自定义颜色…") { showColorPicker = true }
+                Button("自定义颜色…") { showTextColorPicker = true }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "paintpalette").font(.system(size: 13))
@@ -396,12 +406,48 @@ struct EditorView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("文字颜色")
-            .popover(isPresented: $showColorPicker, arrowEdge: .bottom) {
-                ColorPicker("文字颜色", selection: $customColor, supportsOpacity: false)
+            .popover(isPresented: $showTextColorPicker, arrowEdge: .bottom) {
+                ColorPicker("文字颜色", selection: $customTextColor, supportsOpacity: false)
                     .padding(10)
                     .frame(width: 200)
-                    .onChange(of: customColor) { _, newValue in
+                    .onChange(of: customTextColor) { _, newValue in
                         controller.setTextColor(NSColor(newValue))
+                    }
+            }
+
+            // 背景颜色：同样只用色块图标，额外支持自定义与清除
+            Menu {
+                ForEach(backgroundPalette) { item in
+                    Button {
+                        if let color = NSColor(hex: item.hex) {
+                            controller.setBackgroundColor(color)
+                        }
+                    } label: {
+                        ColorSwatch(hex: item.hex)
+                    }
+                    .help(item.name)
+                }
+                Divider()
+                Button("自定义颜色…") { showBackgroundColorPicker = true }
+                Button("清除背景色") { controller.clearBackgroundColor() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "paintbrush.fill").font(.system(size: 13))
+                    Image(systemName: "chevron.down").font(.system(size: 8))
+                }
+                .foregroundColor(Theme.textSecondary)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("背景颜色")
+            .popover(isPresented: $showBackgroundColorPicker, arrowEdge: .bottom) {
+                ColorPicker("背景颜色", selection: $customBackgroundColor, supportsOpacity: false)
+                    .padding(10)
+                    .frame(width: 200)
+                    .onChange(of: customBackgroundColor) { _, newValue in
+                        controller.setBackgroundColor(NSColor(newValue))
                     }
             }
 
@@ -567,6 +613,23 @@ private struct ToolbarIconButton: View {
         }
         .zIndex(hovering ? 20 : 0)
         .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
+// MARK: - 颜色菜单里的纯色块图标
+/// 只显示颜色本身，不带文字；名称由菜单项的 hover 浮窗提供。
+private struct ColorSwatch: View {
+    let hex: UInt32
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color(hex: hex))
+            .frame(width: 18, height: 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.black.opacity(0.16), lineWidth: 0.5)
+            )
+            .padding(2)
     }
 }
 

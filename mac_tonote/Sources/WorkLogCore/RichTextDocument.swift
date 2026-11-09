@@ -54,6 +54,8 @@ public struct RichTextRun: Equatable, Sendable {
     public var fontSize: Double?
     /// 显式文字颜色（#RRGGBB）。nil 表示跟随段落默认颜色。
     public var colorHex: String?
+    /// 显式文字背景色 / 高亮色（#RRGGBB）。nil 表示无背景色。
+    public var backgroundHex: String?
     public var link: String?
     public var image: RichTextImage?
 
@@ -64,6 +66,7 @@ public struct RichTextRun: Equatable, Sendable {
                 isStrike: Bool = false,
                 fontSize: Double? = nil,
                 colorHex: String? = nil,
+                backgroundHex: String? = nil,
                 link: String? = nil,
                 image: RichTextImage? = nil) {
         self.text = text
@@ -73,6 +76,7 @@ public struct RichTextRun: Equatable, Sendable {
         self.isStrike = isStrike
         self.fontSize = fontSize
         self.colorHex = colorHex
+        self.backgroundHex = backgroundHex
         self.link = link
         self.image = image
     }
