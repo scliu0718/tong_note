@@ -207,12 +207,34 @@ public struct RichTextEditor: NSViewRepresentable {
             persist(from: tv)
         }
 
+        /// 列表段落里用 Tab / Shift+Tab 切换编号体系（1. ↔ a. ↔ i.）。
+        public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == NSSelectorFromString("insertTab:") {
+                return parent.controller.changeListLevel(by: 1)
+            }
+            if commandSelector == NSSelectorFromString("insertBacktab:") {
+                return parent.controller.changeListLevel(by: -1)
+            }
+            return false
+        }
+
         /// 把当前 NSTextStorage 序列化回正文（输入与格式命令共用）。
         func persist(from tv: NSTextView) {
             guard !isUpdatingProgrammatically,
                   tv === textView,
                   parent.noteID == representedNoteID else {
                 return
+            }
+
+            // 先同步列表的可见标记（编号连续性、层级、蓝色样式）。
+            // 这些字符只是视图层前缀，编辑期间屏蔽递归通知与 undo 注册。
+            if let storage = tv.textStorage {
+                let undo = tv.undoManager
+                isUpdatingProgrammatically = true
+                undo?.disableUndoRegistration()
+                RichTextBridge.normalizeListMarkers(in: storage)
+                undo?.enableUndoRegistration()
+                isUpdatingProgrammatically = false
             }
 
             let document = RichTextBridge.document(from: tv.textStorage ?? NSAttributedString())

@@ -89,10 +89,16 @@ public struct RichTextRun: Equatable, Sendable {
 public struct RichTextBlock: Equatable, Sendable {
     public var style: RichTextBlockStyle
     public var runs: [RichTextRun]
+    /// 列表缩进层级：0 = 第一级（1. / a. 之前的层级），1 = 子级（a. b. c.）。
+    /// 只影响展示，不影响正文内容，随受控 HTML 的 `data-level` 持久化。
+    public var listLevel: Int
 
-    public init(style: RichTextBlockStyle = .paragraph, runs: [RichTextRun] = []) {
+    public init(style: RichTextBlockStyle = .paragraph,
+                runs: [RichTextRun] = [],
+                listLevel: Int = 0) {
         self.style = style
         self.runs = runs
+        self.listLevel = listLevel
     }
 
     public var plainText: String {

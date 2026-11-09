@@ -21,6 +21,8 @@ public final class RichTextEditorController: ObservableObject {
 
     /// 当前光标所在段落的样式，供工具栏「T」样式菜单显示勾选状态。
     @Published public private(set) var currentBlockStyle: RichTextBlockStyle = .paragraph
+    /// 当前光标所在列表的层级，供「T」菜单显示 1. / a. / i. 的编号体系。
+    @Published public private(set) var currentListLevel: Int = 0
 
     public init() {}
 
@@ -142,44 +144,86 @@ public final class RichTextEditorController: ObservableObject {
     /// 应用段落样式（正文/标题/引用/代码）
     public func applyBlockStyle(_ style: RichTextBlockStyle) {
         guard let tv = textView, let storage = tv.textStorage else { return }
-        applyBlockStyle(style, to: storage, in: tv)
+        applyBlockStyle(style, to: storage, in: tv, level: 0)
     }
 
     /// 由编辑器的选区变化回调驱动，刷新「T」菜单里的当前段落样式。
     public func refreshCurrentStyle() {
         guard let tv = textView, let storage = tv.textStorage, storage.length > 0 else {
             currentBlockStyle = .paragraph
+            currentListLevel = 0
             return
         }
         let location = min(tv.selectedRange().location, storage.length - 1)
         let style = resolveStyle(storage: storage, range: NSRange(location: location, length: 0))
         if currentBlockStyle != style { currentBlockStyle = style }
+        let level = (storage.attribute(RichTextKeys.listLevel, at: location, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
+        if currentListLevel != level { currentListLevel = level }
     }
 
-    /// 切换无序列表 / 有序列表
+    /// 切换无序列表 / 有序列表。
+    /// 已是该列表时，再次点击提升层级（1. → a. → i.），到顶后再点才回到正文。
     public func toggleList(_ style: RichTextBlockStyle) {
         guard let tv = textView, let storage = tv.textStorage else { return }
         let ranges = paragraphRanges(in: storage, range: tv.selectedRange())
         guard !ranges.isEmpty else { return }
         let allMatch = ranges.allSatisfy { resolveStyle(storage: storage, range: $0) == style }
-        applyBlockStyle(allMatch ? .paragraph : style, to: storage, in: tv)
+        guard allMatch else {
+            applyBlockStyle(style, to: storage, in: tv, level: 0)
+            return
+        }
+        let currentLevel = ranges.map {
+            (storage.attribute(RichTextKeys.listLevel, at: $0.location, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
+        }.max() ?? 0
+        if currentLevel < 2 {
+            applyBlockStyle(style, to: storage, in: tv, level: currentLevel + 1)
+        } else {
+            applyBlockStyle(.paragraph, to: storage, in: tv, level: 0)
+        }
+    }
+
+    /// Tab / Shift+Tab 调整列表缩进层级；当前段落不是列表时返回 false，交回系统默认处理。
+    @discardableResult
+    public func changeListLevel(by delta: Int) -> Bool {
+        guard let tv = textView, let storage = tv.textStorage else { return false }
+        let ranges = paragraphRanges(in: storage, range: tv.selectedRange())
+        let listRanges = ranges.filter {
+            let style = resolveStyle(storage: storage, range: $0)
+            return style == .orderedItem || style == .bulletItem
+        }
+        guard !listRanges.isEmpty else { return false }
+
+        storage.beginEditing()
+        for range in listRanges {
+            let style = resolveStyle(storage: storage, range: range)
+            let current = (storage.attribute(RichTextKeys.listLevel, at: range.location, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
+            let next = min(max(current + delta, 0), 3)
+            storage.addAttribute(RichTextKeys.listLevel, value: NSNumber(value: next), range: range)
+            storage.addAttribute(.paragraphStyle,
+                                 value: RichTextBridge.paragraphStyle(for: style, level: next),
+                                 range: range)
+        }
+        storage.endEditing()
+        commitChanges()
+        refreshCurrentStyle()
+        return true
     }
 
     private func applyBlockStyle(_ style: RichTextBlockStyle,
                                  to storage: NSTextStorage,
-                                 in tv: NSTextView) {
+                                 in tv: NSTextView,
+                                 level: Int) {
         let ranges = paragraphRanges(in: storage, range: tv.selectedRange())
         guard !ranges.isEmpty else { return }
-        // 同一批段落共享同一个 NSTextList，序号才能连续
-        let textList = RichTextBridge.makeTextList(for: style)
         let baseSize = RichTextBridge.baseFontSize(for: style)
 
         storage.beginEditing()
         for range in ranges {
             storage.addAttribute(RichTextKeys.blockStyle, value: style.rawValue, range: range)
             storage.addAttribute(RichTextKeys.baseFontSize, value: NSNumber(value: Double(baseSize)), range: range)
+            storage.addAttribute(RichTextKeys.listLevel, value: NSNumber(value: level), range: range)
             storage.addAttribute(.paragraphStyle,
-                                 value: RichTextBridge.paragraphStyle(for: style, textList: textList),
+                                 value: RichTextBridge.paragraphStyle(for: style, level: level),
                                  range: range)
 
             for runRange in runRanges(in: storage, range: range) {
@@ -358,7 +402,14 @@ public final class RichTextEditorController: ObservableObject {
                                   using: { _, runRange, _ in
             ranges.append(runRange)
         })
-        return ranges.isEmpty ? [range] : ranges
+        // 列表编号 / 圆点是视图层前缀，不参与字体、颜色等行内格式命令
+        let content = ranges.filter { runRange in
+            guard runRange.location < storage.length else { return false }
+            return storage.attribute(RichTextKeys.listMarker,
+                                     at: runRange.location,
+                                     effectiveRange: nil) == nil
+        }
+        return content.isEmpty ? (ranges.isEmpty ? [range] : []) : content
     }
 
     /// 选区覆盖到的所有段落

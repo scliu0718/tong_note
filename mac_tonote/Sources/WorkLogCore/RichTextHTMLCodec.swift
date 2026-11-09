@@ -21,16 +21,18 @@ public enum RichTextHTMLCodec {
             switch block.style {
             case .bulletItem, .orderedItem:
                 // 连续的同类列表项合并成一个 <ul> / <ol>
-                var items: [[RichTextRun]] = []
+                var items: [(runs: [RichTextRun], level: Int)] = []
                 var cursor = index
                 while cursor < blocks.count, blocks[cursor].style == block.style {
-                    items.append(blocks[cursor].runs)
+                    items.append((blocks[cursor].runs, blocks[cursor].listLevel))
                     cursor += 1
                 }
                 let tag = block.style == .bulletItem ? "ul" : "ol"
                 html += "<\(tag)>"
                 for item in items {
-                    html += "<li>\(encodeInline(item))</li>"
+                    // 层级写进 data-level：有序列表据此决定 1. / a. 的编号体系
+                    let levelAttr = item.level > 0 ? " data-level=\"\(item.level)\"" : ""
+                    html += "<li\(levelAttr)>\(encodeInline(item.runs))</li>"
                 }
                 html += "</\(tag)>"
                 index = cursor
@@ -189,12 +191,15 @@ public enum RichTextHTMLCodec {
     private static func listBlocks(_ children: [HTMLNode], style: RichTextBlockStyle) -> [RichTextBlock] {
         var result: [RichTextBlock] = []
         for child in children {
-            guard case .element(let tag, _, let grandChildren) = child else { continue }
+            guard case .element(let tag, let attrs, let grandChildren) = child else { continue }
             guard tag == "li" else {
                 result.append(contentsOf: blocksFrom(node: child))
                 continue
             }
-            result.append(RichTextBlock(style: style, runs: inlineRuns(grandChildren, context: InlineContext())))
+            let level = Int(attrs["data-level"] ?? "") ?? 0
+            result.append(RichTextBlock(style: style,
+                                        runs: inlineRuns(grandChildren, context: InlineContext()),
+                                        listLevel: max(0, min(level, 7))))
         }
         return result
     }

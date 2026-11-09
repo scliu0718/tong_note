@@ -9,6 +9,11 @@ enum RichTextKeys {
     static let baseFontSize = NSAttributedString.Key("WorkLogBaseFontSize")
     /// 图片附件相对路径（String）
     static let imagePath = NSAttributedString.Key("WorkLogImagePath")
+    /// 列表项的可见标记字符（NSNumber(true)）。带此属性的字符是视图层前缀，
+    /// 序列化回文档时必须跳过，避免把「1.」「•」写进正文 HTML。
+    static let listMarker = NSAttributedString.Key("WorkLogListMarker")
+    /// 列表缩进层级（NSNumber，Int），0 为第一级
+    static let listLevel = NSAttributedString.Key("WorkLogListLevel")
 }
 
 /// RichTextDocument（跨平台模型）↔ NSAttributedString（AppKit）双向转换。
@@ -17,9 +22,12 @@ enum RichTextKeys {
 /// 绝不允许写入 Cocoa HTML Writer 生成的 `file:///Attachment.tiff` 临时引用。
 enum RichTextBridge {
 
-    static let defaultFontSize: CGFloat = 15
+    /// 正文字号 12pt；标题按 18 / 24 / 32 / 40 递进
+    static let defaultFontSize: CGFloat = 12
     static let defaultTextColor = NSColor(srgbRed: 0.28, green: 0.28, blue: 0.29, alpha: 1)
     static let maxImageWidth: CGFloat = 480
+    /// 列表编号 / 圆点的蓝色，与工具栏样式菜单的强调色一致
+    static let listMarkerColor = NSColor(srgbRed: 0.18, green: 0.486, blue: 0.965, alpha: 1)
 
     // MARK: - 字体与颜色
 
@@ -67,15 +75,17 @@ enum RichTextBridge {
 
     // MARK: - 段落样式
 
+    /// 一级 40 / 二级 32 / 三级 24 / 四级 18 / 正文 12。
+    /// H5、H6 仅为兼容旧笔记保留，字号并入四级以下，菜单不再提供入口。
     static func baseFontSize(for style: RichTextBlockStyle) -> CGFloat {
         switch style {
-        case .heading1: return 26
-        case .heading2: return 20
-        case .heading3: return 17
-        case .heading4: return 16
-        case .heading5: return 15.5
-        case .heading6: return 15
-        case .code: return 13
+        case .heading1: return 40
+        case .heading2: return 32
+        case .heading3: return 24
+        case .heading4: return 18
+        case .heading5: return 16
+        case .heading6: return 14
+        case .code: return 12
         default: return defaultFontSize
         }
     }
@@ -89,24 +99,26 @@ enum RichTextBridge {
         }
     }
 
-    static func paragraphStyle(for style: RichTextBlockStyle, textList: NSTextList?) -> NSParagraphStyle {
+    static func paragraphStyle(for style: RichTextBlockStyle,
+                               textList: NSTextList? = nil,
+                               level: Int = 0) -> NSParagraphStyle {
         let paragraph = NSMutableParagraphStyle()
         switch style {
         case .heading1:
-            paragraph.paragraphSpacingBefore = 14
+            paragraph.paragraphSpacingBefore = 18
+            paragraph.paragraphSpacing = 8
+            paragraph.lineSpacing = 3
+        case .heading2:
+            paragraph.paragraphSpacingBefore = 15
             paragraph.paragraphSpacing = 6
             paragraph.lineSpacing = 2
-        case .heading2:
-            paragraph.paragraphSpacingBefore = 12
-            paragraph.paragraphSpacing = 4
-            paragraph.lineSpacing = 2
         case .heading3:
-            paragraph.paragraphSpacingBefore = 10
-            paragraph.paragraphSpacing = 3
-            paragraph.lineSpacing = 1
+            paragraph.paragraphSpacingBefore = 12
+            paragraph.paragraphSpacing = 5
+            paragraph.lineSpacing = 2
         case .heading4, .heading5, .heading6:
-            paragraph.paragraphSpacingBefore = 8
-            paragraph.paragraphSpacing = 2
+            paragraph.paragraphSpacingBefore = 10
+            paragraph.paragraphSpacing = 4
             paragraph.lineSpacing = 1
         case .quote:
             paragraph.headIndent = 20
@@ -119,11 +131,13 @@ enum RichTextBridge {
             paragraph.paragraphSpacingBefore = 2
             paragraph.paragraphSpacing = 2
         case .bulletItem, .orderedItem:
-            paragraph.headIndent = 26
+            // 标记写在段落开头（marker + \t），缩进按层级递增
+            let indent = listIndent(for: level)
+            paragraph.headIndent = indent
             paragraph.firstLineHeadIndent = 0
             paragraph.paragraphSpacingBefore = 1
             paragraph.paragraphSpacing = 1
-            paragraph.tabStops = [NSTextTab(textAlignment: .left, location: 26)]
+            paragraph.tabStops = [NSTextTab(textAlignment: .left, location: indent)]
         case .paragraph:
             paragraph.lineSpacing = 4
             paragraph.paragraphSpacing = 2
@@ -145,6 +159,237 @@ enum RichTextBridge {
         }
     }
 
+    // MARK: - 列表标记（视图层前缀，不写入正文）
+
+    static func listIndent(for level: Int) -> CGFloat {
+        24 + CGFloat(min(max(level, 0), 7)) * 20
+    }
+
+    /// 第一级 1...n；存在上一层级时切到 a...z；再深一级用 i...，之后循环。
+    static func orderedLabel(_ index: Int, level: Int) -> String {
+        let n = max(1, index)
+        switch ((level % 3) + 3) % 3 {
+        case 1:
+            var value = n
+            var letters = ""
+            while value > 0 {
+                value -= 1
+                if let scalar = UnicodeScalar(UInt32(97 + value % 26)) {
+                    letters = String(Character(scalar)) + letters
+                }
+                value /= 26
+            }
+            return letters.isEmpty ? "a" : letters
+        case 2:
+            return lowerRoman(n)
+        default:
+            return "\(n)"
+        }
+    }
+
+    private static func lowerRoman(_ value: Int) -> String {
+        let table: [(Int, String)] = [
+            (1000, "m"), (900, "cm"), (500, "d"), (400, "cd"),
+            (100, "c"), (90, "xc"), (50, "l"), (40, "xl"),
+            (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")
+        ]
+        var remaining = value
+        var result = ""
+        for (amount, symbol) in table {
+            while remaining >= amount {
+                result += symbol
+                remaining -= amount
+            }
+        }
+        return result.isEmpty ? "i" : result
+    }
+
+    /// marker 文本尾部的 \t 用于把正文推到制表位；非列表返回 nil。
+    static func markerString(for style: RichTextBlockStyle, level: Int, index: Int) -> String? {
+        switch style {
+        case .orderedItem: return orderedLabel(index, level: level) + ".\t"
+        case .bulletItem: return "•\t"
+        default: return nil
+        }
+    }
+
+    /// 按 (段落样式, 层级) 序列为每个段落算出应有的 marker。
+    /// 连续的有序项共用计数；中间插入非有序段落时重新从 1 开始。
+    static func markerPlan(for styles: [(style: RichTextBlockStyle, level: Int)]) -> [String?] {
+        var counters = Array(repeating: 0, count: 8)
+        var plan: [String?] = []
+        for entry in styles {
+            let level = min(max(entry.level, 0), 7)
+            switch entry.style {
+            case .orderedItem:
+                if level + 1 < counters.count {
+                    for i in (level + 1)..<counters.count { counters[i] = 0 }
+                }
+                counters[level] += 1
+                plan.append(markerString(for: .orderedItem, level: level, index: counters[level]))
+            case .bulletItem:
+                plan.append(markerString(for: .bulletItem, level: level, index: 0))
+            default:
+                counters = Array(repeating: 0, count: counters.count)
+                plan.append(nil)
+            }
+        }
+        return plan
+    }
+
+    static func markerAttributes(for style: RichTextBlockStyle,
+                                 level: Int,
+                                 baseSize: CGFloat) -> [NSAttributedString.Key: Any] {
+        let size: CGFloat
+        switch style {
+        case .orderedItem: size = baseSize + 1
+        case .bulletItem: size = max(9, baseSize - 2)
+        default: size = baseSize
+        }
+        return [
+            .font: font(size: size, bold: true, italic: false),
+            .foregroundColor: listMarkerColor,
+            .paragraphStyle: paragraphStyle(for: style, level: level),
+            RichTextKeys.listMarker: NSNumber(value: true),
+            RichTextKeys.listLevel: NSNumber(value: level),
+            RichTextKeys.blockStyle: style.rawValue,
+            RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize))
+        ]
+    }
+
+    private static func markerNeedsRefresh(_ storage: NSMutableAttributedString,
+                                           range: NSRange,
+                                           expected: [NSAttributedString.Key: Any]) -> Bool {
+        let current = storage.attributes(at: range.location, effectiveRange: nil)
+        guard let color = current[.foregroundColor] as? NSColor,
+              let wantedColor = expected[.foregroundColor] as? NSColor,
+              color.isEqual(wantedColor) else { return true }
+        guard let font = current[.font] as? NSFont,
+              let wantedFont = expected[.font] as? NSFont,
+              abs(font.pointSize - wantedFont.pointSize) < 0.01 else { return true }
+        guard let level = current[RichTextKeys.listLevel] as? NSNumber,
+              let wantedLevel = expected[RichTextKeys.listLevel] as? NSNumber,
+              level.intValue == wantedLevel.intValue else { return true }
+        guard let style = current[.paragraphStyle] as? NSParagraphStyle,
+              let wantedStyle = expected[.paragraphStyle] as? NSParagraphStyle,
+              abs(style.headIndent - wantedStyle.headIndent) < 0.01 else { return true }
+        return false
+    }
+
+    /// 让每个列表段落开头的可见标记与样式、层级、序号保持一致。
+    /// 标记字符带 `RichTextKeys.listMarker`，`document(from:)` 会跳过，不会写进 HTML。
+    /// - Returns: 是否改动了 textStorage（调用方需自行屏蔽递归的 textDidChange）。
+    @discardableResult
+    static func normalizeListMarkers(in storage: NSMutableAttributedString) -> Bool {
+        let text = storage.string as NSString
+        guard text.length > 0 else { return false }
+
+        struct Segment {
+            let contentRange: NSRange
+            let style: RichTextBlockStyle
+            let level: Int
+            let markerRange: NSRange?
+            let desired: String?
+        }
+
+        var styles: [(style: RichTextBlockStyle, level: Int)] = []
+        var segments: [Segment] = []
+        var location = 0
+
+        while location < text.length {
+            let paragraph = text.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, max(0, text.length - 1))
+            let separator = separatorLength(in: text, range: paragraph)
+            let content = NSRange(location: paragraph.location,
+                                  length: max(0, paragraph.length - separator))
+            let style: RichTextBlockStyle
+            if let raw = storage.attribute(RichTextKeys.blockStyle, at: probe, effectiveRange: nil) as? String,
+               let resolved = RichTextBlockStyle(rawValue: raw) {
+                style = resolved
+            } else if let paragraphStyle = storage.attribute(.paragraphStyle, at: probe, effectiveRange: nil) as? NSParagraphStyle,
+                      let list = paragraphStyle.textLists.first {
+                style = list.markerFormat == .decimal ? .orderedItem : .bulletItem
+            } else {
+                style = .paragraph
+            }
+            let level = (storage.attribute(RichTextKeys.listLevel, at: probe, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
+            let clamped = min(max(level, 0), 7)
+
+            var markerRange: NSRange?
+            if content.length > 0 {
+                var effective = NSRange(location: 0, length: 0)
+                if storage.attribute(RichTextKeys.listMarker, at: content.location,
+                                     effectiveRange: &effective) != nil {
+                    markerRange = NSRange(location: content.location,
+                                          length: min(effective.length, content.length))
+                }
+            }
+
+            styles.append((style, clamped))
+            segments.append(Segment(contentRange: content, style: style, level: clamped,
+                                    markerRange: markerRange, desired: nil))
+
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+
+        let plan = markerPlan(for: styles)
+        var changed = false
+
+        // 逆序改动：前面的插入/删除不会让后续 NSRange 失效
+        for (index, segment) in segments.enumerated().reversed() {
+            let desired = plan[index]
+            let desiredText = desired ?? ""
+            let existingText = segment.markerRange.map { text.substring(with: $0) } ?? ""
+
+            // 空列表项回车后，用户新输入的字可能误继承 listMarker 属性 → 清属性但保留文字
+            let bodyStart = segment.contentRange.location + (segment.markerRange?.length ?? 0)
+            let bodyEnd = NSMaxRange(segment.contentRange)
+            if bodyStart < bodyEnd {
+                let bodyRange = NSRange(location: bodyStart, length: bodyEnd - bodyStart)
+                var stray: [NSRange] = []
+                storage.enumerateAttribute(RichTextKeys.listMarker, in: bodyRange, options: []) { value, range, _ in
+                    if value != nil { stray.append(range) }
+                }
+                if !stray.isEmpty {
+                    storage.beginEditing()
+                    for range in stray { storage.removeAttribute(RichTextKeys.listMarker, range: range) }
+                    storage.endEditing()
+                    changed = true
+                }
+            }
+
+            let attributes = desiredText.isEmpty
+                ? nil
+                : markerAttributes(for: segment.style,
+                                   level: segment.level,
+                                   baseSize: baseFontSize(for: segment.style))
+
+            if existingText != desiredText {
+                let replacement = NSMutableAttributedString(string: desiredText)
+                if let attributes, !desiredText.isEmpty {
+                    replacement.setAttributes(attributes,
+                                              range: NSRange(location: 0, length: replacement.length))
+                }
+                let target = segment.markerRange
+                    ?? NSRange(location: segment.contentRange.location, length: 0)
+                storage.beginEditing()
+                storage.replaceCharacters(in: target, with: replacement)
+                storage.endEditing()
+                changed = true
+            } else if let range = segment.markerRange, let attributes, !desiredText.isEmpty,
+                      markerNeedsRefresh(storage, range: range, expected: attributes) {
+                storage.beginEditing()
+                storage.setAttributes(attributes, range: range)
+                storage.endEditing()
+                changed = true
+            }
+        }
+
+        return changed
+    }
+
     // MARK: - Document → AttributedString
 
     static func attributedString(from document: RichTextDocument,
@@ -152,25 +397,10 @@ enum RichTextBridge {
         let result = NSMutableAttributedString()
         let blocks = document.blocks
 
-        var sharedBullet: NSTextList?
-        var sharedOrdered: NSTextList?
-        var previousStyle: RichTextBlockStyle?
+        let plan = markerPlan(for: blocks.map { (style: $0.style, level: $0.listLevel) })
 
         for (index, block) in blocks.enumerated() {
-            // 连续的同类列表项共享同一个 NSTextList，编号才能连续
-            switch block.style {
-            case .bulletItem:
-                if previousStyle != .bulletItem { sharedBullet = makeTextList(for: .bulletItem) }
-                sharedOrdered = nil
-            case .orderedItem:
-                if previousStyle != .orderedItem { sharedOrdered = makeTextList(for: .orderedItem) }
-                sharedBullet = nil
-            default:
-                sharedBullet = nil
-                sharedOrdered = nil
-            }
-            let list = block.style == .bulletItem ? sharedBullet : (block.style == .orderedItem ? sharedOrdered : nil)
-
+            let level = min(max(block.listLevel, 0), 7)
             let baseSize = baseFontSize(for: block.style)
             let paragraph = NSMutableAttributedString()
             let paragraphAttributes: [NSAttributedString.Key: Any] = [
@@ -178,10 +408,19 @@ enum RichTextBridge {
                     ? monoFont(size: baseSize, bold: false)
                     : font(size: baseSize, bold: isHeading(block.style), italic: false),
                 .foregroundColor: defaultTextColor,
-                .paragraphStyle: paragraphStyle(for: block.style, textList: list),
+                .paragraphStyle: paragraphStyle(for: block.style, level: level),
                 RichTextKeys.blockStyle: block.style.rawValue,
-                RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize))
+                RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize)),
+                RichTextKeys.listLevel: NSNumber(value: level)
             ]
+
+            // 视图层标记前缀：蓝色序号 / 小圆点，序列化回文档时会被跳过
+            if let marker = plan[index] {
+                let prefix = NSMutableAttributedString(string: marker)
+                prefix.setAttributes(markerAttributes(for: block.style, level: level, baseSize: baseSize),
+                                     range: NSRange(location: 0, length: prefix.length))
+                paragraph.append(prefix)
+            }
 
             for run in block.runs {
                 if let image = run.image {
@@ -232,7 +471,6 @@ enum RichTextBridge {
             if index < blocks.count - 1 {
                 result.append(NSAttributedString(string: "\n", attributes: paragraphAttributes))
             }
-            previousStyle = block.style
         }
 
         return result
@@ -297,6 +535,8 @@ enum RichTextBridge {
         let style = resolveStyle(attributed: attributed, location: safeLocation, hasContent: range.length > 0)
         let baseSize = (attributed.attribute(RichTextKeys.baseFontSize, at: safeLocation, effectiveRange: nil) as? NSNumber)
             .map { CGFloat(truncating: $0) } ?? defaultFontSize
+        let listLevel = (attributed.attribute(RichTextKeys.listLevel, at: safeLocation, effectiveRange: nil) as? NSNumber)?
+            .intValue ?? 0
 
         var runs: [RichTextRun] = []
         let nsString = attributed.string as NSString
@@ -304,6 +544,8 @@ enum RichTextBridge {
         if range.length > 0 {
             attributed.enumerateAttributes(in: range, options: []) { attributes, runRange, _ in
                 guard NSMaxRange(runRange) <= attributed.length else { return }
+                // 列表编号 / 圆点只是视图层前缀，绝不写进正文
+                guard attributes[RichTextKeys.listMarker] == nil else { return }
 
                 if let attachment = attributes[.attachment] as? NSTextAttachment {
                     var image = RichTextImage(path: attributes[RichTextKeys.imagePath] as? String ?? "")
@@ -355,7 +597,7 @@ enum RichTextBridge {
             }
         }
 
-        return RichTextBlock(style: style, runs: runs)
+        return RichTextBlock(style: style, runs: runs, listLevel: listLevel)
     }
 
     private static func resolveStyle(attributed: NSAttributedString,
@@ -373,12 +615,13 @@ enum RichTextBridge {
             return list.markerFormat == .decimal ? .orderedItem : .bulletItem
         }
 
-        // 兜底：粗体大字号视为标题
+        // 兜底：粗体大字号视为标题（阈值与 40/32/24/18 的字号阶梯对齐）
         if let font = attributed.attribute(.font, at: location, effectiveRange: nil) as? NSFont, isBold(font) {
             let size = font.pointSize
-            if size >= 23 { return .heading1 }
-            if size >= 18 { return .heading2 }
-            if size >= 16 { return .heading3 }
+            if size >= 34 { return .heading1 }
+            if size >= 27 { return .heading2 }
+            if size >= 21 { return .heading3 }
+            if size >= 17 { return .heading4 }
         }
         return .paragraph
     }
