@@ -116,15 +116,21 @@ final class RichTextNSTextView: NSTextView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if isEditable,
-           let hit = RichTextTableGutterGeometry.hit(at: point, in: self),
-           hit.buttonRect.insetBy(dx: -7, dy: -7).contains(point) {
-            switch hit.kind {
-            case .column: onTableGutterInsertColumn?(hit.index, hit.probe)
-            case .row: onTableGutterInsertRow?(hit.index, hit.probe)
+        if isEditable {
+            // 「增加行 / 增加列」文字离边沿较远，重新算几何可能找不到命中，
+            // 所以点在已经显示的胶囊上时直接复用 hover 结果，整块都是可点区域。
+            let current = tableGutter?.hit
+            let keepsCurrent = current?.buttonRect.contains(point) ?? false
+            let resolved = keepsCurrent ? current : RichTextTableGutterGeometry.hit(at: point, in: self)
+            if let hit = resolved,
+               hit.buttonRect.insetBy(dx: -4, dy: -4).contains(point) {
+                switch hit.kind {
+                case .column: onTableGutterInsertColumn?(hit.index, hit.probe)
+                case .row: onTableGutterInsertRow?(hit.index, hit.probe)
+                }
+                tableGutter?.hit = nil
+                return
             }
-            tableGutter?.hit = nil
-            return
         }
         super.mouseDown(with: event)
     }
