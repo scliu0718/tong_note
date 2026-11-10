@@ -292,15 +292,14 @@ enum RichTextTableGutterGeometry {
         for dot in layout.dots {
             let dx = abs(dot.point.x - point.x)
             let dy = abs(dot.point.y - point.y)
-            // 加列圆在表格上方，关键是横向对准竖线；加行圆在视口左边缘，关键是纵向对准横线。
-            // 用各向异性容差：主轴（列=横向、行=纵向）容差小、次轴容差大，
-            // 这样点在圆附近一定命中，且左上角两个圆不会互相抢。
+            // 只认「+」图标本身：蓝色圆半径 10，命中范围控制在半径 13 左右，
+            // 不放大成软命中区。主轴（列=横向、行=纵向）权重加倍，
+            // 让左上角两个圆不会互相抢（一个 dprimary≈0 时压过另一个）。
             let primary = dot.kind == .column ? dx : dy
             let secondary = dot.kind == .column ? dy : dx
-            let primaryLimit: CGFloat = 16
-            let secondaryLimit: CGFloat = 32
+            let primaryLimit: CGFloat = 13
+            let secondaryLimit: CGFloat = 13
             guard primary <= primaryLimit, secondary <= secondaryLimit else { continue }
-            // 主轴偏差惩罚更重：点在自己的圆上时 primary≈0，一定压过旁边那个圆。
             let score = primary * 2 + secondary
             if score < bestScore {
                 bestScore = score
@@ -316,22 +315,6 @@ enum RichTextTableGutterGeometry {
             cell.characterRange.location <= characterIndex
                 && characterIndex < NSMaxRange(cell.characterRange)
         }
-    }
-
-    /// 左边缘软命中区：用户没精确点在小灰圆上，但在表格左边界附近（含第一列靠左部分）、
-    /// 且纵向对准某条行分隔线时，也算「加行」。命中区从圆左侧 40pt 到右侧 80pt，
-    /// 覆盖左内侧边距 + 第一列靠左区域，这样点在左边沿附近就能加行，不必瞄准小圆。
-    static func rowDotInLeftBand(_ point: NSPoint,
-                                in layout: RichTextTableGutterLayout) -> RichTextTableGutterDot? {
-        var best: RichTextTableGutterDot?
-        var bestDy = CGFloat.greatestFiniteMagnitude
-        for dot in layout.dots where dot.kind == .row {
-            let dy = abs(dot.point.y - point.y)
-            guard dy <= 18 else { continue }
-            guard point.x >= dot.point.x - 40, point.x <= dot.point.x + 80 else { continue }
-            if dy < bestDy { bestDy = dy; best = dot }
-        }
-        return best
     }
 
     // MARK: - 表格几何

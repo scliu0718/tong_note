@@ -218,20 +218,13 @@ final class RichTextNSTextView: NSTextView {
         }
 
         // 2. 小灰圆 / 蓝色加号 → 插入行或列。
-        //    先用几何找最近的圆（命中半径 16pt，覆盖整个蓝色圆），
-        //    找不到时再退回 hover 高亮的那个，避免鼠标略偏离就落空。
+        //    只认「+」图标本身：几何命中必须在蓝色圆（半径 10）范围内，
+        //    不扩大成左侧/角落软命中区。hover 兜底只给极小余量（13pt）应对亚像素抖动。
         var resolved = nearest
         if resolved == nil, let current = tableGutter?.activeDot {
-            // 兜底：hover 已经高亮了这个圆，鼠标略偏离时仍算命中，
-            // 但横向/纵向容差按类型区分，避免把「加行」误判成「加列」。
             let dx = abs(current.point.x - point.x)
             let dy = abs(current.point.y - point.y)
-            let ok = current.kind == .column ? (dx <= 18 && dy <= 34) : (dy <= 18 && dx <= 34)
-            if ok { resolved = current }
-        }
-        if resolved == nil {
-            // 软命中区：点在表格左边界/第一列靠左、纵向对准某条行线时，也算加行。
-            resolved = RichTextTableGutterGeometry.rowDotInLeftBand(point, in: layout)
+            if dx <= 13 && dy <= 13 { resolved = current }
         }
         guard let dot = resolved else {
             var nearestDistance = CGFloat.greatestFiniteMagnitude
