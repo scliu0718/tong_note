@@ -89,9 +89,18 @@ enum RichTextTableEditor {
                           probe: Int,
                           in textView: NSTextView,
                           attachments: AttachmentStore?) {
-        guard var read = tableSlice(in: textView, probe: probe) else { return }
+        RichTextTableDebug.log("insertRow enter index=\(index) probe=\(probe)")
+        guard var read = tableSlice(in: textView, probe: probe) else {
+            RichTextTableDebug.log("insertRow 失败：read=nil（probe 没落在表格里）")
+            return
+        }
         let insertion = min(max(index, 0), read.table.rowCount)
-        guard read.table.insertRow(at: insertion) else { return }
+        let before = read.table.rowCount
+        guard read.table.insertRow(at: insertion) else {
+            RichTextTableDebug.log("insertRow 失败：模型拒绝 rows=\(before)")
+            return
+        }
+        RichTextTableDebug.log("insertRow rows \(before)→\(read.table.rowCount) range=\(read.range)")
         rewrite(read, table: read.table, in: textView,
                 attachments: attachments, row: insertion, column: 0)
     }
@@ -101,9 +110,18 @@ enum RichTextTableEditor {
                              probe: Int,
                              in textView: NSTextView,
                              attachments: AttachmentStore?) {
-        guard var read = tableSlice(in: textView, probe: probe) else { return }
+        RichTextTableDebug.log("insertColumn enter index=\(index) probe=\(probe)")
+        guard var read = tableSlice(in: textView, probe: probe) else {
+            RichTextTableDebug.log("insertColumn 失败：read=nil（probe 没落在表格里）")
+            return
+        }
         let insertion = min(max(index, 0), read.table.columnCount)
-        guard read.table.insertColumn(at: insertion) else { return }
+        let before = read.table.columnCount
+        guard read.table.insertColumn(at: insertion) else {
+            RichTextTableDebug.log("insertColumn 失败：模型拒绝 columns=\(before)")
+            return
+        }
+        RichTextTableDebug.log("insertColumn columns \(before)→\(read.table.columnCount) range=\(read.range)")
         rewrite(read, table: read.table, in: textView,
                 attachments: attachments, row: 0, column: insertion)
     }
@@ -275,8 +293,14 @@ enum RichTextTableEditor {
 
         RichTextTableLayout.allowsStructuralEdits = true
         defer { RichTextTableLayout.allowsStructuralEdits = false }
-        guard textView.shouldChangeText(in: safeRange, replacementString: replacement.string) else { return }
+        let allowed = textView.shouldChangeText(in: safeRange, replacementString: replacement.string)
+        let replacementLength = replacement.length
+        RichTextTableDebug.log("replace range=\(safeRange) replacementLen=\(replacementLength) shouldChange=\(allowed)")
+        guard allowed else { return }
+        let beforeLength = storage.length
         storage.replaceCharacters(in: safeRange, with: replacement)
+        let afterLength = storage.length
+        RichTextTableDebug.log("replace storage \(beforeLength)→\(afterLength)")
 
         if row >= 0, storage.length > 0 {
             RichTextTableLayout.moveCaret(in: textView, near: caretNear, row: row, column: column)

@@ -1,5 +1,29 @@
 import AppKit
 import WorkLogCore
+import Foundation
+
+/// 表格边沿交互的诊断日志。用户手工点一下加行/加列后，
+/// 直接读 `~/Library/Application Support/tonote/table-debug.log` 就能定位链路断在哪。
+enum RichTextTableDebug {
+    static func log(_ message: String) {
+        let line = "[TNTable] \(message)"
+        NSLog("%@", line)
+        let fm = FileManager.default
+        guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let directory = base.appendingPathComponent("tonote", isDirectory: true)
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("table-debug.log")
+        let entry = "\(Date())\t\(line)\n"
+        guard let data = entry.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: file) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: file)
+        }
+    }
+}
 
 /// 表格边沿的一个常驻小灰圆（插入点）。
 /// 顶部横线与列分隔线的交点 → 加列；左侧竖线与行分隔线的交点 → 加行。
@@ -18,13 +42,6 @@ struct RichTextTableGutterDot: Equatable {
     var point: NSPoint
     /// 插入位置的引导线
     var guideRect: NSRect
-
-    var label: String {
-        switch kind {
-        case .column: return "增加列"
-        case .row: return "增加行"
-        }
-    }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.kind == rhs.kind
@@ -172,16 +189,18 @@ final class RichTextTableGutterView: NSView {
 /// 就退回按 `data-widths`（或等宽）均分，保证灰圆仍然点得到。
 enum RichTextTableGutterGeometry {
 
-    /// TextKit 1 的 lineFragmentRect.minX 已经落在列边界线上，
-    /// 之前再减 11pt padding 会让灰圆和引导线整体左偏一个 padding。
-    private static let columnLeadingInset: CGFloat = 0
-    /// 最右侧边界按内容区右缘补回 padding。
-    private static let columnTrailingInset: CGFloat = 11
-    /// 单元格上下 padding 6pt + 边框 1pt
-    private static let verticalChrome: CGFloat = 7
+    // applyChrome 给每个单元格设 minX/maxX padding 10pt + border 1pt = 11pt，
+    // minY/maxY padding 6pt + border 1pt = 7pt。collapsesBorders = true 时相邻两格
+    // 共用一条边框，可见分隔线正好落在两格 chrome 的中点（11/2、7/2）。
+    // 所以从 lineFragmentRect 的内容区边缘取「半个 chrome」才是真正画线的位置：
+    // 灰圆、蓝色加号、引导线都用这个 x/y，才能与可见竖线 / 横线完全重叠。
+    private static let columnLeadingInset: CGFloat = 5.5
+    private static let columnTrailingInset: CGFloat = 5.5
+    private static let verticalChrome: CGFloat = 3.5
     /// 灰圆离表格边沿的距离（上下左右一致）
     private static let dotInset: CGFloat = 12
-    private static let dotHitRadius: CGFloat = 14
+    /// 命中半径略大于蓝色加号圆（半径 10），点在边缘也能插入行列
+    private static let dotHitRadius: CGFloat = 16
 
     private struct CellRect {
         var row: Int
