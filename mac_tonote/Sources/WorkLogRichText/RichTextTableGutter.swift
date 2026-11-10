@@ -236,6 +236,10 @@ enum RichTextTableGutterGeometry {
                                  storage: storage,
                                  layoutManager: layoutManager,
                                  textContainer: textContainer)
+        // 加行圆吸附在「视口左边缘」而不是表格左边界：表格被加到很多列、需要横向
+        // 滚动时，表格左边界会随内容滚出屏幕，固定在表格左外侧的圆就够不到了。
+        // 改成始终在可见区域最左边 14pt 处画 + 点，无论左右怎么滚都能看到、点得到。
+        let stickyRowX = max(textView.visibleRect.minX, 0) + 14
         var dots: [RichTextTableGutterDot] = []
         var cells: [RichTextTableCellFrame] = []
         for frame in frames {
@@ -251,14 +255,14 @@ enum RichTextTableGutterGeometry {
                                       height: frame.bounds.height + dotInset * 2)
                 ))
             }
-            // 编辑区左侧留了专用内边距，灰圆可以放在表格左边界外侧，不再压在线上。
+            // 加行圆：x 固定在视口左边缘（stickyRowX），y 仍跟随各行分隔线滚动。
             for (index, edge) in frame.rowEdges.enumerated() {
                 dots.append(RichTextTableGutterDot(
                     kind: .row,
                     index: index,
                     probe: frame.probe,
-                    point: NSPoint(x: frame.bounds.minX - dotInset, y: edge),
-                    guideRect: NSRect(x: frame.bounds.minX - dotInset,
+                    point: NSPoint(x: stickyRowX, y: edge),
+                    guideRect: NSRect(x: stickyRowX,
                                       y: edge - 0.75,
                                       width: frame.bounds.width + dotInset,
                                       height: 1.5)
@@ -288,11 +292,14 @@ enum RichTextTableGutterGeometry {
         for dot in layout.dots {
             let dx = abs(dot.point.x - point.x)
             let dy = abs(dot.point.y - point.y)
-            // 加列圆在表格上方，关键是横向对准竖线；加行圆在表格左侧，关键是纵向对准横线。
-            // 表格左上角两个圆只隔约 17pt，用各向异性容差才不会把「加行」判成「加列」。
+            // 加列圆在表格上方，关键是横向对准竖线；加行圆在视口左边缘，关键是纵向对准横线。
+            // 用各向异性容差：主轴（列=横向、行=纵向）容差小、次轴容差大，
+            // 这样点在圆附近一定命中，且左上角两个圆不会互相抢。
             let primary = dot.kind == .column ? dx : dy
             let secondary = dot.kind == .column ? dy : dx
-            guard primary <= 12, secondary <= dotHitRadius else { continue }
+            let primaryLimit: CGFloat = 16
+            let secondaryLimit: CGFloat = 32
+            guard primary <= primaryLimit, secondary <= secondaryLimit else { continue }
             // 主轴偏差惩罚更重：点在自己的圆上时 primary≈0，一定压过旁边那个圆。
             let score = primary * 2 + secondary
             if score < bestScore {

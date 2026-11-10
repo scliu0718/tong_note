@@ -112,6 +112,13 @@ final class RichTextNSTextView: NSTextView {
         refreshTableGutter()
     }
 
+    /// 横向滚动时表格左边界会移出屏幕；加行圆吸附在视口左缘，
+    /// 必须随滚动重算几何，否则圆会停在旧位置、点不到。
+    override func reflectScrolledClipView(_ aClipView: NSClipView) {
+        super.reflectScrolledClipView(aClipView)
+        refreshTableGutter()
+    }
+
     /// 重新计算所有灰圆与格子矩形（文本变化、视图变宽、切换笔记后调用）。
     func refreshTableGutter() {
         guard isEditable else {
@@ -214,19 +221,28 @@ final class RichTextNSTextView: NSTextView {
         //    先用几何找最近的圆（命中半径 16pt，覆盖整个蓝色圆），
         //    找不到时再退回 hover 高亮的那个，避免鼠标略偏离就落空。
         var resolved = nearest
-        if resolved == nil, let current = tableGutter?.activeDot,
-           abs(current.point.x - point.x) <= 20, abs(current.point.y - point.y) <= 20 {
-            resolved = current
+        if resolved == nil, let current = tableGutter?.activeDot {
+            // 兜底：hover 已经高亮了这个圆，鼠标略偏离时仍算命中，
+            // 但横向/纵向容差按类型区分，避免把「加行」误判成「加列」。
+            let dx = abs(current.point.x - point.x)
+            let dy = abs(current.point.y - point.y)
+            let ok = current.kind == .column ? (dx <= 18 && dy <= 34) : (dy <= 18 && dx <= 34)
+            if ok { resolved = current }
         }
         guard let dot = resolved else {
             var nearestDistance = CGFloat.greatestFiniteMagnitude
+            var nearestInfo = "none"
             for candidate in layout.dots {
                 let dx = candidate.point.x - point.x
                 let dy = candidate.point.y - point.y
                 let delta = (dx * dx + dy * dy).squareRoot()
-                if delta < nearestDistance { nearestDistance = delta }
+                if delta < nearestDistance {
+                    nearestDistance = delta
+                    nearestInfo = "\(candidate.kind == .column ? "col" : "row")@(\(Int(candidate.point.x)),\(Int(candidate.point.y)))"
+                }
             }
-            RichTextTableDebug.log("miss：没有命中灰圆，最近距离=\(Int(nearestDistance))pt")
+            let vis = visibleRect
+            RichTextTableDebug.log("miss：没命中，最近=\(nearestInfo) 距离=\(Int(nearestDistance))pt 视口左缘=\(Int(vis.minX)) 点击=(\(Int(point.x)),\(Int(point.y)))")
             super.mouseDown(with: event)
             return
         }
