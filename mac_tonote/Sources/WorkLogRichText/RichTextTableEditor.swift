@@ -92,12 +92,14 @@ enum RichTextTableEditor {
         RichTextTableDebug.log("insertRow enter index=\(index) probe=\(probe)")
         guard var read = tableSlice(in: textView, probe: probe) else {
             RichTextTableDebug.log("insertRow 失败：read=nil（probe 没落在表格里）")
+            NSSound.beep()
             return
         }
         let insertion = min(max(index, 0), read.table.rowCount)
         let before = read.table.rowCount
         guard read.table.insertRow(at: insertion) else {
-            RichTextTableDebug.log("insertRow 失败：模型拒绝 rows=\(before)")
+            RichTextTableDebug.log("insertRow 失败：已达行数上限 \(RichTextTable.maxRows)（rows=\(before)）")
+            NSSound.beep()
             return
         }
         RichTextTableDebug.log("insertRow rows \(before)→\(read.table.rowCount) range=\(read.range)")
@@ -113,12 +115,14 @@ enum RichTextTableEditor {
         RichTextTableDebug.log("insertColumn enter index=\(index) probe=\(probe)")
         guard var read = tableSlice(in: textView, probe: probe) else {
             RichTextTableDebug.log("insertColumn 失败：read=nil（probe 没落在表格里）")
+            NSSound.beep()
             return
         }
         let insertion = min(max(index, 0), read.table.columnCount)
         let before = read.table.columnCount
         guard read.table.insertColumn(at: insertion) else {
-            RichTextTableDebug.log("insertColumn 失败：模型拒绝 columns=\(before)")
+            RichTextTableDebug.log("insertColumn 失败：已达列数上限 \(RichTextTable.maxColumns)（columns=\(before)）")
+            NSSound.beep()
             return
         }
         RichTextTableDebug.log("insertColumn columns \(before)→\(read.table.columnCount) range=\(read.range)")

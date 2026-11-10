@@ -189,18 +189,18 @@ final class RichTextTableGutterView: NSView {
 /// 就退回按 `data-widths`（或等宽）均分，保证灰圆仍然点得到。
 enum RichTextTableGutterGeometry {
 
-    // applyChrome 给每个单元格设 minX/maxX padding 10pt + border 1pt = 11pt，
-    // minY/maxY padding 6pt + border 1pt = 7pt。collapsesBorders = true 时相邻两格
-    // 共用一条边框，可见分隔线正好落在两格 chrome 的中点（11/2、7/2）。
-    // 所以从 lineFragmentRect 的内容区边缘取「半个 chrome」才是真正画线的位置：
-    // 灰圆、蓝色加号、引导线都用这个 x/y，才能与可见竖线 / 横线完全重叠。
+    // applyChrome 设 minX/maxX padding 10 + border 1 = 11pt，minY/maxY = 6 + 1 = 7pt。
+    // 列：collapsesBorders 让相邻两格共用边框，可见竖线正好落在两格 chrome 的中点 11/2 = 5.5。
+    // 行：TextKit 对上下边框不做同样合并，可见横线仍落在完整 chrome 处 = 7（截图实测，
+    //     写成 3.5 会让加行圆比横线低 3.5pt，用户反馈「增加行没对齐」）。
+    // 灰圆、蓝色加号、引导线共用同一 edge，才能与可见边线重叠。
     private static let columnLeadingInset: CGFloat = 5.5
     private static let columnTrailingInset: CGFloat = 5.5
-    private static let verticalChrome: CGFloat = 3.5
+    private static let verticalChrome: CGFloat = 7
     /// 灰圆离表格边沿的距离（上下左右一致）
     private static let dotInset: CGFloat = 12
     /// 命中半径略大于蓝色加号圆（半径 10），点在边缘也能插入行列
-    private static let dotHitRadius: CGFloat = 16
+    private static let dotHitRadius: CGFloat = 20
 
     private struct CellRect {
         var row: Int
@@ -284,13 +284,19 @@ enum RichTextTableGutterGeometry {
 
     static func dot(at point: NSPoint, in layout: RichTextTableGutterLayout) -> RichTextTableGutterDot? {
         var best: RichTextTableGutterDot?
-        var distance = dotHitRadius
+        var bestScore = CGFloat.greatestFiniteMagnitude
         for dot in layout.dots {
-            let dx = dot.point.x - point.x
-            let dy = dot.point.y - point.y
-            let delta = (dx * dx + dy * dy).squareRoot()
-            if delta <= distance {
-                distance = delta
+            let dx = abs(dot.point.x - point.x)
+            let dy = abs(dot.point.y - point.y)
+            // 加列圆在表格上方，关键是横向对准竖线；加行圆在表格左侧，关键是纵向对准横线。
+            // 表格左上角两个圆只隔约 17pt，用各向异性容差才不会把「加行」判成「加列」。
+            let primary = dot.kind == .column ? dx : dy
+            let secondary = dot.kind == .column ? dy : dx
+            guard primary <= 12, secondary <= dotHitRadius else { continue }
+            // 主轴偏差惩罚更重：点在自己的圆上时 primary≈0，一定压过旁边那个圆。
+            let score = primary * 2 + secondary
+            if score < bestScore {
+                bestScore = score
                 best = dot
             }
         }

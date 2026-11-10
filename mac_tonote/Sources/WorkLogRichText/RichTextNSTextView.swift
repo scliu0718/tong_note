@@ -219,7 +219,14 @@ final class RichTextNSTextView: NSTextView {
             resolved = current
         }
         guard let dot = resolved else {
-            RichTextTableDebug.log("miss：点击位置没有命中任何灰圆")
+            var nearestDistance = CGFloat.greatestFiniteMagnitude
+            for candidate in layout.dots {
+                let dx = candidate.point.x - point.x
+                let dy = candidate.point.y - point.y
+                let delta = (dx * dx + dy * dy).squareRoot()
+                if delta < nearestDistance { nearestDistance = delta }
+            }
+            RichTextTableDebug.log("miss：没有命中灰圆，最近距离=\(Int(nearestDistance))pt")
             super.mouseDown(with: event)
             return
         }

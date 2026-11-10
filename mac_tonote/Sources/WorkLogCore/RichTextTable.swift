@@ -62,8 +62,10 @@ public struct RichTextTableCell: Equatable, Sendable {
 
 /// 一张矩形表格。列宽权重和为 1；nil 表示各列等宽。
 public struct RichTextTable: Equatable, Sendable {
-    public static let maxRows = 50
-    public static let maxColumns = 8
+    // 只是防御性上限，不能等于工具栏选择器的最大列数：
+    // 用户从选择器建了 8 列表格后再点边沿「加列」，若上限也是 8 就会被静默拒绝。
+    public static let maxRows = 100
+    public static let maxColumns = 16
     /// 默认每列固定 100pt，表格不铺满笔记宽度。
     public static let fixedColumnWidth: CGFloat = 100
 
