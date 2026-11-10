@@ -135,6 +135,38 @@ public final class BaiduPanClient {
         tokenStore.clear()
     }
 
+    /// 列出目录下的直接子项。目录不存在时抛 `notFound`。
+    public func listFiles(directory: String, accessToken: String) async throws -> [BaiduPanListEntry] {
+        var comps = URLComponents(url: URL(string: "https://pan.baidu.com/rest/2.0/xpan/file")!,
+                                  resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            URLQueryItem(name: "method", value: "list"),
+            URLQueryItem(name: "dir", value: directory),
+            URLQueryItem(name: "start", value: "0"),
+            URLQueryItem(name: "limit", value: "200"),
+            URLQueryItem(name: "order", value: "name"),
+            URLQueryItem(name: "access_token", value: accessToken),
+        ]
+        var request = URLRequest(url: comps.url!)
+        request.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
+        let (data, _) = try await session.data(for: request)
+        struct ListResp: Codable {
+            let errno: Int?
+            let list: [BaiduPanListEntry]?
+        }
+        guard let resp = try? JSONDecoder().decode(ListResp.self, from: data) else {
+            throw BaiduPanError.server(message: "列出目录失败\(Self.bodySnippet(data))")
+        }
+        let errno = resp.errno ?? -1
+        if errno == -9 || errno == 31066 {
+            throw BaiduPanError.notFound
+        }
+        guard errno == 0 else {
+            throw BaiduPanError.server(message: "列出目录失败（errno=\(errno)）\(Self.bodySnippet(data))")
+        }
+        return resp.list ?? []
+    }
+
     // MARK: 文件读写（PCS 个人云存储）
 
     /// 确保远端应用目录存在（失败不致命，上传时会按需创建父目录）。

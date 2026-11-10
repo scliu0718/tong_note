@@ -53,8 +53,10 @@ final class RichTextNSTextView: NSTextView {
     /// 回调：表格边沿「+」插入行 / 列。参数为插入位置与该表内的字符位置。
     var onTableGutterInsertRow: ((Int, Int) -> Void)?
     var onTableGutterInsertColumn: ((Int, Int) -> Void)?
+    /// 单元格下拉菜单直接调用命令层（同模块），不必把事件回传到 SwiftUI。
+    weak var tableController: RichTextEditorController?
 
-    /// 只画加号，不接收事件；事件仍由 NSTextView 自己处理。
+    /// 只画灰圆 / 蓝圆 / 下箭头，不接收事件；事件仍由 NSTextView 自己处理。
     private var tableGutter: RichTextTableGutterView?
 
     private static let logTag = "[TNPaste]"
@@ -64,9 +66,18 @@ final class RichTextNSTextView: NSTextView {
         installTableGutter()
     }
 
+    /// 覆盖了指定初始化方法后，原来的 `init(frame:)` 不会自动保留。
+    convenience override init(frame frameRect: NSRect) {
+        self.init(frame: frameRect, textContainer: nil)
+    }
+
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         installTableGutter()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func installTableGutter() {
@@ -74,61 +85,109 @@ final class RichTextNSTextView: NSTextView {
         gutter.autoresizingMask = [.width, .height]
         addSubview(gutter)
         tableGutter = gutter
-        // 整块可见区域跟踪鼠标；加号只由 hover 状态决定是否绘制。
+        // 整块可见区域跟踪鼠标；hover 状态决定哪个灰圆变成蓝色「+」。
         addTrackingArea(NSTrackingArea(rect: .zero,
                                        options: [.mouseMoved, .mouseEnteredAndExited,
                                                  .activeInKeyWindow, .inVisibleRect],
                                        owner: self,
                                        userInfo: nil))
+        // 光标移到别的格子时，下箭头要跟着换位置
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(tableSelectionDidChange(_:)),
+            name: NSTextView.didChangeSelectionNotification,
+            object: self)
     }
 
-    /// 正文变长时 NSTextView 会改 frame，遮罩层必须一起长高，否则下方的表格没有加号。
+    /// 正文变长时 NSTextView 会改 frame，遮罩层必须一起长高，否则下方的表格没有灰圆。
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         tableGutter?.frame = NSRect(origin: .zero, size: newSize)
+        refreshTableGutter()
     }
 
     override func didChangeText() {
         super.didChangeText()
-        // 表格重建后旧几何失效，等下一次鼠标移动重算
-        tableGutter?.hit = nil
+        // 表格重建后旧几何失效，立刻重算
+        refreshTableGutter()
+    }
+
+    /// 重新计算所有灰圆与格子矩形（文本变化、视图变宽、切换笔记后调用）。
+    func refreshTableGutter() {
+        guard isEditable else {
+            tableGutter?.layout = nil
+            tableGutter?.activeDot = nil
+            tableGutter?.activeCell = nil
+            tableGutter?.menuHover = false
+            return
+        }
+        let layout = RichTextTableGutterGeometry.layout(in: self)
+        tableGutter?.layout = layout
+        refreshActiveCell(using: layout)
+    }
+
+    private func refreshActiveCell(using layout: RichTextTableGutterLayout? = nil) {
+        guard isEditable,
+              let current = layout ?? tableGutter?.layout,
+              let storage = textStorage,
+              storage.length > 0 else {
+            tableGutter?.activeCell = nil
+            return
+        }
+        let index = min(selectedRange().location, storage.length - 1)
+        tableGutter?.activeCell = RichTextTableGutterGeometry.cell(at: index, in: current)
+    }
+
+    @objc private func tableSelectionDidChange(_ notification: Notification) {
+        refreshActiveCell()
     }
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        guard isEditable else {
-            tableGutter?.hit = nil
+        guard isEditable, let layout = tableGutter?.layout else {
+            tableGutter?.activeDot = nil
+            tableGutter?.menuHover = false
             return
         }
         let point = convert(event.locationInWindow, from: nil)
-        // 鼠标从边沿挪到「+」上时按钮不能闪掉
-        if let current = tableGutter?.hit,
-           current.buttonRect.insetBy(dx: -7, dy: -7).contains(point) {
-            return
-        }
-        tableGutter?.hit = RichTextTableGutterGeometry.hit(at: point, in: self)
+        let hoveringMenu = tableGutter?.activeCell.map {
+            $0.menuRect.insetBy(dx: -3, dy: -3).contains(point)
+        } ?? false
+        if tableGutter?.menuHover != hoveringMenu { tableGutter?.menuHover = hoveringMenu }
+        let dot = hoveringMenu ? nil : RichTextTableGutterGeometry.dot(at: point, in: layout)
+        if tableGutter?.activeDot != dot { tableGutter?.activeDot = dot }
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        tableGutter?.hit = nil
+        tableGutter?.activeDot = nil
+        tableGutter?.menuHover = false
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if isEditable {
-            // 「增加行 / 增加列」文字离边沿较远，重新算几何可能找不到命中，
-            // 所以点在已经显示的胶囊上时直接复用 hover 结果，整块都是可点区域。
-            let current = tableGutter?.hit
-            let keepsCurrent = current?.buttonRect.contains(point) ?? false
-            let resolved = keepsCurrent ? current : RichTextTableGutterGeometry.hit(at: point, in: self)
-            if let hit = resolved,
-               hit.buttonRect.insetBy(dx: -4, dy: -4).contains(point) {
-                switch hit.kind {
-                case .column: onTableGutterInsertColumn?(hit.index, hit.probe)
-                case .row: onTableGutterInsertRow?(hit.index, hit.probe)
+        if isEditable, let layout = tableGutter?.layout {
+            // 1. 单元格右上角的下箭头 → 单元格菜单
+            if let cell = tableGutter?.activeCell,
+               cell.menuRect.insetBy(dx: -3, dy: -3).contains(point),
+               let controller = tableController,
+               let gutter = tableGutter {
+                let anchor = NSPoint(x: cell.menuRect.minX, y: NSMaxY(cell.menuRect) + 2)
+                RichTextTableCellMenu.show(for: cell,
+                                           at: anchor,
+                                           in: gutter,
+                                           textView: self,
+                                           controller: controller)
+                return
+            }
+            // 2. 小灰圆 / 蓝色加号 → 插入行或列
+            if let dot = RichTextTableGutterGeometry.dot(at: point, in: layout) {
+                switch dot.kind {
+                case .column: onTableGutterInsertColumn?(dot.index, dot.probe)
+                case .row: onTableGutterInsertRow?(dot.index, dot.probe)
                 }
-                tableGutter?.hit = nil
+                tableGutter?.activeDot = nil
+                refreshTableGutter()
                 return
             }
         }

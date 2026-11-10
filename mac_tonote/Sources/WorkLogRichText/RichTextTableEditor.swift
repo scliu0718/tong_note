@@ -108,6 +108,38 @@ enum RichTextTableEditor {
                 attachments: attachments, row: 0, column: insertion)
     }
 
+    /// 单元格菜单：设置某个格子的背景色（nil = 恢复默认白色）。
+    static func setCellBackground(_ hex: String?,
+                                  row: Int,
+                                  column: Int,
+                                  probe: Int,
+                                  in textView: NSTextView,
+                                  attachments: AttachmentStore?) {
+        guard var read = tableSlice(in: textView, probe: probe),
+              read.table.rows.indices.contains(row),
+              read.table.rows[row].indices.contains(column) else { return }
+        let normalized = RichTextCellColor.normalized(hex)
+        guard read.table.rows[row][column].backgroundHex != normalized else { return }
+        read.table.rows[row][column].backgroundHex = normalized
+        rewrite(read, table: read.table, in: textView,
+                attachments: attachments, row: row, column: column)
+    }
+
+    /// 单元格菜单：「匹配笔记宽度」开关（100% / 80%）。
+    static func setTableFullWidth(_ enabled: Bool,
+                                  probe: Int,
+                                  in textView: NSTextView,
+                                  attachments: AttachmentStore?) {
+        guard var read = tableSlice(in: textView, probe: probe) else { return }
+        guard read.table.fullWidth != enabled else { return }
+        read.table.fullWidth = enabled
+        let caret = RichTextTableLayout.caret(in: textView)
+        rewrite(read, table: read.table, in: textView,
+                attachments: attachments,
+                row: caret?.row ?? 0,
+                column: caret?.column ?? 0)
+    }
+
     static func deleteRow(in textView: NSTextView, attachments: AttachmentStore?) {
         guard let caret = RichTextTableLayout.caret(in: textView),
               var read = currentTable(in: textView) else { return }

@@ -246,6 +246,23 @@ public final class RichTextEditorController: ObservableObject {
         refreshCurrentStyle()
     }
 
+    /// 单元格下拉菜单：设置格子背景色。
+    public func setTableCellBackground(_ hex: String?, row: Int, column: Int, probe: Int) {
+        guard let tv = textView else { return }
+        RichTextTableEditor.setCellBackground(hex, row: row, column: column, probe: probe,
+                                             in: tv, attachments: attachments)
+        commitChanges()
+        refreshCurrentStyle()
+    }
+
+    /// 单元格下拉菜单：切换「匹配笔记宽度」。
+    public func setTableFullWidth(_ enabled: Bool, probe: Int) {
+        guard let tv = textView else { return }
+        RichTextTableEditor.setTableFullWidth(enabled, probe: probe, in: tv, attachments: attachments)
+        commitChanges()
+        refreshCurrentStyle()
+    }
+
     /// 光标在表格里时 Tab / Shift+Tab 跳单元格。不在表格里返回 false。
     @discardableResult
     public func handleTabInTable(shift: Bool) -> Bool {

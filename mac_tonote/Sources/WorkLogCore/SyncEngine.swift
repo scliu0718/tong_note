@@ -48,6 +48,7 @@ public final class SyncEngine: ObservableObject {
         lastMessage = nil
         do {
             let token = try await client.validToken()
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
             let remote = try await pull(token: token)
 
             // 对比合并
@@ -59,6 +60,7 @@ public final class SyncEngine: ObservableObject {
             store.setNotes(mergedNotes)
             todos.setTodos(mergedTodos)
             let manifest = try encodeManifest(notes: mergedNotes, todos: mergedTodos)
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
             try await client.uploadData(manifest, to: remoteManifestPath, accessToken: token.accessToken)
 
             let ts = Date()
@@ -79,6 +81,7 @@ public final class SyncEngine: ObservableObject {
         lastMessage = nil
         do {
             let token = try await client.validToken()
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
             let remote = try await pull(token: token)
 
             // 仅对比本篇笔记
@@ -104,6 +107,7 @@ public final class SyncEngine: ObservableObject {
             store.setNotes(mergedNotes)
             todos.setTodos(mergedTodos)
             let manifest = try encodeManifest(notes: mergedNotes, todos: mergedTodos)
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
             try await client.uploadData(manifest, to: remoteManifestPath, accessToken: token.accessToken)
 
             let ts = Date()

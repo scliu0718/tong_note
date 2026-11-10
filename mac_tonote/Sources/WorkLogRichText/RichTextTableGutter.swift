@@ -1,27 +1,21 @@
 import AppKit
 import WorkLogCore
 
-/// 表格边沿的一次「+ 增加行 / 增加列」命中。
-///
-/// - 横向边沿（表格顶边，正好落在列分隔线的 T 形交点）：插入列
-/// - 纵向边沿（表格左边，正好落在行分隔线的 T 形交点）：插入行
-struct RichTextTableGutterHit: Equatable {
+/// 表格边沿的一个常驻小灰圆（插入点）。
+/// 顶部横线与列分隔线的交点 → 加列；左侧竖线与行分隔线的交点 → 加行。
+struct RichTextTableGutterDot: Equatable {
     enum Kind: Equatable {
         case column
         case row
     }
 
     var kind: Kind
-    /// 插入位置：第 index 列 / 第 index 行之前；等于总数时表示在末尾追加。
+    /// 插入位置：第 index 列 / 行之前；等于总数时表示在末尾追加。
     var index: Int
-    /// 目标表格内任意字符位置，点击时用它定位是哪张表（鼠标不一定在正文选区里）。
+    /// 目标表格内任意字符位置，点击时用它定位是哪张表。
     var probe: Int
-    /// 圆形「+」图标的圆心（NSTextView 坐标）
+    /// 灰圆圆心（NSTextView 坐标）
     var point: NSPoint
-    /// 整个胶囊按钮（含「+」与文字）的命中区域
-    var buttonRect: NSRect
-    /// 文字标签区域
-    var textRect: NSRect
     /// 插入位置的引导线
     var guideRect: NSRect
 
@@ -41,23 +35,68 @@ struct RichTextTableGutterHit: Equatable {
     }
 }
 
-/// 只负责画「+ 增加行 / 增加列」胶囊和引导线，不接收鼠标事件。
+/// 一个单元格的可见矩形，用来放右上角的「下箭头」。
+struct RichTextTableCellFrame: Equatable {
+    var row: Int
+    var column: Int
+    var tableProbe: Int
+    var rect: NSRect
+    /// 该格所有段落覆盖的字符范围，用于判断光标是否在格子里。
+    var characterRange: NSRange
+
+    var menuRect: NSRect {
+        NSRect(x: rect.maxX - 19, y: rect.minY + 3, width: 16, height: 16)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.row == rhs.row
+            && lhs.column == rhs.column
+            && lhs.tableProbe == rhs.tableProbe
+            && abs(lhs.rect.minX - rhs.rect.minX) < 0.5
+            && abs(lhs.rect.minY - rhs.rect.minY) < 0.5
+            && lhs.characterRange.location == rhs.characterRange.location
+    }
+}
+
+struct RichTextTableGutterLayout {
+    var dots: [RichTextTableGutterDot]
+    var cells: [RichTextTableCellFrame]
+}
+
+/// 只负责画灰圆 / 蓝圆 / 单元格下箭头，不接收鼠标事件。
 /// `hitTest` 恒返回 nil，事件仍由底下的 NSTextView 处理，不影响选字与光标。
 final class RichTextTableGutterView: NSView {
 
-    var hit: RichTextTableGutterHit? {
+    var layout: RichTextTableGutterLayout? {
+        didSet { needsDisplay = true }
+    }
+    /// 鼠标正指着的小灰圆：它会变成蓝色「+」。
+    var activeDot: RichTextTableGutterDot? {
         didSet {
-            guard hit != oldValue else { return }
+            guard activeDot != oldValue else { return }
             updateLabel()
+            needsDisplay = true
+        }
+    }
+    /// 光标所在格子：右上角显示下箭头。
+    var activeCell: RichTextTableCellFrame? {
+        didSet {
+            guard activeCell != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+    var menuHover = false {
+        didSet {
+            guard menuHover != oldValue else { return }
             needsDisplay = true
         }
     }
 
     private static let accent = NSColor(srgbRed: 0.20, green: 0.48, blue: 0.92, alpha: 1)
-    private static let border = NSColor(srgbRed: 0.86, green: 0.87, blue: 0.89, alpha: 1)
+    private static let dotGray = NSColor(srgbRed: 0.79, green: 0.80, blue: 0.83, alpha: 1)
+    private static let softBorder = NSColor(srgbRed: 0.87, green: 0.88, blue: 0.90, alpha: 1)
 
-    /// NSTextView 是 flipped 视图，遮罩层必须跟着翻转，
-    /// 否则用排版坐标画出来的按钮会上下颠倒。
+    /// NSTextView 是 flipped 视图，遮罩层必须跟着翻转，否则用排版坐标画出来的按钮会上下颠倒。
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
 
@@ -66,7 +105,7 @@ final class RichTextTableGutterView: NSView {
     private let labelField: NSTextField = {
         let field = NSTextField(labelWithString: "")
         field.font = RichTextTableGutterGeometry.labelFont
-        field.textColor = NSColor(srgbRed: 0.17, green: 0.18, blue: 0.21, alpha: 1)
+        field.textColor = NSColor(srgbRed: 0.29, green: 0.31, blue: 0.35, alpha: 1)
         field.isEditable = false
         field.isSelectable = false
         field.isBezeled = false
@@ -87,59 +126,87 @@ final class RichTextTableGutterView: NSView {
     }
 
     private func updateLabel() {
-        guard let hit else {
+        guard let dot = activeDot else {
             labelField.isHidden = true
             return
         }
-        labelField.stringValue = hit.label
-        labelField.frame = hit.textRect
+        labelField.stringValue = dot.label
+        labelField.frame = RichTextTableGutterGeometry.labelRect(for: dot)
         labelField.isHidden = false
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let hit else { return }
+        guard let layout else { return }
 
-        // 引导线：贴在插入位置上，明确「要插在哪两列 / 两行之间」
+        // 1. 所有常驻小灰圆
+        Self.dotGray.setFill()
+        for dot in layout.dots where dot != activeDot {
+            let r: CGFloat = 3.2
+            NSBezierPath(ovalIn: NSRect(x: dot.point.x - r,
+                                        y: dot.point.y - r,
+                                        width: r * 2,
+                                        height: r * 2)).fill()
+        }
+
+        // 2. 当前格右上角的「下箭头」
+        if let cell = activeCell {
+            drawCellMenuButton(cell.menuRect, hovered: menuHover)
+        }
+
+        // 3. hover 命中的灰圆：引导线 → 文字底 → 蓝色圆加号
+        guard let dot = activeDot else { return }
         Self.accent.withAlphaComponent(0.45).setFill()
-        NSBezierPath(rect: hit.guideRect).fill()
+        NSBezierPath(rect: dot.guideRect).fill()
 
-        // 白色圆角胶囊 + 淡边框 + 轻阴影，把文字从表格内容里托起来
-        let pill = NSBezierPath(roundedRect: hit.buttonRect, xRadius: 11, yRadius: 11)
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.12)
-        shadow.shadowBlurRadius = 4
-        shadow.shadowOffset = NSSize(width: 0, height: 1)
-        shadow.set()
-        NSColor.white.setFill()
-        pill.fill()
-        NSGraphicsContext.restoreGraphicsState()
+        let labelRect = RichTextTableGutterGeometry.labelRect(for: dot)
+        let labelBackground = NSBezierPath(roundedRect: labelRect.insetBy(dx: -3, dy: -1),
+                                          xRadius: 5,
+                                          yRadius: 5)
+        NSColor.white.withAlphaComponent(0.94).setFill()
+        labelBackground.fill()
+        Self.softBorder.setStroke()
+        labelBackground.lineWidth = 0.8
+        labelBackground.stroke()
 
-        Self.border.setStroke()
-        pill.lineWidth = 1
-        pill.stroke()
-
-        // 蓝色实心圆 + 白色加号
-        let radius: CGFloat = 8
-        let circle = NSRect(x: hit.point.x - radius,
-                            y: hit.point.y - radius,
+        let radius: CGFloat = 10
+        let circle = NSRect(x: dot.point.x - radius,
+                            y: dot.point.y - radius,
                             width: radius * 2,
                             height: radius * 2)
         Self.accent.setFill()
         NSBezierPath(ovalIn: circle).fill()
 
-        let arm: CGFloat = 3.6
+        let arm: CGFloat = 4.2
         let plus = NSBezierPath()
-        plus.lineWidth = 1.5
+        plus.lineWidth = 1.6
         plus.lineCapStyle = .round
-        plus.move(to: NSPoint(x: hit.point.x - arm, y: hit.point.y))
-        plus.line(to: NSPoint(x: hit.point.x + arm, y: hit.point.y))
-        plus.move(to: NSPoint(x: hit.point.x, y: hit.point.y - arm))
-        plus.line(to: NSPoint(x: hit.point.x, y: hit.point.y + arm))
+        plus.move(to: NSPoint(x: dot.point.x - arm, y: dot.point.y))
+        plus.line(to: NSPoint(x: dot.point.x + arm, y: dot.point.y))
+        plus.move(to: NSPoint(x: dot.point.x, y: dot.point.y - arm))
+        plus.line(to: NSPoint(x: dot.point.x, y: dot.point.y + arm))
         NSColor.white.setStroke()
         plus.stroke()
-
         // 文字由 NSTextField 子视图绘制，避免 flipped 上下文里手写字符串被倒置
+    }
+
+    private func drawCellMenuButton(_ rect: NSRect, hovered: Bool) {
+        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+        (hovered ? Self.accent.withAlphaComponent(0.12) : NSColor.white).setFill()
+        path.fill()
+        Self.softBorder.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+
+        let center = NSPoint(x: rect.midX, y: rect.midY)
+        let chevron = NSBezierPath()
+        chevron.lineWidth = 1.2
+        chevron.lineCapStyle = .round
+        chevron.lineJoinStyle = .round
+        chevron.move(to: NSPoint(x: center.x - 3, y: center.y - 1.5))
+        chevron.line(to: NSPoint(x: center.x, y: center.y + 1.5))
+        chevron.line(to: NSPoint(x: center.x + 3, y: center.y - 1.5))
+        (hovered ? Self.accent : NSColor.secondaryLabelColor).setStroke()
+        chevron.stroke()
     }
 }
 
@@ -147,13 +214,24 @@ final class RichTextTableGutterView: NSView {
 ///
 /// NSTextTableBlock 会把同一行的格子横排，每个单元格段落各有一条 line fragment。
 /// 以它的矩形为准算出边沿；万一某些版本把整行合成一条 fragment，
-/// 就退回按 `data-widths`（或等宽）均分，保证加号仍然点得到。
+/// 就退回按 `data-widths`（或等宽）均分，保证灰圆仍然点得到。
 enum RichTextTableGutterGeometry {
+
+    static let labelFont = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+
+    /// 单元格左右 padding 10pt + 边框 1pt
+    private static let horizontalChrome: CGFloat = 11
+    /// 单元格上下 padding 6pt + 边框 1pt
+    private static let verticalChrome: CGFloat = 7
+    /// 灰圆离表格边沿的距离
+    private static let dotInset: CGFloat = 7
+    private static let dotHitRadius: CGFloat = 14
 
     private struct CellRect {
         var row: Int
         var column: Int
         var rect: NSRect
+        var characterRange: NSRange
     }
 
     private struct Group {
@@ -167,110 +245,97 @@ enum RichTextTableGutterGeometry {
         var bounds: NSRect
         var columnEdges: [CGFloat]
         var rowEdges: [CGFloat]
+        var cells: [CellRect]
     }
 
-    /// 单元格左右 padding 10pt + 边框 1pt
-    private static let horizontalChrome: CGFloat = 11
-    /// 单元格上下 padding 6pt + 边框 1pt
-    private static let verticalChrome: CGFloat = 7
-    static let labelFont = NSFont.systemFont(ofSize: 11, weight: .medium)
-    private static let plusRadius: CGFloat = 8
-    private static let pillHeight: CGFloat = 22
-    private static let leadingInset: CGFloat = 4
-    private static let iconTextGap: CGFloat = 5
-    private static let trailingInset: CGFloat = 9
-    private static let edgeTolerance: CGFloat = 16
-    private static let snapTolerance: CGFloat = 18
-
-    static func hit(at point: NSPoint, in textView: NSTextView) -> RichTextTableGutterHit? {
-        guard textView.isEditable,
-              let textContainer = textView.textContainer,
+    static func layout(in textView: NSTextView) -> RichTextTableGutterLayout {
+        guard let storage = textView.textStorage,
               let layoutManager = textView.layoutManager,
-              let storage = textView.textStorage,
-              storage.length > 0 else { return nil }
+              let textContainer = textView.textContainer,
+              storage.length > 0,
+              layoutManager.numberOfGlyphs > 0 else {
+            return RichTextTableGutterLayout(dots: [], cells: [])
+        }
 
         let frames = tableFrames(in: textView,
                                  storage: storage,
                                  layoutManager: layoutManager,
                                  textContainer: textContainer)
+        var dots: [RichTextTableGutterDot] = []
+        var cells: [RichTextTableCellFrame] = []
         for frame in frames {
-            // 顶部横向边沿：优先，正好是列分隔线与顶边的 T 形交点
-            if abs(point.y - frame.bounds.minY) <= edgeTolerance,
-               point.x >= frame.bounds.minX - edgeTolerance,
-               point.x <= frame.bounds.maxX + edgeTolerance,
-               let edge = nearestEdge(point.x, in: frame.columnEdges, tolerance: snapTolerance) {
-                let center = NSPoint(x: edge.value, y: frame.bounds.minY)
-                let rects = pillRects(plusCenter: center, label: "增加列")
-                return RichTextTableGutterHit(
+            for (index, edge) in frame.columnEdges.enumerated() {
+                dots.append(RichTextTableGutterDot(
                     kind: .column,
-                    index: edge.index,
+                    index: index,
                     probe: frame.probe,
-                    point: center,
-                    buttonRect: rects.pill,
-                    textRect: rects.text,
-                    guideRect: NSRect(x: edge.value - 0.75,
-                                      y: frame.bounds.minY - 6,
+                    point: NSPoint(x: edge, y: frame.bounds.minY - dotInset),
+                    guideRect: NSRect(x: edge - 0.75,
+                                      y: frame.bounds.minY - dotInset,
                                       width: 1.5,
-                                      height: frame.bounds.height + 12)
-                )
+                                      height: frame.bounds.height + dotInset * 2)
+                ))
             }
-
-            // 左侧纵向边沿：行分隔线与左边的 T 形交点
-            if abs(point.x - frame.bounds.minX) <= edgeTolerance,
-               point.y >= frame.bounds.minY - edgeTolerance,
-               point.y <= frame.bounds.maxY + edgeTolerance,
-               let edge = nearestEdge(point.y, in: frame.rowEdges, tolerance: snapTolerance) {
-                // 往表格内侧挪 12pt：左边界紧贴编辑区左边距，「+」图标不能被裁掉。
-                let center = NSPoint(x: frame.bounds.minX + 12, y: edge.value)
-                let rects = pillRects(plusCenter: center, label: "增加行")
-                return RichTextTableGutterHit(
+            // 左边距只有 4pt，灰圆放外面会被 NSScrollView 裁掉，改贴左边界内侧。
+            for (index, edge) in frame.rowEdges.enumerated() {
+                dots.append(RichTextTableGutterDot(
                     kind: .row,
-                    index: edge.index,
+                    index: index,
                     probe: frame.probe,
-                    point: center,
-                    buttonRect: rects.pill,
-                    textRect: rects.text,
-                    guideRect: NSRect(x: frame.bounds.minX - 6,
-                                      y: edge.value - 0.75,
-                                      width: frame.bounds.width + 12,
+                    point: NSPoint(x: frame.bounds.minX + 5, y: edge),
+                    guideRect: NSRect(x: frame.bounds.minX,
+                                      y: edge - 0.75,
+                                      width: frame.bounds.width,
                                       height: 1.5)
-                )
+                ))
+            }
+            for cell in frame.cells {
+                let column = min(max(cell.column, 0), frame.columnEdges.count - 2)
+                let row = min(max(cell.row, 0), frame.rowEdges.count - 2)
+                let left = frame.columnEdges[column]
+                let right = frame.columnEdges[column + 1]
+                let top = frame.rowEdges[row]
+                let bottom = frame.rowEdges[row + 1]
+                let rect = NSRect(x: left, y: top, width: right - left, height: bottom - top)
+                cells.append(RichTextTableCellFrame(row: cell.row,
+                                                    column: cell.column,
+                                                    tableProbe: frame.probe,
+                                                    rect: rect,
+                                                    characterRange: cell.characterRange))
             }
         }
-        return nil
+        return RichTextTableGutterLayout(dots: dots, cells: cells)
     }
 
-    /// 胶囊从左到右：4pt 留白 → 蓝色「+」圆 → 5pt 间距 → 文字 → 9pt 留白。
-    /// 文字宽度按实际字体量，避免「增加行 / 增加列」字数不同导致排版错位。
-    private static func pillRects(plusCenter center: NSPoint,
-                                  label: String) -> (pill: NSRect, text: NSRect) {
-        let measured = (label as NSString).size(withAttributes: [.font: labelFont])
-        let textWidth = ceil(measured.width)
-        let pillX = center.x - leadingInset - plusRadius
-        let pillY = center.y - pillHeight / 2
-        let pillWidth = leadingInset + plusRadius * 2 + iconTextGap + textWidth + trailingInset
-        let pill = NSRect(x: pillX, y: pillY, width: pillWidth, height: pillHeight)
-        let textX = pillX + leadingInset + plusRadius * 2 + iconTextGap
-        let text = NSRect(x: textX,
-                          y: pillY + 2,
-                          width: textWidth + 4,
-                          height: pillHeight - 4)
-        return (pill, text)
-    }
-
-    private static func nearestEdge(_ value: CGFloat,
-                                    in edges: [CGFloat],
-                                    tolerance: CGFloat) -> (index: Int, value: CGFloat)? {
-        var best: (index: Int, value: CGFloat)?
-        var distance = tolerance
-        for (index, edge) in edges.enumerated() {
-            let delta = abs(edge - value)
+    static func dot(at point: NSPoint, in layout: RichTextTableGutterLayout) -> RichTextTableGutterDot? {
+        var best: RichTextTableGutterDot?
+        var distance = dotHitRadius
+        for dot in layout.dots {
+            let dx = dot.point.x - point.x
+            let dy = dot.point.y - point.y
+            let delta = (dx * dx + dy * dy).squareRoot()
             if delta <= distance {
                 distance = delta
-                best = (index, edge)
+                best = dot
             }
         }
         return best
+    }
+
+    static func cell(at characterIndex: Int,
+                     in layout: RichTextTableGutterLayout) -> RichTextTableCellFrame? {
+        layout.cells.first { cell in
+            cell.characterRange.location <= characterIndex
+                && characterIndex < NSMaxRange(cell.characterRange)
+        }
+    }
+
+    static func labelRect(for dot: RichTextTableGutterDot) -> NSRect {
+        let measured = (dot.label as NSString).size(withAttributes: [.font: labelFont])
+        return NSRect(x: dot.point.x + 14,
+                      y: dot.point.y - 9,
+                      width: ceil(measured.width) + 6,
+                      height: 18)
     }
 
     // MARK: - 表格几何
@@ -279,7 +344,6 @@ enum RichTextTableGutterGeometry {
                                     storage: NSTextStorage,
                                     layoutManager: NSLayoutManager,
                                     textContainer: NSTextContainer) -> [Frame] {
-        guard layoutManager.numberOfGlyphs > 0 else { return [] }
         let ns = storage.string as NSString
         let origin = textView.textContainerOrigin
         var groups: [String: Group] = [:]
@@ -300,9 +364,20 @@ enum RichTextTableGutterGeometry {
                                                         RichTextTableLayout.weightsKey,
                                                         at: probe,
                                                         effectiveRange: nil) as? String)
-                    group.cells.append(CellRect(row: cell.startingRow,
-                                                column: cell.startingColumn,
-                                                rect: rect))
+                    if let last = group.cells.indices.last,
+                       group.cells[last].row == cell.startingRow,
+                       group.cells[last].column == cell.startingColumn {
+                        // 同一格里换段：矩形取并集，字符范围向后延
+                        group.cells[last].rect = group.cells[last].rect.union(rect)
+                        let start = group.cells[last].characterRange.location
+                        group.cells[last].characterRange = NSRange(location: start,
+                                                                   length: NSMaxRange(paragraph) - start)
+                    } else {
+                        group.cells.append(CellRect(row: cell.startingRow,
+                                                    column: cell.startingColumn,
+                                                    rect: rect,
+                                                    characterRange: paragraph))
+                    }
                     groups[key] = group
                 }
             }
@@ -362,7 +437,7 @@ enum RichTextTableGutterGeometry {
                                            weightsRaw: group.weightsRaw)
             }
         }
-        // 行边界必须递增；异常排版时退回按行高均分，避免加号叠在一起。
+        // 行边界必须递增；异常排版时退回按行高均分，避免灰圆叠在一起。
         if rowEdges.count > 1,
            zip(rowEdges, rowEdges.dropFirst()).contains(where: { $0.1 - $0.0 < 4 }) {
             let top = rowEdges.first ?? 0
@@ -381,7 +456,8 @@ enum RichTextTableGutterGeometry {
         return Frame(probe: group.probe,
                      bounds: bounds,
                      columnEdges: columnEdges,
-                     rowEdges: rowEdges)
+                     rowEdges: rowEdges,
+                     cells: group.cells)
     }
 
     private static func splitColumns(left: CGFloat,

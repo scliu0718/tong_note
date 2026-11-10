@@ -16,6 +16,8 @@ final class BaiduPanAuthService: ObservableObject {
     @Published private(set) var state: State = .signedOut
     @Published private(set) var userInfo: BaiduPanUserInfo?
     @Published private(set) var quota: BaiduPanQuota?
+    /// 被其他设备下线后，登录页上的说明。下一次发起登录时清掉。
+    @Published private(set) var signedOutNotice: String?
 
     /// 浏览器登录流程中用于校验回调的 state（防 CSRF）
     private var pendingBrowserState: String?
@@ -31,6 +33,10 @@ final class BaiduPanAuthService: ObservableObject {
     var errorMessage: String? {
         if case .failed(let msg) = state { return msg }
         return nil
+    }
+
+    var bannerMessage: String? {
+        errorMessage ?? signedOutNotice
     }
 
     var isAuthorizing: Bool {
@@ -51,13 +57,13 @@ final class BaiduPanAuthService: ObservableObject {
             state = .failed("尚未配置 AppKey / AppSecret，请先在 BaiduPanConfig.swift 中填写")
             return
         }
+        signedOutNotice = nil
         state = .authorizing
         Task {
             do {
                 let code = try await BaiduPanAuthSession.authorize()
                 _ = try await client.exchangeCode(code)
-                await loadAccount()
-                state = .signedIn
+                await finishSignIn()
             } catch {
                 state = .failed(error.localizedDescription)
             }
@@ -72,6 +78,7 @@ final class BaiduPanAuthService: ObservableObject {
             state = .failed("尚未配置 AppKey / AppSecret，请先在 baidupan.secret.json 中填写")
             return
         }
+        signedOutNotice = nil
         let nonce = UUID().uuidString
         pendingBrowserState = nonce
         state = .authorizing
@@ -94,15 +101,38 @@ final class BaiduPanAuthService: ObservableObject {
             return
         }
         pendingBrowserState = nil
+        signedOutNotice = nil
         state = .authorizing
         Task {
             do {
                 _ = try await client.exchangeCode(code)
-                await loadAccount()
-                state = .signedIn
+                await finishSignIn()
             } catch {
                 state = .failed(error.localizedDescription)
             }
+        }
+    }
+
+    /// 令牌已经落盘。登记失败不取消登录，下次打开或同步时会再写一次设备文件。
+    private func finishSignIn() async {
+        do {
+            try await DeviceRegistry.shared.beginLogin()
+        } catch {
+            // 设备文件没写上时仍保持登录，本地可以继续记笔记
+        }
+        await loadAccount()
+        state = .signedIn
+    }
+
+    /// 已有令牌时核对云端设备文件。读不到文件就保持登录；确认被下线才退出。
+    func enforceDeviceSession() async {
+        guard isSignedIn else { return }
+        do {
+            try await DeviceRegistry.shared.ensureNotKicked()
+        } catch DeviceSessionError.kicked {
+            signOutFromKick()
+        } catch {
+            // 离线或网盘暂时不可用：不退出
         }
     }
 
@@ -120,11 +150,17 @@ final class BaiduPanAuthService: ObservableObject {
         }
     }
 
-    /// 退出登录，清除本地令牌。
+    /// 退出登录，清除本地令牌。设备编号保留，下次登录仍是同一台设备。
     func signOut() {
         client.logout()
         state = .signedOut
         userInfo = nil
         quota = nil
+    }
+
+    /// 其他设备把本机标成下线。
+    func signOutFromKick() {
+        signOut()
+        signedOutNotice = DeviceSessionError.kicked.localizedDescription
     }
 }

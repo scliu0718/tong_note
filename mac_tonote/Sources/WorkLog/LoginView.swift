@@ -125,7 +125,7 @@ struct LoginView: View {
             .buttonStyle(.plain)
             .disabled(auth.isAuthorizing)
 
-            if let msg = auth.errorMessage {
+            if let msg = auth.bannerMessage {
                 Text(msg)
                     .font(.system(size: 12))
                     .foregroundColor(Theme.red)

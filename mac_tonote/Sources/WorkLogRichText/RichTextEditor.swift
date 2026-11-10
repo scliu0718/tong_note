@@ -162,6 +162,7 @@ public struct RichTextEditor: NSViewRepresentable {
 
         /// 绑定粘贴回调（始终指向当前笔记）
         func installPasteHandler(on tv: RichTextNSTextView) {
+            tv.tableController = parent.controller
             tv.onPasteImage = { [weak tv] url in
                 guard tv != nil else {
                     NSLog("%@", "[TNPaste] onPasteImage 触发但 textView 已释放")
@@ -223,6 +224,10 @@ public struct RichTextEditor: NSViewRepresentable {
             // 载入会清空选区，浮窗也随之收起
             parent.onSelectionChange?(nil)
             parent.controller.refreshCurrentStyle()
+            // 编程式 setAttributedString 不触发 didChangeText，手动重算表格灰圆与格子矩形
+            if let rich = tv as? RichTextNSTextView {
+                rich.refreshTableGutter()
+            }
         }
 
         public func textDidChange(_ notification: Notification) {

@@ -7,6 +7,11 @@ struct SyncView: View {
     @ObservedObject var store: NoteStore
     @ObservedObject var todos: TodoStore
     @Environment(\.dismiss) private var dismiss
+    @State private var devices: [DeviceRecord] = []
+    @State private var devicesError: String?
+    @State private var isLoadingDevices = false
+    @State private var pendingKick: DeviceRecord?
+    @State private var kickingID: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -14,7 +19,23 @@ struct SyncView: View {
             sidePanel
         }
         .background(Theme.windowBg)
-        .task { await auth.loadAccount() }
+        .task {
+            await auth.loadAccount()
+            await reloadDevices()
+        }
+        .alert("让这台设备下线？", isPresented: Binding(
+            get: { pendingKick != nil },
+            set: { if !$0 { pendingKick = nil } }
+        )) {
+            Button("下线", role: .destructive) {
+                guard let device = pendingKick else { return }
+                pendingKick = nil
+                Task { await kick(device) }
+            }
+            Button("取消", role: .cancel) { pendingKick = nil }
+        } message: {
+            Text("「\(pendingKick?.deviceName ?? "该设备")」下次打开或同步时会退出登录。已经写在那台设备上、还没同步的笔记会留在本地。")
+        }
     }
 
     // MARK: 主区域
@@ -33,6 +54,7 @@ struct SyncView: View {
                 syncStatusCard
                 cloudTreeCard
                 accountCard
+                devicesCard
             }
             .padding(28)
         }
@@ -203,6 +225,104 @@ struct SyncView: View {
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: 0xF3D2D3), lineWidth: 1))
                 }
             }
+        }
+    }
+
+    private var devicesCard: some View {
+        card("登录设备") {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("下线只改对方设备文件里的标记，不要求对方一直在线。对方下次打开或同步时退出登录，离线写下的笔记仍留在那台设备上。")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 8)
+
+                if isLoadingDevices && devices.isEmpty {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("正在读取设备列表…")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textTertiary)
+                    }
+                    .padding(.vertical, 10)
+                }
+
+                ForEach(devices) { device in
+                    deviceRow(device)
+                }
+
+                if let devicesError {
+                    Text(devicesError)
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.red)
+                        .padding(.top, 8)
+                }
+
+                HStack {
+                    Spacer()
+                    Button(action: { Task { await reloadDevices() } }) {
+                        Text(isLoadingDevices ? "刷新中…" : "刷新")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoadingDevices)
+                    .padding(.top, 8)
+                }
+            }
+        }
+    }
+
+    private func deviceRow(_ device: DeviceRecord) -> some View {
+        let mine = device.deviceId == DeviceRegistry.shared.currentDeviceId
+        return row(device.deviceName.isEmpty ? "未命名设备" : device.deviceName,
+                   subtitle: mine ? "本机" : nil) {
+            if mine {
+                Text("本机")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.accent)
+            } else if device.kicked {
+                Text("已下线")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.textQuaternary)
+            } else {
+                Button(action: { pendingKick = device }) {
+                    Text(kickingID == device.deviceId ? "正在下线…" : "下线")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Theme.red)
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: 0xF3D2D3), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(kickingID != nil)
+            }
+        }
+    }
+
+    private func reloadDevices() async {
+        isLoadingDevices = true
+        defer { isLoadingDevices = false }
+        do {
+            var records = try await DeviceRegistry.shared.listDevices()
+            let local = DeviceRegistry.shared.localSnapshot()
+            if !records.contains(where: { $0.deviceId == local.deviceId }) {
+                records.insert(local, at: 0)
+            }
+            devices = records
+            devicesError = nil
+        } catch {
+            devicesError = error.localizedDescription
+        }
+    }
+
+    private func kick(_ device: DeviceRecord) async {
+        kickingID = device.deviceId
+        defer { kickingID = nil }
+        do {
+            try await DeviceRegistry.shared.kick(deviceId: device.deviceId)
+            await reloadDevices()
+        } catch {
+            devicesError = error.localizedDescription
         }
     }
 

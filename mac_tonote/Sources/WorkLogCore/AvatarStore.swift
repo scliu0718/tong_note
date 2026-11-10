@@ -87,6 +87,7 @@ public final class AvatarStore: ObservableObject {
         await MainActor.run { cloudState = .uploading }
         do {
             let token = try await client.validToken()
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
             let payload = try JSONSerialization.data(withJSONObject: ["id": id])
             try await client.uploadData(payload, to: Self.remotePath, accessToken: token.accessToken)
             await MainActor.run { cloudState = .synced }

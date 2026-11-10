@@ -18,6 +18,8 @@ enum RichTextTableLayout {
 
     static let idKey = NSAttributedString.Key("WorkLogTableID")
     static let weightsKey = NSAttributedString.Key("WorkLogTableColumnWeights")
+    static let cellBackgroundKey = NSAttributedString.Key("WorkLogTableCellBackground")
+    static let fullWidthKey = NSAttributedString.Key("WorkLogTableFullWidth")
     /// 插入表格、增删行列会改掉单元格之间的换行，这些编辑需要绕过「不许拆开表格」的检查。
     static var allowsStructuralEdits = false
 
@@ -39,18 +41,21 @@ enum RichTextTableLayout {
         textTable.numberOfColumns = table.columnCount
         textTable.collapsesBorders = true
         textTable.hidesEmptyCells = false
-        textTable.setContentWidth(100, type: .percentageValueType)
+        // 「匹配笔记宽度」关闭时缩到 80%，右侧留一段空白方便继续写正文。
+        textTable.setContentWidth(table.fullWidth ? 100 : 80, type: .percentageValueType)
 
         let tableID = UUID().uuidString
         let weights = resolvedWeights(for: table)
         let weightsAttribute = table.encodedWeights
+        let fullWidthValue = table.fullWidth ? "1" : "0"
 
         for (rowIndex, row) in table.rows.enumerated() {
             for (columnIndex, cell) in row.enumerated() {
                 let cellBlock = makeCellBlock(table: textTable,
                                               row: rowIndex,
                                               column: columnIndex,
-                                              weight: weights[columnIndex])
+                                              weight: weights[columnIndex],
+                                              backgroundHex: cell.backgroundHex)
                 let paragraphStyle = cellParagraphStyle(block: cellBlock, alignment: cell.alignment)
                 let cellBlocks = cell.blocks.isEmpty ? [RichTextBlock()] : cell.blocks
                 let plan = RichTextBridge.markerPlan(for: cellBlocks.map { ($0.style, $0.listLevel) })
@@ -66,8 +71,12 @@ enum RichTextTableLayout {
                     guard full.length > 0 else { continue }
                     piece.addAttribute(.paragraphStyle, value: paragraphStyle, range: full)
                     piece.addAttribute(idKey, value: tableID, range: full)
+                    piece.addAttribute(fullWidthKey, value: fullWidthValue, range: full)
                     if let weightsAttribute {
                         piece.addAttribute(weightsKey, value: weightsAttribute, range: full)
+                    }
+                    if let background = cell.backgroundHex {
+                        piece.addAttribute(cellBackgroundKey, value: background, range: full)
                     }
                     result.append(piece)
                 }
@@ -98,9 +107,12 @@ enum RichTextTableLayout {
         let origin = tableOrigin(in: attributed, containing: location)
         guard let key = tableKey(in: attributed, at: origin) else { return nil }
 
-        var entries: [(row: Int, column: Int, block: RichTextBlock, alignment: RichTextCellAlignment)] = []
+        var entries: [(row: Int, column: Int, block: RichTextBlock,
+                       alignment: RichTextCellAlignment, backgroundHex: String?)] = []
         var weightsRaw: String?
         var columnCountHint = 0
+        var fullWidth = true
+        var fullWidthRead = false
         var loc = origin
         while loc < ns.length {
             let paragraph = ns.paragraphRange(for: NSRange(location: loc, length: 0))
@@ -110,16 +122,26 @@ enum RichTextTableLayout {
             if weightsRaw == nil {
                 weightsRaw = attributed.attribute(weightsKey, at: probe, effectiveRange: nil) as? String
             }
+            if !fullWidthRead {
+                if let raw = attributed.attribute(fullWidthKey, at: probe, effectiveRange: nil) as? String {
+                    fullWidth = raw != "0"
+                    fullWidthRead = true
+                }
+            }
             columnCountHint = max(columnCountHint, cell.table.numberOfColumns)
             let separator = RichTextBridge.separatorLength(in: ns, range: paragraph)
             let content = NSRange(location: paragraph.location, length: max(0, paragraph.length - separator))
             let paragraphStyle = attributed.attribute(.paragraphStyle,
                                                       at: probe,
                                                       effectiveRange: nil) as? NSParagraphStyle
+            let rawBackground = attributed.attribute(cellBackgroundKey,
+                                                     at: probe,
+                                                     effectiveRange: nil) as? String
             entries.append((cell.startingRow,
                             cell.startingColumn,
                             RichTextBridge.block(from: attributed, range: content),
-                            cellAlignment(from: paragraphStyle)))
+                            cellAlignment(from: paragraphStyle),
+                            RichTextCellColor.normalized(rawBackground)))
             let next = NSMaxRange(paragraph)
             if next <= loc { break }
             loc = next
@@ -134,8 +156,9 @@ enum RichTextTableLayout {
         )
         for entry in entries where entry.row >= 0 && entry.row < rowCount && entry.column >= 0 && entry.column < columnCount {
             if rows[entry.row][entry.column].blocks.isEmpty {
-                // 同一格子里多个段落共用一种对齐，取第一段为准。
+                // 同一格子里多个段落共用一种对齐与背景色，取第一段为准。
                 rows[entry.row][entry.column].alignment = entry.alignment
+                rows[entry.row][entry.column].backgroundHex = entry.backgroundHex
             }
             rows[entry.row][entry.column].blocks.append(sanitized(entry.block))
         }
@@ -145,7 +168,8 @@ enum RichTextTableLayout {
             }
         }
         let table = RichTextTable(rows: rows,
-                                  columnWeights: RichTextTable.weights(from: weightsRaw, columnCount: columnCount))
+                                  columnWeights: RichTextTable.weights(from: weightsRaw, columnCount: columnCount),
+                                  fullWidth: fullWidth)
         return ReadResult(table: table,
                           range: NSRange(location: origin, length: loc - origin),
                           next: loc)
@@ -284,7 +308,8 @@ enum RichTextTableLayout {
             if let color = attributes[.foregroundColor] { typing[.foregroundColor] = color }
         }
         if let style = attributes[.paragraphStyle] { typing[.paragraphStyle] = style }
-        for key in [idKey, weightsKey, RichTextKeys.blockStyle, RichTextKeys.baseFontSize, RichTextKeys.listLevel] {
+        for key in [idKey, weightsKey, cellBackgroundKey, fullWidthKey,
+                    RichTextKeys.blockStyle, RichTextKeys.baseFontSize, RichTextKeys.listLevel] {
             if let value = attributes[key] { typing[key] = value }
         }
         typing.removeValue(forKey: RichTextKeys.listMarker)
@@ -356,6 +381,12 @@ enum RichTextTableLayout {
                 if let weights = fixed.weights {
                     storage.addAttribute(weightsKey, value: weights, range: range)
                 }
+                if let background = fixed.background {
+                    storage.addAttribute(cellBackgroundKey, value: background, range: range)
+                }
+                if let fullWidth = fixed.fullWidth {
+                    storage.addAttribute(fullWidthKey, value: fullWidth, range: range)
+                }
                 storage.endEditing()
                 changed = true
             }
@@ -378,6 +409,8 @@ enum RichTextTableLayout {
         var key: String
         var paragraphStyle: NSParagraphStyle
         var weights: String?
+        var background: String?
+        var fullWidth: String?
     }
 
     private static func sanitized(_ block: RichTextBlock) -> RichTextBlock {
@@ -394,17 +427,21 @@ enum RichTextTableLayout {
         return Array(repeating: share, count: table.columnCount)
     }
 
-    private static func makeCellBlock(table: NSTextTable, row: Int, column: Int, weight: Double) -> NSTextTableBlock {
+    static func makeCellBlock(table: NSTextTable,
+                              row: Int,
+                              column: Int,
+                              weight: Double,
+                              backgroundHex: String? = nil) -> NSTextTableBlock {
         let block = NSTextTableBlock(table: table,
                                      startingRow: row,
                                      rowSpan: 1,
                                      startingColumn: column,
                                      columnSpan: 1)
-        applyChrome(block, weight: weight)
+        applyChrome(block, weight: weight, backgroundHex: backgroundHex)
         return block
     }
 
-    private static func applyChrome(_ block: NSTextTableBlock, weight: Double) {
+    static func applyChrome(_ block: NSTextTableBlock, weight: Double, backgroundHex: String? = nil) {
         block.setContentWidth(CGFloat(weight * 100), type: .percentageValueType)
         block.setWidth(10, type: .absoluteValueType, for: .padding, edge: .minX)
         block.setWidth(10, type: .absoluteValueType, for: .padding, edge: .maxX)
@@ -413,7 +450,8 @@ enum RichTextTableLayout {
         block.setWidth(1, type: .absoluteValueType, for: .border)
         block.setWidth(0, type: .absoluteValueType, for: .margin)
         block.setBorderColor(borderColor)
-        block.backgroundColor = .white
+        let fill = backgroundHex.flatMap { RichTextBridge.color(fromHex: $0) } ?? NSColor.white
+        block.backgroundColor = fill
         block.verticalAlignment = .topAlignment
     }
 
@@ -523,6 +561,8 @@ enum RichTextTableLayout {
         var foundBlock: NSTextTableBlock?
         var foundStyle: NSParagraphStyle?
         var foundWeights: String?
+        var foundBackground: String?
+        var foundFullWidth: String?
         var inconsistent = false
 
         storage.enumerateAttributes(in: paragraph, options: []) { attributes, _, _ in
@@ -534,6 +574,12 @@ enum RichTextTableLayout {
             }
             if foundWeights == nil, let weights = attributes[weightsKey] as? String {
                 foundWeights = weights
+            }
+            if foundBackground == nil, let background = attributes[cellBackgroundKey] as? String {
+                foundBackground = background
+            }
+            if foundFullWidth == nil, let fullWidth = attributes[fullWidthKey] as? String {
+                foundFullWidth = fullWidth
             }
             guard let style = attributes[.paragraphStyle] as? NSParagraphStyle else {
                 inconsistent = true
@@ -566,9 +612,14 @@ enum RichTextTableLayout {
         let block = makeCellBlock(table: table,
                                   row: foundBlock.startingRow,
                                   column: foundBlock.startingColumn,
-                                  weight: weight)
+                                  weight: weight,
+                                  backgroundHex: foundBackground)
         let style = (foundStyle?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
         style.textBlocks = [block]
-        return FixedParagraph(key: key, paragraphStyle: style, weights: foundWeights)
+        return FixedParagraph(key: key,
+                              paragraphStyle: style,
+                              weights: foundWeights,
+                              background: foundBackground,
+                              fullWidth: foundFullWidth)
     }
 }

@@ -26,7 +26,7 @@ struct TableInsertButton: View {
         .buttonStyle(.plain)
         .fixedSize()
         .help("插入表格。表格内 Tab 跳到下一格，最后一格再按 Tab 会新增一行；"
-              + "鼠标移到表格顶边会出现「+ 增加列」，移到左边会出现「+ 增加行」")
+              + "顶边 / 左边的小灰圆可增加列、增加行；格子右上角下箭头可设背景色、对齐或删除行列")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             popover
         }

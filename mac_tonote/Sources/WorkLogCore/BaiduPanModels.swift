@@ -51,6 +51,19 @@ public struct BaiduPanUserInfo: Codable {
     }
 }
 
+/// 网盘目录列表中的一项（xpan file list）。
+public struct BaiduPanListEntry: Codable, Equatable, Sendable {
+    public let path: String?
+    public let serverFilename: String?
+    public let isdir: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case serverFilename = "server_filename"
+        case isdir
+    }
+}
+
 /// 网盘配额（xpan quota）。
 public struct BaiduPanQuota: Codable {
     public let total: Int64?
