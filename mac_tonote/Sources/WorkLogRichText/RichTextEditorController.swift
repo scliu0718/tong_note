@@ -249,8 +249,8 @@ public final class RichTextEditorController: ObservableObject {
     /// 单元格下拉菜单：设置格子背景色。
     public func setTableCellBackground(_ hex: String?, row: Int, column: Int, probe: Int) {
         guard let tv = textView else { return }
-        RichTextTableEditor.setCellBackground(hex, row: row, column: column, probe: probe,
-                                             in: tv, attachments: attachments)
+        RichTextTableEditor.setCellBackground(hex, row: row, column: column,
+                                             probe: probe, in: tv)
         commitChanges()
         refreshCurrentStyle()
     }
@@ -258,7 +258,7 @@ public final class RichTextEditorController: ObservableObject {
     /// 单元格下拉菜单：切换「匹配笔记宽度」。
     public func setTableFullWidth(_ enabled: Bool, probe: Int) {
         guard let tv = textView else { return }
-        RichTextTableEditor.setTableFullWidth(enabled, probe: probe, in: tv, attachments: attachments)
+        RichTextTableEditor.setTableFullWidth(enabled, probe: probe, in: tv)
         commitChanges()
         refreshCurrentStyle()
     }

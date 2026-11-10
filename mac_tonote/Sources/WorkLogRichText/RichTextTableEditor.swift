@@ -109,35 +109,41 @@ enum RichTextTableEditor {
     }
 
     /// 单元格菜单：设置某个格子的背景色（nil = 恢复默认白色）。
+    /// 只就地改目标格子的 block 背景与自定义属性，绝不重建整张表，
+    /// 所以用户调过的列宽、正在输入的文字、undo 栈与光标都保持不变。
     static func setCellBackground(_ hex: String?,
                                   row: Int,
                                   column: Int,
                                   probe: Int,
-                                  in textView: NSTextView,
-                                  attachments: AttachmentStore?) {
-        guard var read = tableSlice(in: textView, probe: probe),
+                                  in textView: NSTextView) {
+        guard let storage = textView.textStorage, storage.length > 0 else { return }
+        let safe = min(max(probe, 0), storage.length - 1)
+        guard let read = RichTextTableLayout.read(from: storage, at: safe),
               read.table.rows.indices.contains(row),
               read.table.rows[row].indices.contains(column) else { return }
         let normalized = RichTextCellColor.normalized(hex)
         guard read.table.rows[row][column].backgroundHex != normalized else { return }
-        read.table.rows[row][column].backgroundHex = normalized
-        rewrite(read, table: read.table, in: textView,
-                attachments: attachments, row: row, column: column)
+        let resolvedColor = normalized.flatMap { RichTextBridge.color(fromHex: $0) }
+        let fill = resolvedColor ?? NSColor.white
+        RichTextTableLayout.setCellBackground(fill,
+                                              hex: normalized,
+                                              row: row,
+                                              column: column,
+                                              tableRange: read.range,
+                                              in: storage)
     }
 
-    /// 单元格菜单：「匹配笔记宽度」开关（100% / 80%）。
+    /// 单元格菜单：「匹配笔记宽度」开关。同样只改宽度值，不重建表格。
     static func setTableFullWidth(_ enabled: Bool,
                                   probe: Int,
-                                  in textView: NSTextView,
-                                  attachments: AttachmentStore?) {
-        guard var read = tableSlice(in: textView, probe: probe) else { return }
+                                  in textView: NSTextView) {
+        guard let storage = textView.textStorage, storage.length > 0 else { return }
+        let safe = min(max(probe, 0), storage.length - 1)
+        guard let read = RichTextTableLayout.read(from: storage, at: safe) else { return }
         guard read.table.fullWidth != enabled else { return }
-        read.table.fullWidth = enabled
-        let caret = RichTextTableLayout.caret(in: textView)
-        rewrite(read, table: read.table, in: textView,
-                attachments: attachments,
-                row: caret?.row ?? 0,
-                column: caret?.column ?? 0)
+        RichTextTableLayout.setWidthMode(fullWidth: enabled,
+                                         tableRange: read.range,
+                                         in: storage)
     }
 
     static func deleteRow(in textView: NSTextView, attachments: AttachmentStore?) {

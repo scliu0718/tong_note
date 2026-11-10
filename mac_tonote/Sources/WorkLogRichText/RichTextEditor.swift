@@ -61,7 +61,9 @@ public struct RichTextEditor: NSViewRepresentable {
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticTextReplacementEnabled = false
         tv.isAutomaticSpellingCorrectionEnabled = false
-        tv.textContainerInset = NSSize(width: 4, height: 14)
+        // 左右各留 24pt：表格左边界外侧要放「增加行」的小灰圆，放 4pt 会被裁掉；
+        // 上方同样留 24pt，给顶部「增加列」的灰圆和蓝色圆留位置。
+        tv.textContainerInset = NSSize(width: 24, height: 24)
         tv.backgroundColor = .white
         tv.drawsBackground = true
         tv.isVerticallyResizable = true

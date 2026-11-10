@@ -180,8 +180,18 @@ final class RichTextNSTextView: NSTextView {
                                            controller: controller)
                 return
             }
-            // 2. 小灰圆 / 蓝色加号 → 插入行或列
-            if let dot = RichTextTableGutterGeometry.dot(at: point, in: layout) {
+            // 2. 小灰圆 / 蓝色加号 → 插入行或列。
+            //    优先复用 hover 已高亮的那个：点在蓝色圆图标范围内一定生效，
+            //    否则只靠「重新找最近灰圆」会在蓝圆边缘、或鼠标略偏离时落空。
+            let current = tableGutter?.activeDot
+            let withinCurrent = current.map { dot in
+                NSRect(x: dot.point.x - 12,
+                       y: dot.point.y - 12,
+                       width: 24,
+                       height: 24).contains(point)
+            } ?? false
+            let resolved = withinCurrent ? current : RichTextTableGutterGeometry.dot(at: point, in: layout)
+            if let dot = resolved {
                 switch dot.kind {
                 case .column: onTableGutterInsertColumn?(dot.index, dot.probe)
                 case .row: onTableGutterInsertRow?(dot.index, dot.probe)

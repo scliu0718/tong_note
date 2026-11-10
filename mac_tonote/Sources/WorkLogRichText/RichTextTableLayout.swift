@@ -41,8 +41,14 @@ enum RichTextTableLayout {
         textTable.numberOfColumns = table.columnCount
         textTable.collapsesBorders = true
         textTable.hidesEmptyCells = false
-        // 「匹配笔记宽度」关闭时缩到 80%，右侧留一段空白方便继续写正文。
-        textTable.setContentWidth(table.fullWidth ? 100 : 80, type: .percentageValueType)
+        // 默认每列固定 100pt；勾选「匹配笔记宽度」后按比例铺满编辑区。
+        let fixedWidth = !table.fullWidth
+        if fixedWidth {
+            textTable.setContentWidth(CGFloat(table.columnCount) * RichTextTable.fixedColumnWidth,
+                                      type: .absoluteValueType)
+        } else {
+            textTable.setContentWidth(100, type: .percentageValueType)
+        }
 
         let tableID = UUID().uuidString
         let weights = resolvedWeights(for: table)
@@ -55,6 +61,7 @@ enum RichTextTableLayout {
                                               row: rowIndex,
                                               column: columnIndex,
                                               weight: weights[columnIndex],
+                                              fixedWidth: fixedWidth,
                                               backgroundHex: cell.backgroundHex)
                 let paragraphStyle = cellParagraphStyle(block: cellBlock, alignment: cell.alignment)
                 let cellBlocks = cell.blocks.isEmpty ? [RichTextBlock()] : cell.blocks
@@ -111,8 +118,9 @@ enum RichTextTableLayout {
                        alignment: RichTextCellAlignment, backgroundHex: String?)] = []
         var weightsRaw: String?
         var columnCountHint = 0
-        var fullWidth = true
-        var fullWidthRead = false
+        // 属性串没声明宽度模式时先留空，最后从排版对象本身推断，
+        // 否则固定 100pt 的表格会被误读成「铺满笔记」，设置单元格后宽度突然变大。
+        var declaredFullWidth: Bool?
         var loc = origin
         while loc < ns.length {
             let paragraph = ns.paragraphRange(for: NSRange(location: loc, length: 0))
@@ -122,11 +130,9 @@ enum RichTextTableLayout {
             if weightsRaw == nil {
                 weightsRaw = attributed.attribute(weightsKey, at: probe, effectiveRange: nil) as? String
             }
-            if !fullWidthRead {
-                if let raw = attributed.attribute(fullWidthKey, at: probe, effectiveRange: nil) as? String {
-                    fullWidth = raw != "0"
-                    fullWidthRead = true
-                }
+            if declaredFullWidth == nil,
+               let raw = attributed.attribute(fullWidthKey, at: probe, effectiveRange: nil) as? String {
+                declaredFullWidth = raw != "0"
             }
             columnCountHint = max(columnCountHint, cell.table.numberOfColumns)
             let separator = RichTextBridge.separatorLength(in: ns, range: paragraph)
@@ -167,6 +173,9 @@ enum RichTextTableLayout {
                 rows[row][column] = RichTextTableCell()
             }
         }
+        // absolute = 每列固定 100pt，percentage = 铺满编辑区；老笔记没有该属性也能正确读回。
+        let fixedWidth = isFixedWidth(attributed, at: origin)
+        let fullWidth = declaredFullWidth ?? !fixedWidth
         let table = RichTextTable(rows: rows,
                                   columnWeights: RichTextTable.weights(from: weightsRaw, columnCount: columnCount),
                                   fullWidth: fullWidth)
@@ -232,6 +241,13 @@ enum RichTextTableLayout {
         return cellAlignment(from: style)
     }
 
+    /// 属性串没写 `fullWidthKey` 时，从排版对象本身判断宽度模式：
+    /// absolute = 每列固定 100pt，percentage = 铺满笔记。
+    static func isFixedWidth(_ attributed: NSAttributedString, at location: Int) -> Bool {
+        guard let block = tableBlock(in: attributed, at: location) else { return false }
+        return block.contentWidthValueType == .absoluteValueType
+    }
+
     /// 只改段落样式的对齐，不重建整张表，因此表格 ID、undo 栈和正在输入的文字都不受影响。
     @discardableResult
     static func setAlignment(_ value: RichTextCellAlignment,
@@ -265,6 +281,107 @@ enum RichTextTableLayout {
         }
         storage.endEditing()
         return changed
+    }
+
+    /// 只改目标格子的背景色：不换表格对象、不动列宽和边框、不重建整张表。
+    /// 设置单元格后宽度、光标、undo 栈和正在输入的文字都保持原样。
+    @discardableResult
+    static func setCellBackground(_ color: NSColor,
+                                  hex: String?,
+                                  row: Int,
+                                  column: Int,
+                                  tableRange: NSRange,
+                                  in storage: NSTextStorage) -> Bool {
+        let ns = storage.string as NSString
+        let end = min(NSMaxRange(tableRange), ns.length)
+        var changed = false
+        storage.beginEditing()
+        var location = tableRange.location
+        while location < end {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, ns.length - 1)
+            if let cell = tableBlock(in: storage, at: probe),
+               cell.startingRow == row, cell.startingColumn == column,
+               let existing = storage.attribute(.paragraphStyle,
+                                                at: probe,
+                                                effectiveRange: nil) as? NSParagraphStyle {
+                if let block = existing.textBlocks.compactMap({ $0 as? NSTextTableBlock }).first {
+                    block.backgroundColor = color
+                }
+                // 换一个新的 paragraphStyle 对象触发 TextKit 重排；textBlocks 仍是同一个 block，
+                // 因此 contentWidth、padding、border 全部不变。
+                let replacement = (existing.mutableCopy() as? NSMutableParagraphStyle) ?? existing
+                storage.addAttribute(.paragraphStyle, value: replacement, range: paragraph)
+                if let hex {
+                    storage.addAttribute(cellBackgroundKey, value: hex, range: paragraph)
+                } else {
+                    storage.removeAttribute(cellBackgroundKey, range: paragraph)
+                }
+                changed = true
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        storage.endEditing()
+        return changed
+    }
+
+    /// 「匹配笔记宽度」只改排版对象的宽度值，不重建表格，避免顺带把单元格属性冲掉。
+    @discardableResult
+    static func setWidthMode(fullWidth: Bool,
+                             tableRange: NSRange,
+                             in storage: NSTextStorage) -> Bool {
+        let ns = storage.string as NSString
+        let end = min(NSMaxRange(tableRange), ns.length)
+        var items: [(paragraph: NSRange, block: NSTextTableBlock, style: NSParagraphStyle)] = []
+        var location = tableRange.location
+        while location < end {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, ns.length - 1)
+            if let block = tableBlock(in: storage, at: probe),
+               let style = storage.attribute(.paragraphStyle,
+                                             at: probe,
+                                             effectiveRange: nil) as? NSParagraphStyle {
+                items.append((paragraph, block, style))
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        guard let first = items.first else { return false }
+
+        let table = first.block.table
+        let columns = max(table.numberOfColumns, 1)
+        let rawWeights = storage.attribute(weightsKey,
+                                           at: tableRange.location,
+                                           effectiveRange: nil) as? String
+        let weights = RichTextTable.weights(from: rawWeights, columnCount: columns)
+        let total = weights?.reduce(0, +) ?? 0
+        if fullWidth {
+            table.setContentWidth(100, type: .percentageValueType)
+        } else {
+            table.setContentWidth(CGFloat(columns) * RichTextTable.fixedColumnWidth,
+                                  type: .absoluteValueType)
+        }
+
+        storage.beginEditing()
+        for item in items {
+            if fullWidth {
+                var share = 100 / Double(columns)
+                if let weights, total > 0, weights.indices.contains(item.block.startingColumn) {
+                    share = weights[item.block.startingColumn] / total * 100
+                }
+                item.block.setContentWidth(CGFloat(share), type: .percentageValueType)
+            } else {
+                item.block.setContentWidth(RichTextTable.fixedColumnWidth, type: .absoluteValueType)
+            }
+            let replacement = (item.style.mutableCopy() as? NSMutableParagraphStyle) ?? item.style
+            storage.addAttribute(.paragraphStyle, value: replacement, range: item.paragraph)
+            storage.addAttribute(fullWidthKey, value: fullWidth ? "1" : "0", range: item.paragraph)
+        }
+        storage.endEditing()
+        return true
     }
 
     static func moveCaret(in textView: NSTextView, near location: Int, row: Int, column: Int) {
@@ -431,18 +548,26 @@ enum RichTextTableLayout {
                               row: Int,
                               column: Int,
                               weight: Double,
+                              fixedWidth: Bool = false,
                               backgroundHex: String? = nil) -> NSTextTableBlock {
         let block = NSTextTableBlock(table: table,
                                      startingRow: row,
                                      rowSpan: 1,
                                      startingColumn: column,
                                      columnSpan: 1)
-        applyChrome(block, weight: weight, backgroundHex: backgroundHex)
+        applyChrome(block, weight: weight, fixedWidth: fixedWidth, backgroundHex: backgroundHex)
         return block
     }
 
-    static func applyChrome(_ block: NSTextTableBlock, weight: Double, backgroundHex: String? = nil) {
-        block.setContentWidth(CGFloat(weight * 100), type: .percentageValueType)
+    static func applyChrome(_ block: NSTextTableBlock,
+                            weight: Double,
+                            fixedWidth: Bool = false,
+                            backgroundHex: String? = nil) {
+        if fixedWidth {
+            block.setContentWidth(RichTextTable.fixedColumnWidth, type: .absoluteValueType)
+        } else {
+            block.setContentWidth(CGFloat(weight * 100), type: .percentageValueType)
+        }
         block.setWidth(10, type: .absoluteValueType, for: .padding, edge: .minX)
         block.setWidth(10, type: .absoluteValueType, for: .padding, edge: .maxX)
         block.setWidth(6, type: .absoluteValueType, for: .padding, edge: .minY)
@@ -609,10 +734,16 @@ enum RichTextTableLayout {
 
         let columns = max(table.numberOfColumns, foundBlock.startingColumn + 1)
         let weight = weightForColumn(foundBlock.startingColumn, weights: foundWeights, columns: columns)
+        // 宽度模式优先用属性；属性缺失时从被替换的 block 反推，
+        // 否则固定 100pt 的表格会在回车、粘贴后被重建成铺满笔记。
+        let declaredFixed = foundFullWidth.map { $0 == "0" }
+        let inferredFixed = foundBlock.contentWidthValueType == .absoluteValueType
+        let fixedWidth = declaredFixed ?? inferredFixed
         let block = makeCellBlock(table: table,
                                   row: foundBlock.startingRow,
                                   column: foundBlock.startingColumn,
                                   weight: weight,
+                                  fixedWidth: fixedWidth,
                                   backgroundHex: foundBackground)
         let style = (foundStyle?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
         style.textBlocks = [block]
@@ -620,6 +751,6 @@ enum RichTextTableLayout {
                               paragraphStyle: style,
                               weights: foundWeights,
                               background: foundBackground,
-                              fullWidth: foundFullWidth)
+                              fullWidth: fixedWidth ? "0" : "1")
     }
 }

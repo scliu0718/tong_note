@@ -275,8 +275,7 @@ struct SyncView: View {
 
     private func deviceRow(_ device: DeviceRecord) -> some View {
         let mine = device.deviceId == DeviceRegistry.shared.currentDeviceId
-        return row(device.deviceName.isEmpty ? "未命名设备" : device.deviceName,
-                   subtitle: mine ? "本机" : nil) {
+        return row(device.deviceName.isEmpty ? "未命名设备" : device.deviceName) {
             if mine {
                 Text("本机")
                     .font(.system(size: 12, weight: .medium))

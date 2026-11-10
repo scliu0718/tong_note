@@ -74,7 +74,6 @@ final class RichTextTableGutterView: NSView {
     var activeDot: RichTextTableGutterDot? {
         didSet {
             guard activeDot != oldValue else { return }
-            updateLabel()
             needsDisplay = true
         }
     }
@@ -102,39 +101,6 @@ final class RichTextTableGutterView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    private let labelField: NSTextField = {
-        let field = NSTextField(labelWithString: "")
-        field.font = RichTextTableGutterGeometry.labelFont
-        field.textColor = NSColor(srgbRed: 0.29, green: 0.31, blue: 0.35, alpha: 1)
-        field.isEditable = false
-        field.isSelectable = false
-        field.isBezeled = false
-        field.drawsBackground = false
-        field.lineBreakMode = .byClipping
-        field.isHidden = true
-        return field
-    }()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        addSubview(labelField)
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        addSubview(labelField)
-    }
-
-    private func updateLabel() {
-        guard let dot = activeDot else {
-            labelField.isHidden = true
-            return
-        }
-        labelField.stringValue = dot.label
-        labelField.frame = RichTextTableGutterGeometry.labelRect(for: dot)
-        labelField.isHidden = false
-    }
-
     override func draw(_ dirtyRect: NSRect) {
         guard let layout else { return }
 
@@ -153,20 +119,10 @@ final class RichTextTableGutterView: NSView {
             drawCellMenuButton(cell.menuRect, hovered: menuHover)
         }
 
-        // 3. hover 命中的灰圆：引导线 → 文字底 → 蓝色圆加号
+        // 3. hover 命中的灰圆：引导线 → 蓝色圆加号（按需求不再显示文字浮窗）
         guard let dot = activeDot else { return }
         Self.accent.withAlphaComponent(0.45).setFill()
         NSBezierPath(rect: dot.guideRect).fill()
-
-        let labelRect = RichTextTableGutterGeometry.labelRect(for: dot)
-        let labelBackground = NSBezierPath(roundedRect: labelRect.insetBy(dx: -3, dy: -1),
-                                          xRadius: 5,
-                                          yRadius: 5)
-        NSColor.white.withAlphaComponent(0.94).setFill()
-        labelBackground.fill()
-        Self.softBorder.setStroke()
-        labelBackground.lineWidth = 0.8
-        labelBackground.stroke()
 
         let radius: CGFloat = 10
         let circle = NSRect(x: dot.point.x - radius,
@@ -186,7 +142,6 @@ final class RichTextTableGutterView: NSView {
         plus.line(to: NSPoint(x: dot.point.x, y: dot.point.y + arm))
         NSColor.white.setStroke()
         plus.stroke()
-        // 文字由 NSTextField 子视图绘制，避免 flipped 上下文里手写字符串被倒置
     }
 
     private func drawCellMenuButton(_ rect: NSRect, hovered: Bool) {
@@ -217,14 +172,15 @@ final class RichTextTableGutterView: NSView {
 /// 就退回按 `data-widths`（或等宽）均分，保证灰圆仍然点得到。
 enum RichTextTableGutterGeometry {
 
-    static let labelFont = NSFont.systemFont(ofSize: 10.5, weight: .medium)
-
-    /// 单元格左右 padding 10pt + 边框 1pt
-    private static let horizontalChrome: CGFloat = 11
+    /// TextKit 1 的 lineFragmentRect.minX 已经落在列边界线上，
+    /// 之前再减 11pt padding 会让灰圆和引导线整体左偏一个 padding。
+    private static let columnLeadingInset: CGFloat = 0
+    /// 最右侧边界按内容区右缘补回 padding。
+    private static let columnTrailingInset: CGFloat = 11
     /// 单元格上下 padding 6pt + 边框 1pt
     private static let verticalChrome: CGFloat = 7
-    /// 灰圆离表格边沿的距离
-    private static let dotInset: CGFloat = 7
+    /// 灰圆离表格边沿的距离（上下左右一致）
+    private static let dotInset: CGFloat = 12
     private static let dotHitRadius: CGFloat = 14
 
     private struct CellRect {
@@ -276,16 +232,16 @@ enum RichTextTableGutterGeometry {
                                       height: frame.bounds.height + dotInset * 2)
                 ))
             }
-            // 左边距只有 4pt，灰圆放外面会被 NSScrollView 裁掉，改贴左边界内侧。
+            // 编辑区左侧留了专用内边距，灰圆可以放在表格左边界外侧，不再压在线上。
             for (index, edge) in frame.rowEdges.enumerated() {
                 dots.append(RichTextTableGutterDot(
                     kind: .row,
                     index: index,
                     probe: frame.probe,
-                    point: NSPoint(x: frame.bounds.minX + 5, y: edge),
-                    guideRect: NSRect(x: frame.bounds.minX,
+                    point: NSPoint(x: frame.bounds.minX - dotInset, y: edge),
+                    guideRect: NSRect(x: frame.bounds.minX - dotInset,
                                       y: edge - 0.75,
-                                      width: frame.bounds.width,
+                                      width: frame.bounds.width + dotInset,
                                       height: 1.5)
                 ))
             }
@@ -328,14 +284,6 @@ enum RichTextTableGutterGeometry {
             cell.characterRange.location <= characterIndex
                 && characterIndex < NSMaxRange(cell.characterRange)
         }
-    }
-
-    static func labelRect(for dot: RichTextTableGutterDot) -> NSRect {
-        let measured = (dot.label as NSString).size(withAttributes: [.font: labelFont])
-        return NSRect(x: dot.point.x + 14,
-                      y: dot.point.y - 9,
-                      width: ceil(measured.width) + 6,
-                      height: 18)
     }
 
     // MARK: - 表格几何
@@ -400,7 +348,7 @@ enum RichTextTableGutterGeometry {
         for column in 0..<columnCount {
             let cells = group.cells.filter { $0.column == column }
             if let minimum = cells.map(\.rect.minX).min() {
-                columnEdges.append(minimum - horizontalChrome)
+                columnEdges.append(minimum - columnLeadingInset)
             } else {
                 return nil
             }
@@ -408,7 +356,7 @@ enum RichTextTableGutterGeometry {
         let lastColumnMaxX = group.cells.filter { $0.column == columnCount - 1 }
             .map(\.rect.maxX).max()
         let rightMost = lastColumnMaxX ?? (columnEdges.last ?? 0)
-        columnEdges.append(rightMost + horizontalChrome)
+        columnEdges.append(rightMost + columnTrailingInset)
 
         var rowEdges: [CGFloat] = []
         for row in 0..<rowCount {

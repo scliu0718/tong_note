@@ -64,6 +64,8 @@ public struct RichTextTableCell: Equatable, Sendable {
 public struct RichTextTable: Equatable, Sendable {
     public static let maxRows = 50
     public static let maxColumns = 8
+    /// 默认每列固定 100pt，表格不铺满笔记宽度。
+    public static let fixedColumnWidth: CGFloat = 100
 
     public var rows: [[RichTextTableCell]]
     public var columnWeights: [Double]?
@@ -101,13 +103,14 @@ public struct RichTextTable: Equatable, Sendable {
     public var rowCount: Int { rows.count }
     public var columnCount: Int { rows.first?.count ?? 0 }
 
-    /// 新建空表。两列时左列稍窄，方便写「字段 / 内容」这种表。
+    /// 新建空表：每列固定 100pt，不铺满笔记。用户可在单元格菜单里勾选「匹配笔记宽度」。
     public static func make(rows: Int, columns: Int) -> RichTextTable {
         let rowCount = min(max(rows, 1), maxRows)
         let columnCount = min(max(columns, 1), maxColumns)
         let row = Array(repeating: RichTextTableCell(), count: columnCount)
-        let weights: [Double]? = columnCount == 2 ? [0.28, 0.72] : nil
-        return RichTextTable(rows: Array(repeating: row, count: rowCount), columnWeights: weights)
+        return RichTextTable(rows: Array(repeating: row, count: rowCount),
+                             columnWeights: nil,
+                             fullWidth: false)
     }
 
     public var plainText: String {
