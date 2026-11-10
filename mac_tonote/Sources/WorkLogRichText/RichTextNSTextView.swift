@@ -229,6 +229,10 @@ final class RichTextNSTextView: NSTextView {
             let ok = current.kind == .column ? (dx <= 18 && dy <= 34) : (dy <= 18 && dx <= 34)
             if ok { resolved = current }
         }
+        if resolved == nil {
+            // 软命中区：点在表格左边界/第一列靠左、纵向对准某条行线时，也算加行。
+            resolved = RichTextTableGutterGeometry.rowDotInLeftBand(point, in: layout)
+        }
         guard let dot = resolved else {
             var nearestDistance = CGFloat.greatestFiniteMagnitude
             var nearestInfo = "none"

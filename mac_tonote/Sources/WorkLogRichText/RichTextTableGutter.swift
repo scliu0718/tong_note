@@ -236,10 +236,10 @@ enum RichTextTableGutterGeometry {
                                  storage: storage,
                                  layoutManager: layoutManager,
                                  textContainer: textContainer)
-        // 加行圆吸附在「视口左边缘」而不是表格左边界：表格被加到很多列、需要横向
-        // 滚动时，表格左边界会随内容滚出屏幕，固定在表格左外侧的圆就够不到了。
-        // 改成始终在可见区域最左边 14pt 处画 + 点，无论左右怎么滚都能看到、点得到。
-        let stickyRowX = max(textView.visibleRect.minX, 0) + 14
+        // 加行圆用和加列圆同一套坐标（列/行边界反推出的表格几何，已是文档坐标），
+        // 这样绘制位置与 mouseDown 的 hit-test 完全一致，不会出现「画在左、命中在右」的错位，
+        // 也不会因 visibleRect 在初始布局时未稳定而算错初始位置。
+        // 圆放在表格左边界外侧 dotInset，编辑区 left inset=24 给它留了空间，不会被裁掉。
         var dots: [RichTextTableGutterDot] = []
         var cells: [RichTextTableCellFrame] = []
         for frame in frames {
@@ -255,14 +255,14 @@ enum RichTextTableGutterGeometry {
                                       height: frame.bounds.height + dotInset * 2)
                 ))
             }
-            // 加行圆：x 固定在视口左边缘（stickyRowX），y 仍跟随各行分隔线滚动。
+            // 加行圆：x 固定在表格左边界外侧（与列边界同坐标系），y 跟随各行分隔线。
             for (index, edge) in frame.rowEdges.enumerated() {
                 dots.append(RichTextTableGutterDot(
                     kind: .row,
                     index: index,
                     probe: frame.probe,
-                    point: NSPoint(x: stickyRowX, y: edge),
-                    guideRect: NSRect(x: stickyRowX,
+                    point: NSPoint(x: frame.bounds.minX - dotInset, y: edge),
+                    guideRect: NSRect(x: frame.bounds.minX - dotInset,
                                       y: edge - 0.75,
                                       width: frame.bounds.width + dotInset,
                                       height: 1.5)
@@ -316,6 +316,22 @@ enum RichTextTableGutterGeometry {
             cell.characterRange.location <= characterIndex
                 && characterIndex < NSMaxRange(cell.characterRange)
         }
+    }
+
+    /// 左边缘软命中区：用户没精确点在小灰圆上，但在表格左边界附近（含第一列靠左部分）、
+    /// 且纵向对准某条行分隔线时，也算「加行」。命中区从圆左侧 40pt 到右侧 80pt，
+    /// 覆盖左内侧边距 + 第一列靠左区域，这样点在左边沿附近就能加行，不必瞄准小圆。
+    static func rowDotInLeftBand(_ point: NSPoint,
+                                in layout: RichTextTableGutterLayout) -> RichTextTableGutterDot? {
+        var best: RichTextTableGutterDot?
+        var bestDy = CGFloat.greatestFiniteMagnitude
+        for dot in layout.dots where dot.kind == .row {
+            let dy = abs(dot.point.y - point.y)
+            guard dy <= 18 else { continue }
+            guard point.x >= dot.point.x - 40, point.x <= dot.point.x + 80 else { continue }
+            if dy < bestDy { bestDy = dy; best = dot }
+        }
+        return best
     }
 
     // MARK: - 表格几何
