@@ -25,7 +25,8 @@ struct TableInsertButton: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
-        .help("插入表格。表格内 Tab 跳到下一格，最后一格再按 Tab 会新增一行")
+        .help("插入表格。表格内 Tab 跳到下一格，最后一格再按 Tab 会新增一行；"
+              + "鼠标移到表格顶边可「+」加列，移到左边可「+」加行")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             popover
         }
@@ -49,6 +50,14 @@ struct TableInsertButton: View {
             }
 
             if controller.tableCaret != nil {
+                Divider()
+                Text("单元格对齐")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Theme.textTertiary)
+                    .padding(.horizontal, 8)
+                TableAlignmentButton(controller: controller)
+                    .padding(.horizontal, 4)
+
                 Divider()
                 action("在下方插入行") { controller.insertTableRowBelow() }
                 action("在右侧插入列") { controller.insertTableColumnAfter() }

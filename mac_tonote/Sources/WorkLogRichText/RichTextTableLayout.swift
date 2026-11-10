@@ -51,7 +51,7 @@ enum RichTextTableLayout {
                                               row: rowIndex,
                                               column: columnIndex,
                                               weight: weights[columnIndex])
-                let paragraphStyle = cellParagraphStyle(block: cellBlock)
+                let paragraphStyle = cellParagraphStyle(block: cellBlock, alignment: cell.alignment)
                 let cellBlocks = cell.blocks.isEmpty ? [RichTextBlock()] : cell.blocks
                 let plan = RichTextBridge.markerPlan(for: cellBlocks.map { ($0.style, $0.listLevel) })
                 for (index, cellBlockModel) in cellBlocks.enumerated() {
@@ -98,7 +98,7 @@ enum RichTextTableLayout {
         let origin = tableOrigin(in: attributed, containing: location)
         guard let key = tableKey(in: attributed, at: origin) else { return nil }
 
-        var entries: [(row: Int, column: Int, block: RichTextBlock)] = []
+        var entries: [(row: Int, column: Int, block: RichTextBlock, alignment: RichTextCellAlignment)] = []
         var weightsRaw: String?
         var columnCountHint = 0
         var loc = origin
@@ -113,7 +113,13 @@ enum RichTextTableLayout {
             columnCountHint = max(columnCountHint, cell.table.numberOfColumns)
             let separator = RichTextBridge.separatorLength(in: ns, range: paragraph)
             let content = NSRange(location: paragraph.location, length: max(0, paragraph.length - separator))
-            entries.append((cell.startingRow, cell.startingColumn, RichTextBridge.block(from: attributed, range: content)))
+            let paragraphStyle = attributed.attribute(.paragraphStyle,
+                                                      at: probe,
+                                                      effectiveRange: nil) as? NSParagraphStyle
+            entries.append((cell.startingRow,
+                            cell.startingColumn,
+                            RichTextBridge.block(from: attributed, range: content),
+                            cellAlignment(from: paragraphStyle)))
             let next = NSMaxRange(paragraph)
             if next <= loc { break }
             loc = next
@@ -127,6 +133,10 @@ enum RichTextTableLayout {
             count: rowCount
         )
         for entry in entries where entry.row >= 0 && entry.row < rowCount && entry.column >= 0 && entry.column < columnCount {
+            if rows[entry.row][entry.column].blocks.isEmpty {
+                // 同一格子里多个段落共用一种对齐，取第一段为准。
+                rows[entry.row][entry.column].alignment = entry.alignment
+            }
             rows[entry.row][entry.column].blocks.append(sanitized(entry.block))
         }
         for row in 0..<rowCount {
@@ -156,6 +166,81 @@ enum RichTextTableLayout {
                                   column: cell.startingColumn,
                                   rowCount: read.table.rowCount,
                                   columnCount: read.table.columnCount)
+    }
+
+    /// 单元格坐标（同一张表内）。
+    struct CellAddress: Hashable {
+        var row: Int
+        var column: Int
+    }
+
+    /// 选区覆盖到的所有格子。无选区时就是光标所在那一格。
+    static func cells(in storage: NSAttributedString,
+                      selection: NSRange,
+                      tableRange: NSRange) -> Set<CellAddress> {
+        let start = max(selection.location, tableRange.location)
+        let end = min(NSMaxRange(selection), NSMaxRange(tableRange))
+        guard start < end, storage.length > 0 else { return [] }
+        let ns = storage.string as NSString
+        var result: Set<CellAddress> = []
+        var location = start
+        while location < end {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, ns.length - 1)
+            if let cell = tableBlock(in: storage, at: probe) {
+                result.insert(CellAddress(row: cell.startingRow, column: cell.startingColumn))
+            }
+            let next = min(NSMaxRange(paragraph), end)
+            if next <= location { break }
+            location = next
+        }
+        return result
+    }
+
+    /// 当前光标所在格子的对齐；不在表格里返回 nil。
+    static func alignmentAtCaret(in textView: NSTextView) -> RichTextCellAlignment? {
+        guard let storage = textView.textStorage, storage.length > 0 else { return nil }
+        let probe = min(textView.selectedRange().location, storage.length - 1)
+        guard tableKey(in: storage, at: probe) != nil else { return nil }
+        let style = storage.attribute(.paragraphStyle,
+                                      at: probe,
+                                      effectiveRange: nil) as? NSParagraphStyle
+        return cellAlignment(from: style)
+    }
+
+    /// 只改段落样式的对齐，不重建整张表，因此表格 ID、undo 栈和正在输入的文字都不受影响。
+    @discardableResult
+    static func setAlignment(_ value: RichTextCellAlignment,
+                             for cells: Set<CellAddress>,
+                             tableRange: NSRange,
+                             in storage: NSTextStorage) -> Bool {
+        guard !cells.isEmpty else { return false }
+        let wanted = textAlignment(for: value)
+        let ns = storage.string as NSString
+        let end = min(NSMaxRange(tableRange), ns.length)
+        var changed = false
+        storage.beginEditing()
+        var location = tableRange.location
+        while location < end {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, ns.length - 1)
+            if let cell = tableBlock(in: storage, at: probe),
+               cells.contains(CellAddress(row: cell.startingRow, column: cell.startingColumn)),
+               let existing = storage.attribute(.paragraphStyle,
+                                                at: probe,
+                                                effectiveRange: nil) as? NSParagraphStyle,
+               existing.alignment != wanted,
+               let mutable = existing.mutableCopy() as? NSMutableParagraphStyle {
+                mutable.alignment = wanted
+                storage.addAttribute(.paragraphStyle, value: mutable, range: paragraph)
+                changed = true
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        storage.endEditing()
+        return changed
     }
 
     static func moveCaret(in textView: NSTextView, near location: Int, row: Int, column: Int) {
@@ -209,12 +294,14 @@ enum RichTextTableLayout {
     }
 
     /// 改段落样式时保住单元格上的表格块，否则一设标题表格就散。
+    /// 同时保住居左 / 居中 / 居右：新段落样式是默认左对齐，不复制就会把对齐冲掉。
     static func keepingTable(_ style: NSParagraphStyle, from existing: NSParagraphStyle?) -> NSParagraphStyle {
         guard let block = existing?.textBlocks.compactMap({ $0 as? NSTextTableBlock }).first,
               let mutable = style.mutableCopy() as? NSMutableParagraphStyle else {
             return style
         }
         mutable.textBlocks = [block]
+        mutable.alignment = existing?.alignment ?? .natural
         return mutable
     }
 
@@ -330,13 +417,31 @@ enum RichTextTableLayout {
         block.verticalAlignment = .topAlignment
     }
 
-    private static func cellParagraphStyle(block: NSTextTableBlock) -> NSParagraphStyle {
+    private static func cellParagraphStyle(block: NSTextTableBlock,
+                                           alignment: RichTextCellAlignment) -> NSParagraphStyle {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 2
         paragraph.paragraphSpacing = 1
         paragraph.paragraphSpacingBefore = 0
+        paragraph.alignment = textAlignment(for: alignment)
         paragraph.textBlocks = [block]
         return paragraph
+    }
+
+    static func textAlignment(for value: RichTextCellAlignment) -> NSTextAlignment {
+        switch value {
+        case .left: return .left
+        case .center: return .center
+        case .right: return .right
+        }
+    }
+
+    static func cellAlignment(from style: NSParagraphStyle?) -> RichTextCellAlignment {
+        switch style?.alignment ?? .natural {
+        case .center: return .center
+        case .right: return .right
+        default: return .left
+        }
     }
 
     static func tableKey(in attributed: NSAttributedString, at location: Int) -> String? {
@@ -350,7 +455,7 @@ enum RichTextTableLayout {
         return nil
     }
 
-    private static func tableBlock(in attributed: NSAttributedString, at location: Int) -> NSTextTableBlock? {
+    static func tableBlock(in attributed: NSAttributedString, at location: Int) -> NSTextTableBlock? {
         guard location >= 0, location < attributed.length,
               let style = attributed.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle else {
             return nil

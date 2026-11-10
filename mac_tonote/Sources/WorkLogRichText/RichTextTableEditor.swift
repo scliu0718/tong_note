@@ -83,6 +83,31 @@ enum RichTextTableEditor {
         rewrite(read, table: read.table, in: textView, attachments: attachments, row: caret.row, column: caret.column + 1)
     }
 
+    /// 表格边沿的「+」加行：在第 index 行前插入。probe 是目标表格内任意字符位置，
+    /// 因为点击加号时鼠标不一定在正文里，不能依赖当前选区去猜是哪张表。
+    static func insertRow(at index: Int,
+                          probe: Int,
+                          in textView: NSTextView,
+                          attachments: AttachmentStore?) {
+        guard var read = tableSlice(in: textView, probe: probe) else { return }
+        let insertion = min(max(index, 0), read.table.rowCount)
+        guard read.table.insertRow(at: insertion) else { return }
+        rewrite(read, table: read.table, in: textView,
+                attachments: attachments, row: insertion, column: 0)
+    }
+
+    /// 表格边沿的「+」加列：在第 index 列前插入。
+    static func insertColumn(at index: Int,
+                             probe: Int,
+                             in textView: NSTextView,
+                             attachments: AttachmentStore?) {
+        guard var read = tableSlice(in: textView, probe: probe) else { return }
+        let insertion = min(max(index, 0), read.table.columnCount)
+        guard read.table.insertColumn(at: insertion) else { return }
+        rewrite(read, table: read.table, in: textView,
+                attachments: attachments, row: 0, column: insertion)
+    }
+
     static func deleteRow(in textView: NSTextView, attachments: AttachmentStore?) {
         guard let caret = RichTextTableLayout.caret(in: textView),
               var read = currentTable(in: textView) else { return }
@@ -135,9 +160,13 @@ enum RichTextTableEditor {
     }
 
     private static func currentTable(in textView: NSTextView) -> TableSlice? {
+        tableSlice(in: textView, probe: textView.selectedRange().location)
+    }
+
+    private static func tableSlice(in textView: NSTextView, probe: Int) -> TableSlice? {
         guard let storage = textView.textStorage, storage.length > 0 else { return nil }
-        let probe = min(textView.selectedRange().location, storage.length - 1)
-        guard let read = RichTextTableLayout.read(from: storage, at: probe) else { return nil }
+        let safe = min(max(probe, 0), storage.length - 1)
+        guard let read = RichTextTableLayout.read(from: storage, at: safe) else { return nil }
         return TableSlice(table: read.table, range: read.range)
     }
 

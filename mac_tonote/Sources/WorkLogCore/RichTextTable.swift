@@ -1,16 +1,41 @@
 import Foundation
 
+/// 单元格内文字的水平对齐。左对齐是默认值，不写进 HTML。
+public enum RichTextCellAlignment: String, Equatable, Sendable, CaseIterable {
+    case left
+    case center
+    case right
+
+    /// 受控 HTML 的 `data-align` 值，同时兼容外部粘贴进来的 `style="text-align:…"`。
+    public static func fromHTMLAttributes(_ attributes: [String: String]) -> Self {
+        if let raw = attributes["data-align"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           let value = Self(rawValue: raw) {
+            return value
+        }
+        let style = (attributes["style"] ?? "").lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\t", with: "")
+        if style.contains("text-align:center") { return .center }
+        if style.contains("text-align:right") { return .right }
+        return .left
+    }
+}
+
 /// 表格的一个单元格。里面是若干普通段落（加粗、颜色、换段），不再嵌套表格。
 public struct RichTextTableCell: Equatable, Sendable {
     public var blocks: [RichTextBlock]
+    public var alignment: RichTextCellAlignment
 
-    public init(blocks: [RichTextBlock] = [RichTextBlock()], fillIfEmpty: Bool = true) {
+    public init(blocks: [RichTextBlock] = [RichTextBlock()],
+                fillIfEmpty: Bool = true,
+                alignment: RichTextCellAlignment = .left) {
         let kept = blocks.filter { $0.style != .table }
         if kept.isEmpty && fillIfEmpty {
             self.blocks = [RichTextBlock()]
         } else {
             self.blocks = kept
         }
+        self.alignment = alignment
     }
 
     public var plainText: String {
@@ -34,7 +59,7 @@ public struct RichTextTable: Equatable, Sendable {
             ? [Array(repeating: RichTextTableCell(), count: columnCount)]
             : rows
         self.rows = source.map { row in
-            var copy = row.map { RichTextTableCell(blocks: $0.blocks) }
+            var copy = row.map { RichTextTableCell(blocks: $0.blocks, alignment: $0.alignment) }
             if copy.count < columnCount {
                 copy.append(contentsOf: Array(repeating: RichTextTableCell(), count: columnCount - copy.count))
             } else if copy.count > columnCount {
@@ -85,7 +110,13 @@ public struct RichTextTable: Equatable, Sendable {
     public mutating func insertRow(at index: Int) -> Bool {
         guard rowCount < Self.maxRows, columnCount > 0 else { return false }
         let insertion = min(max(index, 0), rowCount)
-        rows.insert(Array(repeating: RichTextTableCell(), count: columnCount), at: insertion)
+        // 新行沿用相邻行的对齐，用户按「在下方插入行」时不会突然变回左对齐。
+        let reference = rows.indices.contains(insertion) ? rows[insertion] : rows[rowCount - 1]
+        let fresh = (0..<columnCount).map { column in
+            RichTextTableCell(alignment: reference.indices.contains(column)
+                ? reference[column].alignment : .left)
+        }
+        rows.insert(fresh, at: insertion)
         return true
     }
 
@@ -100,8 +131,12 @@ public struct RichTextTable: Equatable, Sendable {
     public mutating func insertColumn(at index: Int) -> Bool {
         guard columnCount < Self.maxColumns, rowCount > 0 else { return false }
         let insertion = min(max(index, 0), columnCount)
+        // 新列沿用左邻列（在最左侧插入时沿用原第一列）的对齐。
+        let referenceColumn = insertion > 0 ? insertion - 1 : min(insertion, columnCount - 1)
         for row in rows.indices {
-            rows[row].insert(RichTextTableCell(), at: insertion)
+            let alignment = rows[row].indices.contains(referenceColumn)
+                ? rows[row][referenceColumn].alignment : .left
+            rows[row].insert(RichTextTableCell(alignment: alignment), at: insertion)
         }
         columnWeights = nil
         return true

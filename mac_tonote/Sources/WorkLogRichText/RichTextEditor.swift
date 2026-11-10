@@ -193,6 +193,14 @@ public struct RichTextEditor: NSViewRepresentable {
                 NSLog("%@", "[TNPaste] onPasteFailure → \(message)")
                 self?.parent.onEditorError?(message)
             }
+            // 表格边沿「+」：把插入位置与表格内字符位置交给命令层，
+            // 不依赖当前选区，鼠标停在表外也能正确定位目标表格。
+            tv.onTableGutterInsertRow = { [weak self] index, probe in
+                self?.parent.controller.insertTableRow(at: index, probe: probe)
+            }
+            tv.onTableGutterInsertColumn = { [weak self] index, probe in
+                self?.parent.controller.insertTableColumn(at: index, probe: probe)
+            }
         }
 
         /// 载入正文到编辑器

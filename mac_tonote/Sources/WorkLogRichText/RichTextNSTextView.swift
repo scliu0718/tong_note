@@ -50,8 +50,84 @@ final class RichTextNSTextView: NSTextView {
     /// 回调：列表段落里按 Tab / Shift+Tab 切换层级。
     /// 参数为 +1 / -1；返回 true 表示该按键已被消费，不再传给系统（避免焦点跳走）。
     var onTabInList: ((Int) -> Bool)?
+    /// 回调：表格边沿「+」插入行 / 列。参数为插入位置与该表内的字符位置。
+    var onTableGutterInsertRow: ((Int, Int) -> Void)?
+    var onTableGutterInsertColumn: ((Int, Int) -> Void)?
+
+    /// 只画加号，不接收事件；事件仍由 NSTextView 自己处理。
+    private var tableGutter: RichTextTableGutterView?
 
     private static let logTag = "[TNPaste]"
+
+    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
+        installTableGutter()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        installTableGutter()
+    }
+
+    private func installTableGutter() {
+        let gutter = RichTextTableGutterView(frame: bounds)
+        gutter.autoresizingMask = [.width, .height]
+        addSubview(gutter)
+        tableGutter = gutter
+        // 整块可见区域跟踪鼠标；加号只由 hover 状态决定是否绘制。
+        addTrackingArea(NSTrackingArea(rect: .zero,
+                                       options: [.mouseMoved, .mouseEnteredAndExited,
+                                                 .activeInKeyWindow, .inVisibleRect],
+                                       owner: self,
+                                       userInfo: nil))
+    }
+
+    /// 正文变长时 NSTextView 会改 frame，遮罩层必须一起长高，否则下方的表格没有加号。
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        tableGutter?.frame = NSRect(origin: .zero, size: newSize)
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        // 表格重建后旧几何失效，等下一次鼠标移动重算
+        tableGutter?.hit = nil
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard isEditable else {
+            tableGutter?.hit = nil
+            return
+        }
+        let point = convert(event.locationInWindow, from: nil)
+        // 鼠标从边沿挪到「+」上时按钮不能闪掉
+        if let current = tableGutter?.hit,
+           current.buttonRect.insetBy(dx: -7, dy: -7).contains(point) {
+            return
+        }
+        tableGutter?.hit = RichTextTableGutterGeometry.hit(at: point, in: self)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        tableGutter?.hit = nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if isEditable,
+           let hit = RichTextTableGutterGeometry.hit(at: point, in: self),
+           hit.buttonRect.insetBy(dx: -7, dy: -7).contains(point) {
+            switch hit.kind {
+            case .column: onTableGutterInsertColumn?(hit.index, hit.probe)
+            case .row: onTableGutterInsertRow?(hit.index, hit.probe)
+            }
+            tableGutter?.hit = nil
+            return
+        }
+        super.mouseDown(with: event)
+    }
 
     private static func log(_ message: String) {
         let line = "\(logTag) \(message)"

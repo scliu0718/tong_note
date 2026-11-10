@@ -21,7 +21,10 @@ enum RichTextTableCodec {
             html += "<tr>"
             for cell in row {
                 let inner = RichTextHTMLCodec.encode(RichTextDocument(blocks: cell.blocks))
-                html += "<td>\(inner)</td>"
+                // 左对齐是默认值，不写属性，保证老笔记编码结果与之前完全一致。
+                let align = cell.alignment == .left
+                    ? "" : " data-align=\"\(cell.alignment.rawValue)\""
+                html += "<td\(align)>\(inner)</td>"
             }
             html += "</tr>"
         }
@@ -35,10 +38,11 @@ enum RichTextTableCodec {
             guard case .element(let tag, _, let rowChildren) = child, tag == "tr" else { continue }
             var cells: [RichTextTableCell] = []
             for cellNode in rowChildren {
-                guard case .element(let cellTag, _, let cellChildren) = cellNode else { continue }
+                guard case .element(let cellTag, let cellAttributes, let cellChildren) = cellNode else { continue }
                 guard cellTag == "td" || cellTag == "th" else { continue }
                 let blocks = RichTextHTMLCodec.blocks(from: cellChildren).filter { $0.style != .table }
-                cells.append(RichTextTableCell(blocks: blocks))
+                cells.append(RichTextTableCell(blocks: blocks,
+                                               alignment: RichTextCellAlignment.fromHTMLAttributes(cellAttributes)))
             }
             if !cells.isEmpty {
                 rows.append(cells)

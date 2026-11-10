@@ -25,6 +25,8 @@ public final class RichTextEditorController: ObservableObject {
     @Published public private(set) var currentListLevel: Int = 0
     /// 光标在表格单元格内时非空，供工具栏显示增删行列。
     @Published public private(set) var tableCaret: RichTextTableCaret?
+    /// 当前格子居左 / 居中 / 居右；不在表格里为 nil。
+    @Published public private(set) var currentCellAlignment: RichTextCellAlignment?
 
     public init() {}
 
@@ -155,6 +157,7 @@ public final class RichTextEditorController: ObservableObject {
             currentBlockStyle = .paragraph
             currentListLevel = 0
             if tableCaret != nil { tableCaret = nil }
+            if currentCellAlignment != nil { currentCellAlignment = nil }
             return
         }
         let location = min(tv.selectedRange().location, storage.length - 1)
@@ -164,6 +167,8 @@ public final class RichTextEditorController: ObservableObject {
         if currentListLevel != level { currentListLevel = level }
         let caret = RichTextTableLayout.caret(in: tv)
         if tableCaret != caret { tableCaret = caret }
+        let alignment = RichTextTableLayout.alignmentAtCaret(in: tv)
+        if currentCellAlignment != alignment { currentCellAlignment = alignment }
         RichTextTableLayout.adoptTypingAttributes(in: tv)
     }
 
@@ -202,6 +207,42 @@ public final class RichTextEditorController: ObservableObject {
     public func deleteTable() {
         guard let tv = textView else { return }
         RichTextTableEditor.deleteTable(in: tv)
+        refreshCurrentStyle()
+    }
+
+    /// 设置当前格子的水平对齐。选区跨多个格子时一起改。
+    /// 只改段落样式的 alignment，不重建表格，输入中的文字与撤销栈都保留。
+    public func setCellAlignment(_ value: RichTextCellAlignment) {
+        guard let tv = textView,
+              let storage = tv.textStorage,
+              storage.length > 0 else { return }
+        let probe = min(tv.selectedRange().location, storage.length - 1)
+        guard let read = RichTextTableLayout.read(from: storage, at: probe) else { return }
+        let cells = RichTextTableLayout.cells(in: storage,
+                                              selection: tv.selectedRange(),
+                                              tableRange: read.range)
+        guard !cells.isEmpty else { return }
+        if RichTextTableLayout.setAlignment(value,
+                                            for: cells,
+                                            tableRange: read.range,
+                                            in: storage) {
+            commitChanges()
+        }
+        RichTextTableLayout.adoptTypingAttributes(in: tv)
+        refreshCurrentStyle()
+    }
+
+    /// 表格边沿「+」加行：在第 index 行前插入，probe 指向目标表格。
+    public func insertTableRow(at index: Int, probe: Int) {
+        guard let tv = textView else { return }
+        RichTextTableEditor.insertRow(at: index, probe: probe, in: tv, attachments: attachments)
+        refreshCurrentStyle()
+    }
+
+    /// 表格边沿「+」加列：在第 index 列前插入，probe 指向目标表格。
+    public func insertTableColumn(at index: Int, probe: Int) {
+        guard let tv = textView else { return }
+        RichTextTableEditor.insertColumn(at: index, probe: probe, in: tv, attachments: attachments)
         refreshCurrentStyle()
     }
 
