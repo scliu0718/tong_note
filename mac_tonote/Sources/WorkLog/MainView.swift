@@ -54,6 +54,7 @@ struct MainView: View {
     @State private var searchText: String = ""
     @State private var sortMode: SortMode = .updated
     @State private var showingTrash = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         HStack(spacing: 0) {
@@ -115,6 +116,21 @@ struct MainView: View {
             if let id = selectedID, store.note(with: id) != nil { return }
             selectedID = store.activeNotes.first(where: { $0.id != NoteStore.quickSyncNoteID })?.id
                 ?? NoteStore.quickSyncNoteID
+        }
+        .task {
+            await sync.syncRound(store: store, todos: todos)
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                guard !Task.isCancelled, scenePhase == .active else { continue }
+                await sync.syncRound(store: store, todos: todos)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await sync.syncRound(store: store, todos: todos) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tonoteLocalDataChanged)) { _ in
+            sync.schedule(store: store, todos: todos)
         }
         // 兜底：当前选中的笔记被删除/消失时，选中当前分类第一条，而不是「快同步」
         .onReceive(store.$notes) { notes in

@@ -137,13 +137,51 @@ public final class BaiduPanClient {
 
     /// 列出目录下的直接子项。目录不存在时抛 `notFound`。
     public func listFiles(directory: String, accessToken: String) async throws -> [BaiduPanListEntry] {
+        var all: [BaiduPanListEntry] = []
+        var start = 0
+        let limit = 200
+        while start < 5000 {
+            let page = try await listFilePage(directory: directory,
+                                              accessToken: accessToken,
+                                              start: start,
+                                              limit: limit)
+            all.append(contentsOf: page)
+            if page.count < limit { break }
+            start += limit
+        }
+        return all
+    }
+
+    public func deleteRemote(path: String, accessToken: String) async throws {
+        let listData = try JSONSerialization.data(withJSONObject: [path])
+        let filelist = String(data: listData, encoding: .utf8) ?? "[]"
+        let created = try await postForm(
+            "https://pan.baidu.com/rest/2.0/xpan/file",
+            accessToken: accessToken,
+            query: [
+                URLQueryItem(name: "method", value: "filemanager"),
+                URLQueryItem(name: "opera", value: "delete"),
+            ],
+            form: [
+                "async": "0",
+                "filelist": filelist,
+            ]
+        )
+        if let obj = try? JSONSerialization.jsonObject(with: created) as? [String: Any],
+           let errno = obj["errno"] as? Int, errno != 0, errno != -9, errno != 31066 {
+            throw BaiduPanError.server(message: "删除远端文件失败（errno=\(errno)）")
+        }
+    }
+
+    private func listFilePage(directory: String, accessToken: String,
+                              start: Int, limit: Int) async throws -> [BaiduPanListEntry] {
         var comps = URLComponents(url: URL(string: "https://pan.baidu.com/rest/2.0/xpan/file")!,
                                   resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             URLQueryItem(name: "method", value: "list"),
             URLQueryItem(name: "dir", value: directory),
-            URLQueryItem(name: "start", value: "0"),
-            URLQueryItem(name: "limit", value: "200"),
+            URLQueryItem(name: "start", value: "\(start)"),
+            URLQueryItem(name: "limit", value: "\(limit)"),
             URLQueryItem(name: "order", value: "name"),
             URLQueryItem(name: "access_token", value: accessToken),
         ]
@@ -227,8 +265,10 @@ public final class BaiduPanClient {
 
     /// 上传文件到远端（覆盖写）。开放平台标准三步：precreate → 上传分片 → create。
     public func uploadData(_ data: Data, to remotePath: String, accessToken: String) async throws {
-        let md5 = data.md5Hex
-        let blockList = "[\"\(md5)\"]".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "[\"\(md5)\"]"
+        let slices = UploadChunks.slices(data)
+        let md5List = slices.map(\.md5Hex)
+        let blockJSON = "[" + md5List.map { "\"\($0)\"" }.joined(separator: ",") + "]"
+        let blockList = blockJSON.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? blockJSON
 
         // 1) precreate：申请 uploadid，自动创建父目录
         let precreate = try await postForm(
@@ -244,10 +284,10 @@ public final class BaiduPanClient {
                 "rtype": "3",
             ]
         )
-        struct PreResp: Codable {
+        struct PreResp: Decodable {
             let uploadid: String?
             let returnType: Int?
-            let blockList: [String]?
+            let blockList: [Int]?
             let errno: Int?
 
             enum CodingKeys: String, CodingKey {
@@ -268,7 +308,13 @@ public final class BaiduPanClient {
                     uploadid = nil
                 }
                 returnType = try? c.decode(Int.self, forKey: .returnType)
-                blockList = try? c.decode([String].self, forKey: .blockList)
+                if let numbers = try? c.decode([Int].self, forKey: .blockList) {
+                    blockList = numbers
+                } else if let strings = try? c.decode([String].self, forKey: .blockList) {
+                    blockList = strings.compactMap(Int.init)
+                } else {
+                    blockList = nil
+                }
                 errno = try? c.decode(Int.self, forKey: .errno)
             }
         }
@@ -281,12 +327,16 @@ public final class BaiduPanClient {
         }
 
         // return_type == 2 表示云端已有相同分片（秒传），无需再上传分片
-        let needBlockUpload = (pre.returnType ?? 1) != 2 && !(pre.blockList?.isEmpty ?? false)
+        let needBlockUpload = (pre.returnType ?? 1) != 2
         if needBlockUpload {
-            try await uploadBlock(data,
-                                  remotePath: remotePath,
-                                  uploadID: uploadID,
-                                  accessToken: accessToken)
+            let indexes = (pre.blockList?.isEmpty == false) ? (pre.blockList ?? []) : Array(slices.indices)
+            for index in indexes where slices.indices.contains(index) {
+                try await uploadBlock(slices[index],
+                                      remotePath: remotePath,
+                                      uploadID: uploadID,
+                                      partseq: index,
+                                      accessToken: accessToken)
+            }
         }
 
         // 3) create：提交分片，完成文件（rtype=3 覆盖同名）
@@ -340,7 +390,7 @@ public final class BaiduPanClient {
 
     /// 上传单个分片到 `superfile2`（开放平台分片上传专用端点）。
     private func uploadBlock(_ data: Data, remotePath: String,
-                             uploadID: String, accessToken: String) async throws {
+                             uploadID: String, partseq: Int, accessToken: String) async throws {
         guard let url = URL(string: "https://c.pcs.baidu.com/rest/2.0/pcs/superfile2") else {
             throw BaiduPanError.invalidResponse
         }
@@ -350,7 +400,7 @@ public final class BaiduPanClient {
             URLQueryItem(name: "type", value: "tmpfile"),
             URLQueryItem(name: "path", value: remotePath),
             URLQueryItem(name: "uploadid", value: uploadID),
-            URLQueryItem(name: "partseq", value: "0"),
+            URLQueryItem(name: "partseq", value: "\(partseq)"),
             URLQueryItem(name: "access_token", value: accessToken),
         ]
         let boundary = "----TonoteBoundary\(UUID().uuidString)"

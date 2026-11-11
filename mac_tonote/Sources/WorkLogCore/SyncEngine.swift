@@ -1,12 +1,8 @@
 import Foundation
 import Combine
 
-/// 同笔记同步引擎：先拉取云端 manifest，按 id + 更新时间对比合并，
-/// 再把合并结果写回本地并上传到百度网盘 /apps/tong_log/manifest.json。
-///
-/// 设计要点：
-/// - 云端以单个 `manifest.json` 保存全部笔记与任务，一文件即全量索引，结构简洁、可靠性高。
-/// - 冲突策略为「更新时间较新者胜出」（last-write-wins），适配单人多端场景。
+/// 按篇同步：每篇笔记一个云端文件。启动、保存后、回到窗口和定时都会跑同一轮。
+/// 失败只留到下一轮，不因此退出登录。
 public final class SyncEngine: ObservableObject {
     public enum Status: Equatable {
         case idle
@@ -18,204 +14,655 @@ public final class SyncEngine: ObservableObject {
     }
 
     @Published public private(set) var status: Status = .idle
-    /// 最近一次同步的统计信息（如「共 3 篇 · 上传 2 · 拉取 1」）
     @Published public private(set) var lastMessage: String?
-    /// 最近一次成功同步时间（持久化，供设置页展示）
     @Published public private(set) var lastSyncDate: Date? {
         didSet {
-            if let d = lastSyncDate { UserDefaults.standard.set(d, forKey: Self.lastSyncKey) }
+            if let date = lastSyncDate { UserDefaults.standard.set(date, forKey: Self.lastSyncKey) }
         }
     }
 
     private let client = BaiduPanClient.shared
+    private var scheduled: Task<Void, Never>?
+    private var needsAnotherRound = false
     private static let lastSyncKey = "tonote.lastSyncDate"
-    private static let manifestName = "manifest.json"
-    private var remoteManifestPath: String {
-        BaiduPanConfig.remoteRoot + "/" + SyncEngine.manifestName
-    }
+
+    private let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+    private let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
 
     public init() {
         lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date
     }
 
-    // MARK: - 对外入口
+    /// 保存后一两秒再同步。连续保存只跑最后一轮。
+    @MainActor
+    public func schedule(store: NoteStore, todos: TodoStore) {
+        scheduled?.cancel()
+        scheduled = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            await self.syncRound(store: store, todos: todos)
+        }
+    }
 
-    /// 一键同步：拉远端 → 对比合并笔记与任务 → 写回本地并上传。
     @MainActor
     public func quickSync(store: NoteStore, todos: TodoStore) async {
-        guard !status.isSyncing else { return }
-        status = .syncing
-        lastMessage = nil
-        do {
-            let token = try await client.validToken()
-            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
-            let remote = try await pull(token: token)
-
-            // 对比合并
-            let mergedNotes = mergeNotes(local: store.notes, remote: remote.notes)
-            let mergedTodos = mergeTodos(local: todos.todos, remote: remote.todos)
-            let stats = diffStats(local: store.notes, remote: remote.notes, merged: mergedNotes)
-
-            // 写回本地并上传
-            store.setNotes(mergedNotes)
-            todos.setTodos(mergedTodos)
-            let manifest = try encodeManifest(notes: mergedNotes, todos: mergedTodos)
-            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
-            try await client.uploadData(manifest, to: remoteManifestPath, accessToken: token.accessToken)
-
-            let ts = Date()
-            status = .success(ts)
-            lastSyncDate = ts
-            lastMessage = stats
-        } catch {
-            status = .failed(error.localizedDescription)
-            lastMessage = error.localizedDescription
-        }
+        await syncRound(store: store, todos: todos)
     }
 
-    /// 单独同步某一篇笔记：仅就该篇与远端对比，任务一并做拉取合并，保持云端完整。
     @MainActor
     public func syncSingleNote(store: NoteStore, todos: TodoStore, noteID: UUID) async {
-        guard !status.isSyncing else { return }
+        await syncRound(store: store, todos: todos, onlyNoteID: noteID)
+    }
+
+    @MainActor
+    public func syncRound(store: NoteStore, todos: TodoStore, onlyNoteID: UUID? = nil) async {
+        if status.isSyncing {
+            needsAnotherRound = true
+            return
+        }
         status = .syncing
         lastMessage = nil
+        var kicked = false
         do {
             let token = try await client.validToken()
             try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
-            let remote = try await pull(token: token)
-
-            // 仅对比本篇笔记
-            let localNote = store.note(with: noteID)
-            let remoteNote = remote.notes.first { $0.id == noteID }
-            let resolved: Note?
-            if let local = localNote, let remote = remoteNote {
-                resolved = local.updatedAt >= remote.updatedAt ? local : remote
-            } else {
-                resolved = localNote ?? remoteNote
+            let noteCount = try await syncNotes(store: store, token: token.accessToken, onlyNoteID: onlyNoteID)
+            var todoCount = 0
+            if onlyNoteID == nil {
+                try await syncNotebooks(token: token.accessToken)
+                todoCount = try await syncTodos(store: todos, token: token.accessToken)
             }
-
-            var mergedNotes = store.notes
-            if let r = resolved {
-                if let idx = mergedNotes.firstIndex(where: { $0.id == noteID }) {
-                    mergedNotes[idx] = r
-                } else {
-                    mergedNotes.append(r)
-                }
-            }
-            let mergedTodos = mergeTodos(local: todos.todos, remote: remote.todos)
-
-            store.setNotes(mergedNotes)
-            todos.setTodos(mergedTodos)
-            let manifest = try encodeManifest(notes: mergedNotes, todos: mergedTodos)
-            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
-            try await client.uploadData(manifest, to: remoteManifestPath, accessToken: token.accessToken)
-
-            let ts = Date()
-            status = .success(ts)
-            lastSyncDate = ts
-            lastMessage = resolved == nil ? "本地与云端均无该笔记" : "已同步本篇"
+            let date = Date()
+            status = .success(date)
+            lastSyncDate = date
+            lastMessage = onlyNoteID == nil
+                ? "笔记 \(noteCount) 篇 · 任务 \(todoCount) 条"
+                : "已同步本篇"
+        } catch DeviceSessionError.kicked {
+            kicked = true
+            status = .failed(DeviceSessionError.kicked.localizedDescription)
+            lastMessage = DeviceSessionError.kicked.localizedDescription
         } catch {
             status = .failed(error.localizedDescription)
             lastMessage = error.localizedDescription
         }
+        let again = needsAnotherRound && !kicked
+        needsAnotherRound = false
+        if again {
+            await syncRound(store: store, todos: todos, onlyNoteID: onlyNoteID)
+        }
     }
 
-    // MARK: - 拉取与合并
+    // MARK: - 笔记
 
-    private func pull(token: BaiduPanToken) async throws -> (notes: [Note], todos: [Todo]) {
+    private func syncNotes(store: NoteStore, token: String, onlyNoteID: UUID?) async throws -> Int {
+        try await migrateNotesIfNeeded(store: store, token: token)
+        let remoteFiles = try await listJSON(directory: notesDirectory, token: token)
+        var remoteIDs = Set(remoteFiles.keys)
+        var localIDs = Set(store.notes.map(\.id))
+        if let onlyNoteID {
+            remoteIDs = remoteIDs.contains(onlyNoteID) ? [onlyNoteID] : []
+            localIDs = localIDs.contains(onlyNoteID) ? [onlyNoteID] : []
+        }
+        var changed = 0
+        var firstError: Error?
+        for id in remoteIDs.union(localIDs) {
+            do {
+                let didChange = try await syncOneNote(id: id,
+                                                      listing: remoteFiles[id],
+                                                      store: store,
+                                                      token: token)
+                if didChange { changed += 1 }
+            } catch DeviceSessionError.kicked {
+                throw DeviceSessionError.kicked
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        if let firstError { throw firstError }
+        return changed
+    }
+
+    /// `notes/` 还是空的、旧清单还在时，把清单拆成按篇文件。之后不再写清单。
+    private func migrateNotesIfNeeded(store: NoteStore, token: String) async throws {
+        let existing = try await listJSON(directory: notesDirectory, token: token)
+        guard existing.isEmpty else { return }
+        let remote = try await pullManifestNotes(token: token)
+        guard !remote.isEmpty else { return }
+        let merged = mergeByUpdatedAt(local: store.notes, remote: remote)
+        for note in merged {
+            var publishing = note
+            publishing.rev = max(publishing.rev, 1)
+            var cursor = store.syncCursor(for: publishing.id)
+            try await uploadAttachments(of: publishing, cursor: &cursor, store: store, token: token)
+            try await uploadNote(publishing, token: token)
+            cursor.baseRev = publishing.rev
+            cursor.baseUpdatedAt = publishing.updatedAt
+            cursor.dirty = false
+            cursor.serverMtime = nil
+            store.applySyncedNote(publishing, cursor: cursor)
+        }
+    }
+
+    private func syncOneNote(id: UUID,
+                             listing: BaiduPanListEntry?,
+                             store: NoteStore,
+                             token: String) async throws -> Bool {
+        let local = store.note(with: id)
+        var cursor = local == nil ? SyncCursor.unsynced : store.syncCursor(for: id)
+        if let mtime = listing?.serverMtime, SyncRules.shouldSkipFetch(serverMtime: mtime, cursor: cursor) {
+            return false
+        }
+        let remote = try await downloadNote(id: id, token: token)
+        let step = SyncRules.afterFetch(dirty: cursor.dirty,
+                                        remoteRev: remote?.rev,
+                                        remoteUpdatedAt: remote?.updatedAt,
+                                        localUpdatedAt: local?.updatedAt,
+                                        cursor: cursor)
+        switch step {
+        case .skip:
+            return false
+        case .rememberMtime:
+            guard let local else { return false }
+            cursor.serverMtime = listing?.serverMtime
+            cursor.dirty = false
+            store.applySyncedNote(local, cursor: cursor)
+            return false
+        case .useRemote:
+            guard let remote else { return false }
+            cursor = SyncCursor(baseRev: remote.rev,
+                                baseUpdatedAt: remote.updatedAt,
+                                serverMtime: listing?.serverMtime,
+                                dirty: false,
+                                uploadedAttachments: cursor.uploadedAttachments)
+            if await downloadAttachments(of: remote, cursor: &cursor, store: store, token: token) == false {
+                cursor.serverMtime = nil
+            }
+            store.applySyncedNote(remote, cursor: cursor)
+            return true
+        case .upload(let rev):
+            guard var note = local else { return false }
+            let published = try await publish(note: &note,
+                                              rev: rev,
+                                              cursor: &cursor,
+                                              store: store,
+                                              token: token,
+                                              listingMtime: listing?.serverMtime)
+            return published
+        case .conflict:
+            guard let local, let remote else { return false }
+            try await resolveConflict(local: local,
+                                      remote: remote,
+                                      cursor: cursor,
+                                      store: store,
+                                      token: token,
+                                      listingMtime: listing?.serverMtime)
+            return true
+        }
+    }
+
+    private func publish(note: inout Note,
+                         rev: Int,
+                         cursor: inout SyncCursor,
+                         store: NoteStore,
+                         token: String,
+                         listingMtime: Int?) async throws -> Bool {
+        var attemptCursor = cursor
+        var publishing = note
+        var nextRev = rev
+        for _ in 0..<3 {
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token)
+            publishing.rev = nextRev
+            if publishing.purged {
+                try await uploadNote(publishing, token: token)
+            } else {
+                try await uploadAttachments(of: publishing, cursor: &attemptCursor, store: store, token: token)
+                try await uploadNote(publishing, token: token)
+            }
+            let check = try await downloadNote(id: publishing.id, token: token)
+            if check?.rev == publishing.rev,
+               let updated = check?.updatedAt,
+               SyncRules.sameTime(updated, publishing.updatedAt) {
+                attemptCursor.baseRev = publishing.rev
+                attemptCursor.baseUpdatedAt = publishing.updatedAt
+                attemptCursor.dirty = false
+                attemptCursor.serverMtime = listingMtime
+                if publishing.purged {
+                    let prefix = "attachments/\(publishing.id.uuidString)/"
+                    let stillUsed = store.notes.contains { other in
+                        other.id != publishing.id && !other.purged && other.body.contains(prefix)
+                    }
+                    if !stillUsed {
+                        try? await client.deleteRemote(path: attachmentDirectory(publishing.id), accessToken: token)
+                    }
+                }
+                store.applySyncedNote(publishing, cursor: attemptCursor)
+                note = publishing
+                cursor = attemptCursor
+                return true
+            }
+            if let check {
+                let again = SyncRules.afterFetch(dirty: true,
+                                                 remoteRev: check.rev,
+                                                 remoteUpdatedAt: check.updatedAt,
+                                                 localUpdatedAt: publishing.updatedAt,
+                                                 cursor: attemptCursor)
+                if case .upload(let next) = again {
+                    nextRev = next
+                    continue
+                }
+                if case .conflict = again, let current = store.note(with: publishing.id) {
+                    try await resolveConflict(local: current,
+                                              remote: check,
+                                              cursor: attemptCursor,
+                                              store: store,
+                                              token: token,
+                                              listingMtime: listingMtime)
+                    return true
+                }
+            }
+        }
+        throw BaiduPanError.server(message: "笔记「\(publishing.title)」连续三次没能写上云端")
+    }
+
+    private func resolveConflict(local: Note,
+                                 remote: Note,
+                                 cursor: SyncCursor,
+                                 store: NoteStore,
+                                 token: String,
+                                 listingMtime: Int?) async throws {
+        if SyncRules.remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt) {
+            var copy = conflictCopy(of: local)
+            copy.rev = 0
+            var copyCursor = SyncCursor(uploadedAttachments: cursor.uploadedAttachments)
+            store.applySyncedNote(copy, cursor: copyCursor)
+            _ = try await publish(note: &copy, rev: 1, cursor: &copyCursor, store: store, token: token, listingMtime: nil)
+            var clean = SyncCursor(baseRev: remote.rev,
+                                   baseUpdatedAt: remote.updatedAt,
+                                   serverMtime: listingMtime,
+                                   dirty: false,
+                                   uploadedAttachments: cursor.uploadedAttachments)
+            _ = await downloadAttachments(of: remote, cursor: &clean, store: store, token: token)
+            store.applySyncedNote(remote, cursor: clean)
+        } else {
+            var copy = conflictCopy(of: remote)
+            var copyCursor = SyncCursor(uploadedAttachments: cursor.uploadedAttachments)
+            _ = await downloadAttachments(of: copy, cursor: &copyCursor, store: store, token: token)
+            store.applySyncedNote(copy, cursor: copyCursor)
+            _ = try await publish(note: &copy, rev: 1, cursor: &copyCursor, store: store, token: token, listingMtime: nil)
+            var winner = local
+            var winnerCursor = cursor
+            let rev = max(local.rev, remote.rev) + 1
+            _ = try await publish(note: &winner, rev: rev, cursor: &winnerCursor, store: store, token: token, listingMtime: listingMtime)
+        }
+    }
+
+    private func conflictCopy(of note: Note) -> Note {
+        var copy = note
+        copy.id = UUID()
+        if !copy.title.hasSuffix("（冲突副本）") {
+            copy.title += "（冲突副本）"
+        }
+        copy.rev = 0
+        copy.purged = false
+        return copy
+    }
+
+    // MARK: - 图片
+
+    private func uploadAttachments(of note: Note,
+                                   cursor: inout SyncCursor,
+                                   store: NoteStore,
+                                   token: String) async throws {
+        for path in NoteAttachmentIndex.relativePaths(in: note.body) where !cursor.uploadedAttachments.contains(path) {
+            let file = store.attachments.absoluteURL(for: path)
+            guard FileManager.default.fileExists(atPath: file.path) else { continue }
+            let data = try Data(contentsOf: file)
+            try await client.uploadData(data, to: BaiduPanConfig.remoteRoot + "/" + path, accessToken: token)
+            cursor.uploadedAttachments.append(path)
+            if let current = store.note(with: note.id) {
+                var persisted = cursor
+                persisted.dirty = true
+                store.applySyncedNote(current, cursor: persisted)
+            }
+        }
+    }
+
+    /// 返回 false 表示还有图片没拉下来，下一轮要再试。
+    private func downloadAttachments(of note: Note,
+                                     cursor: inout SyncCursor,
+                                     store: NoteStore,
+                                     token: String) async -> Bool {
+        var complete = true
+        for path in NoteAttachmentIndex.relativePaths(in: note.body) {
+            if !store.attachments.fileExists(relativePath: path) {
+                do {
+                    let data = try await client.downloadData(BaiduPanConfig.remoteRoot + "/" + path, accessToken: token)
+                    let dest = store.attachments.absoluteURL(for: path)
+                    try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(),
+                                                           withIntermediateDirectories: true)
+                    try data.write(to: dest)
+                } catch BaiduPanError.notFound {
+                    continue
+                } catch {
+                    complete = false
+                    continue
+                }
+            }
+            if !cursor.uploadedAttachments.contains(path) {
+                cursor.uploadedAttachments.append(path)
+            }
+        }
+        return complete
+    }
+
+    // MARK: - 笔记本与任务
+
+    private func syncNotebooks(token: String) async throws {
+        let notebooks = NotebookStore.shared
+        let remote = try await downloadNotebooks(token: token)
+        let merged = NotebookMerge.merge(localNames: notebooks.custom,
+                                         localRemoved: notebooks.removed,
+                                         remote: remote)
+        let changed = merged != remote || notebooks.isDirty
+        notebooks.applyCloud(names: merged.names, removed: merged.removed)
+        if changed {
+            let data = try encoder.encode(merged)
+            try await client.uploadData(data, to: notebooksPath, accessToken: token)
+        }
+    }
+
+    private func syncTodos(store: TodoStore, token: String) async throws -> Int {
+        try await migrateTodosIfNeeded(store: store, token: token)
+        let remoteFiles = try await listJSON(directory: todosDirectory, token: token)
+        let ids = Set(remoteFiles.keys).union(store.todos.map(\.id))
+        var changed = 0
+        var firstError: Error?
+        for id in ids {
+            do {
+                if try await syncOneTodo(id: id, listing: remoteFiles[id], store: store, token: token) {
+                    changed += 1
+                }
+            } catch DeviceSessionError.kicked {
+                throw DeviceSessionError.kicked
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        if let firstError { throw firstError }
+        return changed
+    }
+
+    private func migrateTodosIfNeeded(store: TodoStore, token: String) async throws {
+        let existing = try await listJSON(directory: todosDirectory, token: token)
+        guard existing.isEmpty else { return }
+        let remote = try await pullManifestTodos(token: token)
+        guard !remote.isEmpty else { return }
+        let merged = mergeTodos(local: store.todos, remote: remote)
+        for todo in merged {
+            var publishing = todo
+            publishing.rev = max(publishing.rev, 1)
+            try await uploadTodo(publishing, token: token)
+            let cursor = SyncCursor(baseRev: publishing.rev,
+                                    baseUpdatedAt: publishing.updatedAt,
+                                    serverMtime: nil,
+                                    dirty: false,
+                                    uploadedAttachments: [])
+            store.applySyncedTodo(publishing, cursor: cursor)
+        }
+    }
+
+    private func syncOneTodo(id: UUID,
+                             listing: BaiduPanListEntry?,
+                             store: TodoStore,
+                             token: String) async throws -> Bool {
+        let local = store.todo(with: id)
+        var cursor = local == nil ? SyncCursor.unsynced : store.syncCursor(for: id)
+        if let mtime = listing?.serverMtime, SyncRules.shouldSkipFetch(serverMtime: mtime, cursor: cursor) {
+            return false
+        }
+        let remote = try await downloadTodo(id: id, token: token)
+        let step = SyncRules.afterFetch(dirty: cursor.dirty,
+                                        remoteRev: remote?.rev,
+                                        remoteUpdatedAt: remote?.updatedAt,
+                                        localUpdatedAt: local?.updatedAt,
+                                        cursor: cursor)
+        switch step {
+        case .skip:
+            return false
+        case .rememberMtime:
+            guard let local else { return false }
+            cursor.serverMtime = listing?.serverMtime
+            cursor.dirty = false
+            store.applySyncedTodo(local, cursor: cursor)
+            return false
+        case .useRemote:
+            guard let remote else { return false }
+            let clean = SyncCursor(baseRev: remote.rev,
+                                   baseUpdatedAt: remote.updatedAt,
+                                   serverMtime: listing?.serverMtime,
+                                   dirty: false,
+                                   uploadedAttachments: [])
+            store.applySyncedTodo(remote, cursor: clean)
+            return true
+        case .upload(let rev):
+            guard var todo = local else { return false }
+            return try await publishTodo(&todo, rev: rev, cursor: &cursor, store: store, token: token, listingMtime: listing?.serverMtime)
+        case .conflict:
+            guard let local, let remote else { return false }
+            try await resolveTodoConflict(local: local, remote: remote, cursor: cursor, store: store, token: token, listingMtime: listing?.serverMtime)
+            return true
+        }
+    }
+
+    private func publishTodo(_ todo: inout Todo,
+                             rev: Int,
+                             cursor: inout SyncCursor,
+                             store: TodoStore,
+                             token: String,
+                             listingMtime: Int?) async throws -> Bool {
+        var publishing = todo
+        var attempt = cursor
+        var nextRev = rev
+        for _ in 0..<3 {
+            try await DeviceRegistry.shared.ensureNotKicked(accessToken: token)
+            publishing.rev = nextRev
+            try await uploadTodo(publishing, token: token)
+            let check = try await downloadTodo(id: publishing.id, token: token)
+            if check?.rev == publishing.rev,
+               let updated = check?.updatedAt,
+               SyncRules.sameTime(updated, publishing.updatedAt) {
+                attempt.baseRev = publishing.rev
+                attempt.baseUpdatedAt = publishing.updatedAt
+                attempt.dirty = false
+                attempt.serverMtime = listingMtime
+                store.applySyncedTodo(publishing, cursor: attempt)
+                todo = publishing
+                cursor = attempt
+                return true
+            }
+            if let check {
+                let again = SyncRules.afterFetch(dirty: true,
+                                                 remoteRev: check.rev,
+                                                 remoteUpdatedAt: check.updatedAt,
+                                                 localUpdatedAt: publishing.updatedAt,
+                                                 cursor: attempt)
+                if case .upload(let next) = again {
+                    nextRev = next
+                    continue
+                }
+                if case .conflict = again, let current = store.todo(with: publishing.id) {
+                    try await resolveTodoConflict(local: current, remote: check, cursor: attempt,
+                                                 store: store, token: token, listingMtime: listingMtime)
+                    return true
+                }
+            }
+        }
+        throw BaiduPanError.server(message: "任务「\(publishing.title)」连续三次没能写上云端")
+    }
+
+    private func resolveTodoConflict(local: Todo,
+                                     remote: Todo,
+                                     cursor: SyncCursor,
+                                     store: TodoStore,
+                                     token: String,
+                                     listingMtime: Int?) async throws {
+        if SyncRules.remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt) {
+            let clean = SyncCursor(baseRev: remote.rev, baseUpdatedAt: remote.updatedAt,
+                                   serverMtime: listingMtime, dirty: false, uploadedAttachments: [])
+            store.applySyncedTodo(remote, cursor: clean)
+            var copy = conflictCopy(of: local)
+            store.applySyncedTodo(copy, cursor: .unsynced)
+            var copyCursor = SyncCursor.unsynced
+            _ = try await publishTodo(&copy, rev: 1, cursor: &copyCursor, store: store, token: token, listingMtime: nil)
+        } else {
+            var copy = conflictCopy(of: remote)
+            store.applySyncedTodo(copy, cursor: .unsynced)
+            var copyCursor = SyncCursor.unsynced
+            _ = try await publishTodo(&copy, rev: 1, cursor: &copyCursor, store: store, token: token, listingMtime: nil)
+            var winner = local
+            var winnerCursor = cursor
+            _ = try await publishTodo(&winner, rev: max(local.rev, remote.rev) + 1, cursor: &winnerCursor, store: store, token: token, listingMtime: listingMtime)
+        }
+    }
+
+    private func conflictCopy(of todo: Todo) -> Todo {
+        var copy = todo
+        copy.id = UUID()
+        if !copy.title.hasSuffix("（冲突副本）") {
+            copy.title += "（冲突副本）"
+        }
+        copy.rev = 0
+        copy.purged = false
+        return copy
+    }
+
+    // MARK: - 网盘读写
+
+    private var notesDirectory: String { BaiduPanConfig.remoteRoot + "/notes" }
+    private var todosDirectory: String { BaiduPanConfig.remoteRoot + "/todos" }
+    private var notebooksPath: String { BaiduPanConfig.remoteRoot + "/notebooks.json" }
+    private var manifestPath: String { BaiduPanConfig.remoteRoot + "/manifest.json" }
+
+    private func notePath(_ id: UUID) -> String { notesDirectory + "/" + id.uuidString + ".json" }
+    private func todoPath(_ id: UUID) -> String { todosDirectory + "/" + id.uuidString + ".json" }
+    private func attachmentDirectory(_ id: UUID) -> String {
+        BaiduPanConfig.remoteRoot + "/attachments/" + id.uuidString
+    }
+
+    private func listJSON(directory: String, token: String) async throws -> [UUID: BaiduPanListEntry] {
+        let entries: [BaiduPanListEntry]
         do {
-            let data = try await client.downloadData(remoteManifestPath, accessToken: token.accessToken)
-            let m = try decodeManifest(data)
-            return (m?.notes ?? [], m?.todos ?? [])
+            entries = try await client.listFiles(directory: directory, accessToken: token)
         } catch BaiduPanError.notFound {
-            return ([], []) // 云端尚未同步过
+            return [:]
+        }
+        var result: [UUID: BaiduPanListEntry] = [:]
+        for entry in entries {
+            let name = entry.serverFilename ?? entry.path?.split(separator: "/").last.map(String.init) ?? ""
+            guard entry.isdir != 1, name.hasSuffix(".json") else { continue }
+            let stem = name.replacingOccurrences(of: ".json", with: "")
+            guard let id = UUID(uuidString: stem) else { continue }
+            result[id] = entry
+        }
+        return result
+    }
+
+    private func downloadNote(id: UUID, token: String) async throws -> Note? {
+        do {
+            let data = try await client.downloadData(notePath(id), accessToken: token)
+            return try decoder.decode(Note.self, from: data)
+        } catch BaiduPanError.notFound {
+            return nil
         }
     }
 
-    /// 笔记合并：按 id 聚合，updatedAt 较新者胜出。
-    private func mergeNotes(local: [Note], remote: [Note]) -> [Note] {
-        var map: [UUID: Note] = [:]
-        for n in remote { map[n.id] = n }
-        for n in local {
-            if let r = map[n.id] {
-                map[n.id] = n.updatedAt >= r.updatedAt ? n : r
-            } else {
-                map[n.id] = n
-            }
-        }
-        return Array(map.values).sorted { $0.updatedAt > $1.updatedAt }
+    private func uploadNote(_ note: Note, token: String) async throws {
+        try await client.uploadData(try encoder.encode(note), to: notePath(note.id), accessToken: token)
     }
 
-    /// 任务合并：同 id 取更新时间较新者，仅一端存在的直接纳入。
-    private func mergeTodos(local: [Todo], remote: [Todo]) -> [Todo] {
-        var map: [UUID: Todo] = [:]
-        for t in remote { map[t.id] = t }
-        for t in local {
-            if let r = map[t.id] {
-                map[t.id] = t.updatedAt >= r.updatedAt ? t : r
-            } else {
-                map[t.id] = t
-            }
+    private func downloadTodo(id: UUID, token: String) async throws -> Todo? {
+        do {
+            let data = try await client.downloadData(todoPath(id), accessToken: token)
+            return try decoder.decode(Todo.self, from: data)
+        } catch BaiduPanError.notFound {
+            return nil
         }
-        return Array(map.values).sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    /// 生成同步统计文案（仅统计笔记，任务不额外计数）。
-    private func diffStats(local: [Note], remote: [Note], merged: [Note]) -> String {
-        let localIDs = Set(local.map { $0.id })
-        let remoteIDs = Set(remote.map { $0.id })
-        let addedFromLocal = localIDs.subtracting(remoteIDs).count
-        let addedFromRemote = remoteIDs.subtracting(localIDs).count
-        return "共 \(merged.count) 篇 · 上传 \(addedFromLocal) · 拉取 \(addedFromRemote)"
+    private func uploadTodo(_ todo: Todo, token: String) async throws {
+        try await client.uploadData(try encoder.encode(todo), to: todoPath(todo.id), accessToken: token)
     }
 
-    // MARK: - 编解码
-
-    private struct CloudManifest: Codable {
-        let deviceID: String
-        let syncedAt: Date
-        let notes: [Note]
-        let todos: [Todo]
-
-        enum CodingKeys: String, CodingKey {
-            case deviceID = "device_id"
-            case syncedAt = "synced_at"
-            case notes
-            case todos
+    private func downloadNotebooks(token: String) async throws -> NotebookCloud? {
+        do {
+            let data = try await client.downloadData(notebooksPath, accessToken: token)
+            return try decoder.decode(NotebookCloud.self, from: data)
+        } catch BaiduPanError.notFound {
+            return nil
         }
+    }
 
-        init(deviceID: String, syncedAt: Date, notes: [Note], todos: [Todo]) {
-            self.deviceID = deviceID
-            self.syncedAt = syncedAt
-            self.notes = notes
-            self.todos = todos
-        }
-
+    private struct OldManifest: Codable {
+        var notes: [Note]
+        var todos: [Todo]
+        enum CodingKeys: String, CodingKey { case notes, todos }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            deviceID = try c.decode(String.self, forKey: .deviceID)
-            syncedAt = try c.decode(Date.self, forKey: .syncedAt)
             notes = try c.decodeIfPresent([Note].self, forKey: .notes) ?? []
             todos = try c.decodeIfPresent([Todo].self, forKey: .todos) ?? []
         }
     }
 
-    private func decodeManifest(_ data: Data) throws -> CloudManifest? {
-        let dec = JSONDecoder()
-        dec.dateDecodingStrategy = .iso8601
-        return try? dec.decode(CloudManifest.self, from: data)
+    private func pullManifest(token: String) async throws -> OldManifest? {
+        do {
+            let data = try await client.downloadData(manifestPath, accessToken: token)
+            return try decoder.decode(OldManifest.self, from: data)
+        } catch BaiduPanError.notFound {
+            return nil
+        }
     }
 
-    private func encodeManifest(notes: [Note], todos: [Todo]) throws -> Data {
-        let manifest = CloudManifest(
-            deviceID: Host.current().name ?? "unknown",
-            syncedAt: Date(),
-            notes: notes,
-            todos: todos
-        )
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        enc.dateEncodingStrategy = .iso8601
-        return try enc.encode(manifest)
+    private func pullManifestNotes(token: String) async throws -> [Note] {
+        try await pullManifest(token: token)?.notes ?? []
+    }
+
+    private func pullManifestTodos(token: String) async throws -> [Todo] {
+        try await pullManifest(token: token)?.todos ?? []
+    }
+
+    private func mergeByUpdatedAt(local: [Note], remote: [Note]) -> [Note] {
+        var map: [UUID: Note] = [:]
+        for note in remote { map[note.id] = note }
+        for note in local {
+            if let other = map[note.id] {
+                map[note.id] = note.updatedAt >= other.updatedAt ? note : other
+            } else {
+                map[note.id] = note
+            }
+        }
+        return Array(map.values)
+    }
+
+    private func mergeTodos(local: [Todo], remote: [Todo]) -> [Todo] {
+        var map: [UUID: Todo] = [:]
+        for todo in remote { map[todo.id] = todo }
+        for todo in local {
+            if let other = map[todo.id] {
+                map[todo.id] = todo.updatedAt >= other.updatedAt ? todo : other
+            } else {
+                map[todo.id] = todo
+            }
+        }
+        return Array(map.values)
     }
 }

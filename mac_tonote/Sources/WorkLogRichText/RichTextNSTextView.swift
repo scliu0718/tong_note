@@ -56,6 +56,12 @@ final class RichTextNSTextView: NSTextView {
     /// 单元格下拉菜单直接调用命令层（同模块），不必把事件回传到 SwiftUI。
     weak var tableController: RichTextEditorController?
 
+    /// 载入笔记后的一小段时间内，禁止 NSTextView 把光标滚进视口。
+    /// 宽表格会把文档撑得很宽，`setSelectedRange` 常把横向滚动停在中间，
+    /// 打开笔记时就看不到最左侧。
+    private var lockScrollToOrigin = false
+    private var originLockToken = 0
+
     /// 只画灰圆 / 蓝圆 / 下箭头，不接收事件；事件仍由 NSTextView 自己处理。
     private var tableGutter: RichTextTableGutterView?
 
@@ -119,6 +125,50 @@ final class RichTextNSTextView: NSTextView {
         refreshTableGutter()
     }
 
+    /// 打开或切换笔记后，把滚动位置钉在文档左上角。
+    /// 排版和 `scrollRangeToVisible` 会在当前回合之后再改一次原点，所以多钉两拍。
+    func showFromDocumentStart() {
+        originLockToken += 1
+        lockScrollToOrigin = true
+        let token = originLockToken
+        pinClipToOrigin()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.originLockToken == token else { return }
+            self.pinClipToOrigin()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.originLockToken == token else { return }
+                self.pinClipToOrigin()
+                self.lockScrollToOrigin = false
+            }
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        if lockScrollToOrigin { pinClipToOrigin() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil, lockScrollToOrigin { pinClipToOrigin() }
+    }
+
+    override func scrollRangeToVisible(_ range: NSRange) {
+        if lockScrollToOrigin {
+            pinClipToOrigin()
+            return
+        }
+        super.scrollRangeToVisible(range)
+    }
+
+    private func pinClipToOrigin() {
+        guard let scroll = enclosingScrollView else { return }
+        let clip = scroll.contentView
+        guard clip.bounds.origin.x != 0 || clip.bounds.origin.y != 0 else { return }
+        clip.scroll(to: .zero)
+        scroll.reflectScrolledClipView(clip)
+    }
+
     /// 重新计算所有灰圆与格子矩形（文本变化、视图变宽、切换笔记后调用）。
     func refreshTableGutter() {
         guard isEditable else {
@@ -152,35 +202,34 @@ final class RichTextNSTextView: NSTextView {
     /// 带 `.cursorUpdate` 的 tracking area 会接管光标，避免 NSTextView 默认把
     /// hover 到灰圆上的光标又刷回 I 形（选文字）。
     override func cursorUpdate(with event: NSEvent) {
-        if isEditable, isPointerArea {
-            NSCursor.pointingHand.set()
-        } else {
-            NSCursor.iBeam.set()
-        }
-    }
-
-    private var isPointerArea: Bool {
-        tableGutter?.activeDot != nil || tableGutter?.menuHover == true
+        let point = convert(event.locationInWindow, from: nil)
+        refreshTablePointer(at: point)
     }
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        refreshTablePointer(at: point)
+    }
+
+    /// 灰圆和单元格菜单用手型；竖边用左右拖动光标（两道竖线），横边用上下拖动光标。
+    private func refreshTablePointer(at point: NSPoint) {
         guard isEditable, let layout = tableGutter?.layout else {
             tableGutter?.activeDot = nil
             tableGutter?.menuHover = false
-            NSCursor.arrow.set()
+            NSCursor.iBeam.set()
             return
         }
-        let point = convert(event.locationInWindow, from: nil)
         let hoveringMenu = tableGutter?.activeCell.map {
             $0.menuRect.insetBy(dx: -3, dy: -3).contains(point)
         } ?? false
         if tableGutter?.menuHover != hoveringMenu { tableGutter?.menuHover = hoveringMenu }
         let dot = hoveringMenu ? nil : RichTextTableGutterGeometry.dot(at: point, in: layout)
         if tableGutter?.activeDot != dot { tableGutter?.activeDot = dot }
-        // 灰圆 / 蓝圆 / 下箭头都是可点击控件，光标必须是手型而不是选文字的 I 形。
         if dot != nil || hoveringMenu {
             NSCursor.pointingHand.set()
+        } else if let border = RichTextTableGutterGeometry.borderCursor(at: point, in: layout) {
+            border.set()
         } else {
             NSCursor.iBeam.set()
         }
@@ -218,13 +267,12 @@ final class RichTextNSTextView: NSTextView {
         }
 
         // 2. 小灰圆 / 蓝色加号 → 插入行或列。
-        //    只认「+」图标本身：几何命中必须在蓝色圆（半径 10）范围内，
-        //    不扩大成左侧/角落软命中区。hover 兜底只给极小余量（13pt）应对亚像素抖动。
+        //    蓝色圆半径 10，点击常落在靠表格的一侧，命中和 hover 兜底都放到 22pt。
         var resolved = nearest
         if resolved == nil, let current = tableGutter?.activeDot {
             let dx = abs(current.point.x - point.x)
             let dy = abs(current.point.y - point.y)
-            if dx <= 13 && dy <= 13 { resolved = current }
+            if dx <= 22 && dy <= 22 { resolved = current }
         }
         guard let dot = resolved else {
             var nearestDistance = CGFloat.greatestFiniteMagnitude

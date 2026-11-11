@@ -17,6 +17,7 @@ public final class NoteStore: ObservableObject {
     public static let quickSyncNoteID = UUID(uuidString: "E1C2D3A4-B5F6-47C8-9D0E-1F2A3B4C5D6E")!
     /// 附件仓库
     public let attachments: AttachmentStore
+    private let cursors: SyncCursorStore
 
     public convenience init() {
         let fm = FileManager.default
@@ -36,6 +37,7 @@ public final class NoteStore: ObservableObject {
         rootDirectory = directory
         fileURL = directory.appendingPathComponent("notes.json")
         attachments = AttachmentStore(rootDirectory: directory)
+        cursors = SyncCursorStore(fileURL: directory.appendingPathComponent("note-sync.json"))
 
         encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -74,17 +76,17 @@ public final class NoteStore: ObservableObject {
 
     // MARK: - 派生数据
     public var activeNotes: [Note] {
-        notes.filter { !$0.isTrashed }.sorted { $0.updatedAt > $1.updatedAt }
+        notes.filter { !$0.purged && !$0.isTrashed }.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     public var trashNotes: [Note] {
-        notes.filter { $0.isTrashed }
+        notes.filter { $0.isTrashed && !$0.purged }
             .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
     }
 
     public var allTags: [String] {
         var set = Set<String>()
-        for n in notes where !n.isTrashed && n.id != NoteStore.quickSyncNoteID {
+        for n in notes where !n.isTrashed && !n.purged && n.id != NoteStore.quickSyncNoteID {
             for t in n.tags { set.insert(t) }
         }
         return set.sorted()
@@ -102,23 +104,31 @@ public final class NoteStore: ObservableObject {
     /// 删除目录时把该目录下的笔记（含回收站）整体转移到目标分类，笔记本身不删除。
     public func moveNotes(from: String, to: String) {
         var changed = false
+        var touched: [UUID] = []
         for i in notes.indices where notes[i].notebook == from {
             notes[i].notebook = to
             notes[i].updatedAt = Date()
+            touched.append(notes[i].id)
             changed = true
         }
-        if changed { save() }
+        if changed {
+            save()
+            touched.forEach { cursors.markDirty($0) }
+        }
     }
 
     /// 删除一个标签：从所有笔记（含回收站）上移除，笔记本身与正文保留。
     public func removeTag(_ tag: String) {
-        var changed = false
+        var touched: [UUID] = []
         for i in notes.indices where notes[i].tags.contains(tag) {
             notes[i].tags.removeAll { $0 == tag }
             notes[i].updatedAt = Date()
-            changed = true
+            touched.append(notes[i].id)
         }
-        if changed { save() }
+        if !touched.isEmpty {
+            save()
+            touched.forEach { cursors.markDirty($0) }
+        }
     }
 
     // MARK: - CRUD
@@ -127,32 +137,43 @@ public final class NoteStore: ObservableObject {
         let note = Note(title: "未命名笔记", body: "", notebook: notebook)
         notes.insert(note, at: 0)
         save()
+        cursors.markDirty(note.id)
         return note
     }
 
     public func moveToTrash(_ id: UUID) {
         guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[i].deletedAt = Date()
+        notes[i].updatedAt = Date()
         notes[i].pinned = false
         save()
+        cursors.markDirty(id)
     }
 
     public func restore(_ id: UUID) {
         guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[i].deletedAt = nil
+        notes[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     public func permanentlyDelete(_ id: UUID) {
-        notes.removeAll { $0.id == id }
+        guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[i].purged = true
+        notes[i].updatedAt = Date()
+        notes[i].pinned = false
         attachments.removeAttachments(for: id)
         save()
+        cursors.markDirty(id)
     }
 
     public func togglePin(_ id: UUID) {
         guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[i].pinned.toggle()
+        notes[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     public func note(with id: UUID) -> Note? {
@@ -172,6 +193,7 @@ public final class NoteStore: ObservableObject {
         updated.updatedAt = Date()
         notes[idx] = updated
         save()
+        cursors.markDirty(note.id)
     }
 
     /// 原子更新正文与正文格式（富文本编辑器每次保存都走这里）
@@ -180,6 +202,27 @@ public final class NoteStore: ObservableObject {
         notes[idx].body = body
         notes[idx].contentFormat = format
         notes[idx].updatedAt = Date()
+        save()
+        cursors.markDirty(id)
+    }
+
+    public func syncCursor(for id: UUID) -> SyncCursor {
+        cursors.cursor(for: id)
+    }
+
+    /// 同步结果回写。不标脏，也不触发下一轮防抖同步。
+    public func applySyncedNote(_ note: Note, cursor: SyncCursor) {
+        if let idx = notes.firstIndex(where: { $0.id == note.id }) {
+            notes[idx] = note
+        } else {
+            notes.append(note)
+        }
+        if note.purged && !notes.contains(where: { other in
+            other.id != note.id && !other.purged && other.body.contains("attachments/\(note.id.uuidString)/")
+        }) {
+            attachments.removeAttachments(for: note.id)
+        }
+        cursors.set(cursor, for: note.id)
         save()
     }
 

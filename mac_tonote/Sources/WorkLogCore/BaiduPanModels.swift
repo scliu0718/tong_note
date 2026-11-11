@@ -56,11 +56,38 @@ public struct BaiduPanListEntry: Codable, Equatable, Sendable {
     public let path: String?
     public let serverFilename: String?
     public let isdir: Int?
+    /// 网盘目录项的修改时间（秒）。只用来跳过没变的文件。
+    public let serverMtime: Int?
 
     enum CodingKeys: String, CodingKey {
         case path
         case serverFilename = "server_filename"
         case isdir
+        case serverMtime = "server_mtime"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        path = try c.decodeIfPresent(String.self, forKey: .path)
+        serverFilename = try c.decodeIfPresent(String.self, forKey: .serverFilename)
+        isdir = try c.decodeIfPresent(Int.self, forKey: .isdir)
+        if let value = try? c.decode(Int.self, forKey: .serverMtime) {
+            serverMtime = value
+        } else if let value = try? c.decode(Double.self, forKey: .serverMtime) {
+            serverMtime = Int(value)
+        } else if let value = try? c.decode(String.self, forKey: .serverMtime), let number = Int(value) {
+            serverMtime = number
+        } else {
+            serverMtime = nil
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(path, forKey: .path)
+        try c.encodeIfPresent(serverFilename, forKey: .serverFilename)
+        try c.encodeIfPresent(isdir, forKey: .isdir)
+        try c.encodeIfPresent(serverMtime, forKey: .serverMtime)
     }
 }
 

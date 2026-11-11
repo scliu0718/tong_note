@@ -199,8 +199,11 @@ enum RichTextTableGutterGeometry {
     private static let verticalChrome: CGFloat = 7
     /// 灰圆离表格边沿的距离（上下左右一致）
     private static let dotInset: CGFloat = 12
-    /// 命中半径略大于蓝色加号圆（半径 10），点在边缘也能插入行列
-    private static let dotHitRadius: CGFloat = 20
+    /// 整张表相对正文起点右移的距离。12pt 让灰圆落在文字上，再加 4pt 让表格离文字更远。
+    static let tableLeadingMargin: CGFloat = 16
+    /// 蓝色加号半径 10。实际点击常常落在圆心偏表格一侧约 15–20pt，
+    /// 13pt 的命中框会把按钮本身判成没点中。
+    private static let dotHitRadius: CGFloat = 22
 
     private struct CellRect {
         var row: Int
@@ -236,10 +239,10 @@ enum RichTextTableGutterGeometry {
                                  storage: storage,
                                  layoutManager: layoutManager,
                                  textContainer: textContainer)
-        // 加行圆用和加列圆同一套坐标（列/行边界反推出的表格几何，已是文档坐标），
-        // 这样绘制位置与 mouseDown 的 hit-test 完全一致，不会出现「画在左、命中在右」的错位，
-        // 也不会因 visibleRect 在初始布局时未稳定而算错初始位置。
-        // 圆放在表格左边界外侧 dotInset，编辑区 left inset=24 给它留了空间，不会被裁掉。
+        let rowDotX = bodyTextMinX(in: textView,
+                                   storage: storage,
+                                   layoutManager: layoutManager,
+                                   textContainer: textContainer)
         var dots: [RichTextTableGutterDot] = []
         var cells: [RichTextTableCellFrame] = []
         for frame in frames {
@@ -255,16 +258,16 @@ enum RichTextTableGutterGeometry {
                                       height: frame.bounds.height + dotInset * 2)
                 ))
             }
-            // 加行圆：x 固定在表格左边界外侧（与列边界同坐标系），y 跟随各行分隔线。
+            // 加行圆的横坐标锁在正文起点，表格再往右挪时灰圆仍与上面的文字对齐。
             for (index, edge) in frame.rowEdges.enumerated() {
                 dots.append(RichTextTableGutterDot(
                     kind: .row,
                     index: index,
                     probe: frame.probe,
-                    point: NSPoint(x: frame.bounds.minX - dotInset, y: edge),
-                    guideRect: NSRect(x: frame.bounds.minX - dotInset,
+                    point: NSPoint(x: rowDotX, y: edge),
+                    guideRect: NSRect(x: rowDotX,
                                       y: edge - 0.75,
-                                      width: frame.bounds.width + dotInset,
+                                      width: max(frame.bounds.maxX - rowDotX, 1),
                                       height: 1.5)
                 ))
             }
@@ -292,13 +295,12 @@ enum RichTextTableGutterGeometry {
         for dot in layout.dots {
             let dx = abs(dot.point.x - point.x)
             let dy = abs(dot.point.y - point.y)
-            // 只认「+」图标本身：蓝色圆半径 10，命中范围控制在半径 13 左右，
-            // 不放大成软命中区。主轴（列=横向、行=纵向）权重加倍，
-            // 让左上角两个圆不会互相抢（一个 dprimary≈0 时压过另一个）。
+            // 蓝色圆半径 10。点击常常落在圆心靠表格的一侧，命中框要盖住整个按钮。
+            // 主轴（列=横向、行=纵向）权重加倍，避免左上角两个圆互相抢。
             let primary = dot.kind == .column ? dx : dy
             let secondary = dot.kind == .column ? dy : dx
-            let primaryLimit: CGFloat = 13
-            let secondaryLimit: CGFloat = 13
+            let primaryLimit = dotHitRadius
+            let secondaryLimit = dotHitRadius
             guard primary <= primaryLimit, secondary <= secondaryLimit else { continue }
             let score = primary * 2 + secondary
             if score < bestScore {
@@ -309,12 +311,67 @@ enum RichTextTableGutterGeometry {
         return best
     }
 
+    /// 鼠标落在单元格竖边或横边上时，返回对应的拖动光标。
+    /// 竖边是左右拖（两道竖线），横边是上下拖。
+    static func borderCursor(at point: NSPoint, in layout: RichTextTableGutterLayout) -> NSCursor? {
+        let slop: CGFloat = 4
+        guard !layout.cells.isEmpty else { return nil }
+        var bestVertical = CGFloat.greatestFiniteMagnitude
+        var bestHorizontal = CGFloat.greatestFiniteMagnitude
+        var inside = false
+        for cell in layout.cells {
+            let body = cell.rect.insetBy(dx: -slop, dy: -slop)
+            if body.contains(point) { inside = true }
+            bestVertical = min(bestVertical, abs(point.x - cell.rect.minX), abs(point.x - cell.rect.maxX))
+            bestHorizontal = min(bestHorizontal, abs(point.y - cell.rect.minY), abs(point.y - cell.rect.maxY))
+        }
+        guard inside else { return nil }
+        let nearVertical = bestVertical <= slop
+        let nearHorizontal = bestHorizontal <= slop
+        if nearVertical && (!nearHorizontal || bestVertical <= bestHorizontal) {
+            return .resizeLeftRight
+        }
+        if nearHorizontal {
+            return .resizeUpDown
+        }
+        return nil
+    }
+
     static func cell(at characterIndex: Int,
                      in layout: RichTextTableGutterLayout) -> RichTextTableCellFrame? {
         layout.cells.first { cell in
             cell.characterRange.location <= characterIndex
                 && characterIndex < NSMaxRange(cell.characterRange)
         }
+    }
+
+    /// 正文第一个字的左缘。没有正文时用编辑区文字起点，保证灰圆仍对齐文字开始的位置。
+    private static func bodyTextMinX(in textView: NSTextView,
+                                    storage: NSTextStorage,
+                                    layoutManager: NSLayoutManager,
+                                    textContainer: NSTextContainer) -> CGFloat {
+        let origin = textView.textContainerOrigin
+        let fallback = origin.x + textContainer.lineFragmentPadding
+        let ns = storage.string as NSString
+        var location = 0
+        while location < ns.length {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, ns.length - 1)
+            if paragraph.length > 1,
+               RichTextTableLayout.tableKey(in: storage, at: probe) == nil {
+                let glyphs = layoutManager.glyphRange(
+                    forCharacterRange: NSRange(location: probe, length: 1),
+                    actualCharacterRange: nil)
+                if glyphs.length > 0, glyphs.location < layoutManager.numberOfGlyphs {
+                    let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+                    return rect.minX + origin.x
+                }
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        return fallback
     }
 
     // MARK: - 表格几何

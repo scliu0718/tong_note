@@ -28,6 +28,10 @@ public struct Todo: Identifiable, Codable, Hashable {
     public var updatedAt: Date
     /// 组内排序权重（v1 按时间排序，预留字段）
     public var order: Int
+    /// 已成功写到云端的版本。本机编辑不增加，上传成功才加 1。
+    public var rev: Int
+    /// 删除后的墓碑。列表里不再显示。
+    public var purged: Bool
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -38,7 +42,9 @@ public struct Todo: Identifiable, Codable, Hashable {
                 startedAt: Date? = nil,
                 createdAt: Date = Date(),
                 updatedAt: Date = Date(),
-                order: Int = 0) {
+                order: Int = 0,
+                rev: Int = 0,
+                purged: Bool = false) {
         self.id = id
         self.title = title
         self.notes = notes
@@ -49,6 +55,8 @@ public struct Todo: Identifiable, Codable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.order = order
+        self.rev = rev
+        self.purged = purged
     }
 
     /// 是否逾期：仍在进行中/待完成，且计划完成时间早于今天（已完成、终止均不算逾期）。
@@ -59,7 +67,7 @@ public struct Todo: Identifiable, Codable, Hashable {
 
     // MARK: - 兼容解码（缺省字段兜底）
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, status, plannedAt, completedAt, startedAt, createdAt, updatedAt, order
+        case id, title, notes, status, plannedAt, completedAt, startedAt, createdAt, updatedAt, order, rev, purged
     }
 
     public init(from decoder: Decoder) throws {
@@ -74,6 +82,24 @@ public struct Todo: Identifiable, Codable, Hashable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
         order = try c.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        rev = try c.decodeIfPresent(Int.self, forKey: .rev) ?? 0
+        purged = try c.decodeIfPresent(Bool.self, forKey: .purged) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(notes, forKey: .notes)
+        try c.encode(status, forKey: .status)
+        try c.encodeIfPresent(plannedAt, forKey: .plannedAt)
+        try c.encodeIfPresent(completedAt, forKey: .completedAt)
+        try c.encodeIfPresent(startedAt, forKey: .startedAt)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encode(order, forKey: .order)
+        try c.encode(rev, forKey: .rev)
+        try c.encode(purged, forKey: .purged)
     }
 }
 
@@ -82,6 +108,7 @@ public final class TodoStore: ObservableObject {
     @Published public private(set) var todos: [Todo] = []
 
     private let fileURL: URL
+    private let cursors: SyncCursorStore
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -96,6 +123,7 @@ public final class TodoStore: ObservableObject {
     public init(directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("todos.json")
+        cursors = SyncCursorStore(fileURL: directory.appendingPathComponent("todo-sync.json"))
         encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -111,15 +139,15 @@ public final class TodoStore: ObservableObject {
     public var done: [Todo] { sorted(for: .done) }
     public var terminated: [Todo] { sorted(for: .terminated) }
 
-    public var incompleteCount: Int { todos.filter { $0.status == .todo || $0.status == .doing }.count }
-    public var pendingCount: Int { todos.filter { $0.status == .todo }.count }
-    public var doingCount: Int { todos.filter { $0.status == .doing }.count }
-    public var doneCount: Int { todos.filter { $0.status == .done }.count }
-    public var terminatedCount: Int { todos.filter { $0.status == .terminated }.count }
-    public var overdueCount: Int { todos.filter(\.isOverdue).count }
+    public var incompleteCount: Int { todos.filter { !$0.purged && ($0.status == .todo || $0.status == .doing) }.count }
+    public var pendingCount: Int { todos.filter { !$0.purged && $0.status == .todo }.count }
+    public var doingCount: Int { todos.filter { !$0.purged && $0.status == .doing }.count }
+    public var doneCount: Int { todos.filter { !$0.purged && $0.status == .done }.count }
+    public var terminatedCount: Int { todos.filter { !$0.purged && $0.status == .terminated }.count }
+    public var overdueCount: Int { todos.filter { !$0.purged && $0.isOverdue }.count }
 
     private func sorted(for status: TodoStatus) -> [Todo] {
-        todos.filter { $0.status == status }.sorted { a, b in
+        todos.filter { !$0.purged && $0.status == status }.sorted { a, b in
             if a.isOverdue != b.isOverdue { return a.isOverdue }
             let pa = a.plannedAt, pb = b.plannedAt
             if pa != nil || pb != nil {
@@ -140,12 +168,16 @@ public final class TodoStore: ObservableObject {
         let t = Todo(title: title, order: todos.count)
         todos.append(t)
         save()
+        cursors.markDirty(t.id)
         return t
     }
 
     public func remove(_ id: UUID) {
-        todos.removeAll { $0.id == id }
+        guard let i = index(of: id) else { return }
+        todos[i].purged = true
+        todos[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     /// 勾选/取消勾选：完成 ↔ 待完成（完成自动记录时间，取消清空完成时间）。
@@ -160,6 +192,7 @@ public final class TodoStore: ObservableObject {
         }
         todos[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     /// 待完成 → 进行中，记录开始时间。
@@ -169,6 +202,7 @@ public final class TodoStore: ObservableObject {
         todos[i].startedAt = Date()
         todos[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     /// 进行中 → 已完成，记录完成时间。
@@ -178,6 +212,7 @@ public final class TodoStore: ObservableObject {
         todos[i].completedAt = Date()
         todos[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     /// 任意状态 → 终止（停止的任务），不记完成时间。
@@ -187,6 +222,7 @@ public final class TodoStore: ObservableObject {
         todos[i].completedAt = nil
         todos[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     /// 终止 → 待完成（重新激活）。
@@ -196,6 +232,7 @@ public final class TodoStore: ObservableObject {
         todos[i].completedAt = nil
         todos[i].updatedAt = Date()
         save()
+        cursors.markDirty(id)
     }
 
     /// 整体更新一条任务（编辑回写），自动刷新更新时间。
@@ -205,6 +242,7 @@ public final class TodoStore: ObservableObject {
         t.updatedAt = Date()
         todos[i] = t
         save()
+        cursors.markDirty(todo.id)
     }
 
     public func todo(with id: UUID) -> Todo? {
@@ -213,7 +251,29 @@ public final class TodoStore: ObservableObject {
 
     /// 清空已完成（供「一键清空已完成」使用）。
     public func clearCompleted() {
-        todos.removeAll { $0.status == .done }
+        var touched: [UUID] = []
+        for i in todos.indices where todos[i].status == .done && !todos[i].purged {
+            todos[i].purged = true
+            todos[i].updatedAt = Date()
+            touched.append(todos[i].id)
+        }
+        if !touched.isEmpty {
+            save()
+            touched.forEach { cursors.markDirty($0) }
+        }
+    }
+
+    public func syncCursor(for id: UUID) -> SyncCursor {
+        cursors.cursor(for: id)
+    }
+
+    public func applySyncedTodo(_ todo: Todo, cursor: SyncCursor) {
+        if let i = index(of: todo.id) {
+            todos[i] = todo
+        } else {
+            todos.append(todo)
+        }
+        cursors.set(cursor, for: todo.id)
         save()
     }
 

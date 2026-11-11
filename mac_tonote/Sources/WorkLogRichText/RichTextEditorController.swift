@@ -246,11 +246,12 @@ public final class RichTextEditorController: ObservableObject {
         refreshCurrentStyle()
     }
 
-    /// 单元格下拉菜单：设置格子背景色。
-    public func setTableCellBackground(_ hex: String?, row: Int, column: Int, probe: Int) {
+    /// 单元格下拉菜单：给选中的格子设背景色。多个格子一起改。
+    func setTableCellBackground(_ hex: String?,
+                                cells: Set<RichTextTableLayout.CellAddress>,
+                                probe: Int) {
         guard let tv = textView else { return }
-        RichTextTableEditor.setCellBackground(hex, row: row, column: column,
-                                             probe: probe, in: tv)
+        RichTextTableEditor.setCellBackground(hex, cells: cells, probe: probe, in: tv)
         commitChanges()
         refreshCurrentStyle()
     }

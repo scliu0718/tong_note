@@ -5,6 +5,7 @@ public enum RichTextCellAlignment: String, Equatable, Sendable, CaseIterable {
     case left
     case center
     case right
+    case justify
 
     /// 受控 HTML 的 `data-align` 值，同时兼容外部粘贴进来的 `style="text-align:…"`。
     public static func fromHTMLAttributes(_ attributes: [String: String]) -> Self {
@@ -15,6 +16,7 @@ public enum RichTextCellAlignment: String, Equatable, Sendable, CaseIterable {
         let style = (attributes["style"] ?? "").lowercased()
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "\t", with: "")
+        if style.contains("text-align:justify") { return .justify }
         if style.contains("text-align:center") { return .center }
         if style.contains("text-align:right") { return .right }
         return .left
@@ -65,7 +67,7 @@ public struct RichTextTable: Equatable, Sendable {
     // 只是防御性上限，不能等于工具栏选择器的最大列数：
     // 用户从选择器建了 8 列表格后再点边沿「加列」，若上限也是 8 就会被静默拒绝。
     public static let maxRows = 100
-    public static let maxColumns = 16
+    public static let maxColumns = 32
     /// 默认每列固定 100pt，表格不铺满笔记宽度。
     public static let fixedColumnWidth: CGFloat = 100
 

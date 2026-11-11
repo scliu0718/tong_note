@@ -413,12 +413,16 @@ struct EditorView: View {
             Button {
                 showTextPalette = true
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "paintpalette").font(.system(size: 13))
-                    Image(systemName: "chevron.down").font(.system(size: 8))
+                HStack(spacing: 3) {
+                    Text("A")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(Color(hex: 0xE8A317))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundColor(Theme.textSecondary)
                 }
-                .foregroundColor(Theme.textSecondary)
-                .frame(width: 30, height: 30)
+                .frame(height: 30)
+                .padding(.horizontal, 6)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -479,7 +483,7 @@ struct EditorView: View {
             formatButton("photo", .image, "插入图片") { insertImage() }
             TableInsertButton(controller: controller)
 
-            // 光标进入表格格子时才出现，给格子里的文字设居左 / 居中 / 居右
+            // 光标进入表格格子时才出现，点开后选左对齐 / 居中 / 右对齐 / 两端对齐
             if controller.tableCaret != nil {
                 toolbarDivider
                 TableAlignmentButton(controller: controller)

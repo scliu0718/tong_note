@@ -7,12 +7,22 @@ public final class NotebookStore: ObservableObject {
     public static let shared = NotebookStore()
 
     @Published public private(set) var custom: [String] = []
+    @Published public private(set) var removed: [String] = []
+    public private(set) var isDirty = false
 
     private let defaultsKey = "tonote.customNotebooks"
+    private let removedKey = "tonote.removedNotebooks"
+    private let dirtyKey = "tonote.notebooksDirty"
     private let maxNameLength = 12
 
     private init() {
         custom = UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
+        removed = UserDefaults.standard.stringArray(forKey: removedKey) ?? []
+        if UserDefaults.standard.object(forKey: dirtyKey) == nil {
+            isDirty = true
+        } else {
+            isDirty = UserDefaults.standard.bool(forKey: dirtyKey)
+        }
     }
 
     /// 内置笔记本在前，自建笔记本在后，顺序稳定。
@@ -26,7 +36,8 @@ public final class NotebookStore: ObservableObject {
         guard !list.contains(trimmed) else { return "该笔记本已存在" }
         guard trimmed.count <= maxNameLength else { return "笔记本名称最多 \(maxNameLength) 个字" }
         custom.append(trimmed)
-        UserDefaults.standard.set(custom, forKey: defaultsKey)
+        removed.removeAll { $0 == trimmed }
+        persist(dirty: true)
         return nil
     }
 
@@ -34,6 +45,24 @@ public final class NotebookStore: ObservableObject {
     public func remove(_ name: String) {
         guard name != Notebooks.all, custom.contains(name) else { return }
         custom.removeAll { $0 == name }
+        if !removed.contains(name) { removed.append(name) }
+        persist(dirty: true)
+    }
+
+    /// 同步合并后回写。不标脏。
+    public func applyCloud(names: [String], removed: [String]) {
+        custom = names
+        self.removed = removed
+        persist(dirty: false)
+    }
+
+    private func persist(dirty: Bool) {
+        isDirty = dirty
         UserDefaults.standard.set(custom, forKey: defaultsKey)
+        UserDefaults.standard.set(removed, forKey: removedKey)
+        UserDefaults.standard.set(dirty, forKey: dirtyKey)
+        if dirty {
+            NotificationCenter.default.post(name: .tonoteLocalDataChanged, object: nil)
+        }
     }
 }

@@ -226,9 +226,11 @@ public struct RichTextEditor: NSViewRepresentable {
             // 载入会清空选区，浮窗也随之收起
             parent.onSelectionChange?(nil)
             parent.controller.refreshCurrentStyle()
-            // 编程式 setAttributedString 不触发 didChangeText，手动重算表格灰圆与格子矩形
+            // 编程式 setAttributedString 不触发 didChangeText，手动重算表格灰圆与格子矩形。
+            // 宽表格会把横向滚动停在中间，打开笔记时强制从最左侧开始。
             if let rich = tv as? RichTextNSTextView {
                 rich.refreshTableGutter()
+                rich.showFromDocumentStart()
             }
         }
 

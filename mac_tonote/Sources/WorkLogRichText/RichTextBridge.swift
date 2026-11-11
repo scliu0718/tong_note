@@ -549,6 +549,7 @@ enum RichTextBridge {
             }
         }
 
+        RichTextTableLayout.separateFromBodyText(in: result)
         return result
     }
 

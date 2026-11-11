@@ -62,7 +62,19 @@ final class NoteStoreTests: XCTestCase {
     func testPermanentlyDelete() {
         let note = store.addNote()
         store.permanentlyDelete(note.id)
-        XCTAssertNil(store.note(with: note.id))
+        XCTAssertEqual(store.note(with: note.id)?.purged, true)
+        XCTAssertFalse(store.activeNotes.contains { $0.id == note.id })
+        XCTAssertFalse(store.trashNotes.contains { $0.id == note.id })
+    }
+
+    func testTrashBumpsUpdatedAt() {
+        let note = store.addNote()
+        let before = store.note(with: note.id)!.updatedAt
+        store.moveToTrash(note.id)
+        let trashed = store.note(with: note.id)!
+        XCTAssertNotNil(trashed.deletedAt)
+        XCTAssertGreaterThanOrEqual(trashed.updatedAt, before)
+        XCTAssertTrue(store.syncCursor(for: note.id).dirty)
     }
 
     // 6. 置顶切换
@@ -103,7 +115,8 @@ final class NoteStoreTests: XCTestCase {
         edited.tags = ["新标签"]
         store.update(edited)
         XCTAssertEqual(store.count(withTag: "新标签"), 1)
-        XCTAssertEqual(store.count(inNotebook: Notebooks.all), store.activeNotes.count)
+        let visible = store.activeNotes.filter { $0.id != NoteStore.quickSyncNoteID }
+        XCTAssertEqual(store.count(inNotebook: Notebooks.all), visible.count)
     }
 
     // 10. 删除会取消置顶

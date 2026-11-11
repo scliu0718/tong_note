@@ -12,6 +12,10 @@ public struct Note: Identifiable, Codable, Hashable {
     public var pinned: Bool
     /// 正文格式。旧笔记读取时默认为 markdown，用户实际编辑后升级为 richText。
     public var contentFormat: NoteContentFormat
+    /// 已成功写到云端的版本。本机编辑不增加，上传成功才加 1。
+    public var rev: Int
+    /// 彻底删除后留在云端的墓碑。界面不再显示，文件先不从网盘删掉。
+    public var purged: Bool
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -22,7 +26,9 @@ public struct Note: Identifiable, Codable, Hashable {
                 tags: [String] = [],
                 notebook: String = "工作日志",
                 pinned: Bool = false,
-                contentFormat: NoteContentFormat = .markdown) {
+                contentFormat: NoteContentFormat = .markdown,
+                rev: Int = 0,
+                purged: Bool = false) {
         self.id = id
         self.title = title
         self.body = body
@@ -33,11 +39,13 @@ public struct Note: Identifiable, Codable, Hashable {
         self.notebook = notebook
         self.pinned = pinned
         self.contentFormat = contentFormat
+        self.rev = rev
+        self.purged = purged
     }
 
     // MARK: - 兼容解码
     private enum CodingKeys: String, CodingKey {
-        case id, title, body, createdAt, updatedAt, deletedAt, tags, notebook, pinned, contentFormat
+        case id, title, body, createdAt, updatedAt, deletedAt, tags, notebook, pinned, contentFormat, rev, purged
     }
 
     public init(from decoder: Decoder) throws {
@@ -52,6 +60,24 @@ public struct Note: Identifiable, Codable, Hashable {
         notebook = try container.decodeIfPresent(String.self, forKey: .notebook) ?? "工作日志"
         pinned = try container.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         contentFormat = try container.decodeIfPresent(NoteContentFormat.self, forKey: .contentFormat) ?? .markdown
+        rev = try container.decodeIfPresent(Int.self, forKey: .rev) ?? 0
+        purged = try container.decodeIfPresent(Bool.self, forKey: .purged) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(body, forKey: .body)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(deletedAt, forKey: .deletedAt)
+        try container.encode(tags, forKey: .tags)
+        try container.encode(notebook, forKey: .notebook)
+        try container.encode(pinned, forKey: .pinned)
+        try container.encode(contentFormat, forKey: .contentFormat)
+        try container.encode(rev, forKey: .rev)
+        try container.encode(purged, forKey: .purged)
     }
 
     public var isTrashed: Bool { deletedAt != nil }

@@ -130,27 +130,27 @@ enum RichTextTableEditor {
                 attachments: attachments, row: 0, column: insertion)
     }
 
-    /// 单元格菜单：设置某个格子的背景色（nil = 恢复默认白色）。
-    /// 只就地改目标格子的 block 背景与自定义属性，绝不重建整张表，
-    /// 所以用户调过的列宽、正在输入的文字、undo 栈与光标都保持不变。
+    /// 单元格菜单：设置格子背景色（nil = 恢复默认白色）。
+    /// `cells` 是菜单打开时选中的全部格子；只改这些格子的背景，不重建整张表。
     static func setCellBackground(_ hex: String?,
-                                  row: Int,
-                                  column: Int,
+                                  cells: Set<RichTextTableLayout.CellAddress>,
                                   probe: Int,
                                   in textView: NSTextView) {
-        guard let storage = textView.textStorage, storage.length > 0 else { return }
+        guard !cells.isEmpty, let storage = textView.textStorage, storage.length > 0 else { return }
         let safe = min(max(probe, 0), storage.length - 1)
-        guard let read = RichTextTableLayout.read(from: storage, at: safe),
-              read.table.rows.indices.contains(row),
-              read.table.rows[row].indices.contains(column) else { return }
+        guard let read = RichTextTableLayout.read(from: storage, at: safe) else { return }
         let normalized = RichTextCellColor.normalized(hex)
-        guard read.table.rows[row][column].backgroundHex != normalized else { return }
+        let targets = cells.filter { address in
+            read.table.rows.indices.contains(address.row)
+                && read.table.rows[address.row].indices.contains(address.column)
+                && read.table.rows[address.row][address.column].backgroundHex != normalized
+        }
+        guard !targets.isEmpty else { return }
         let resolvedColor = normalized.flatMap { RichTextBridge.color(fromHex: $0) }
         let fill = resolvedColor ?? NSColor.white
         RichTextTableLayout.setCellBackground(fill,
                                               hex: normalized,
-                                              row: row,
-                                              column: column,
+                                              cells: targets,
                                               tableRange: read.range,
                                               in: storage)
     }

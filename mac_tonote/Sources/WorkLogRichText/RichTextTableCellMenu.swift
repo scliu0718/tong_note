@@ -1,7 +1,7 @@
 import AppKit
 import WorkLogCore
 
-/// 单元格右上角「下箭头」弹出的菜单：背景色、匹配笔记宽度、对齐、删除行列 / 表格。
+/// 单元格右上角「下箭头」弹出的菜单：背景色、匹配笔记宽度、删除行列 / 表格。
 ///
 /// 用原生 NSMenu + 自定义色板 view，菜单在 AppKit 层直接调用 RichTextEditorController，
 /// 不必把事件一路回传到 SwiftUI，也就不会打断正在输入的选区。
@@ -55,21 +55,6 @@ enum RichTextTableCellMenu {
         widthItem.state = info.fullWidth ? .on : .off
         menu.addItem(widthItem)
 
-        let alignItem = NSMenuItem(title: "单元格对齐", action: nil, keyEquivalent: "")
-        let alignMenu = NSMenu()
-        alignMenu.autoenablesItems = false
-        for option in AlignmentOption.all {
-            let item = NSMenuItem(title: option.title,
-                                  action: #selector(MenuActions.align(_:)),
-                                  keyEquivalent: "")
-            item.target = actions
-            item.representedObject = option.value.rawValue
-            item.state = info.alignment == option.value ? .on : .off
-            alignMenu.addItem(item)
-        }
-        alignItem.submenu = alignMenu
-        menu.addItem(alignItem)
-
         menu.addItem(.separator())
         for option in DestructiveOption.all {
             let item = NSMenuItem(title: option.title,
@@ -87,12 +72,11 @@ enum RichTextTableCellMenu {
     private struct Info {
         var background: String?
         var fullWidth: Bool
-        var alignment: RichTextCellAlignment
     }
 
     private static func currentInfo(for cell: RichTextTableCellFrame,
                                     in textView: NSTextView) -> Info {
-        let fallback = Info(background: nil, fullWidth: true, alignment: .left)
+        let fallback = Info(background: nil, fullWidth: true)
         guard let storage = textView.textStorage, storage.length > 0 else { return fallback }
         let probe = min(cell.tableProbe, storage.length - 1)
         guard let read = RichTextTableLayout.read(from: storage, at: probe),
@@ -101,18 +85,7 @@ enum RichTextTableCellMenu {
         let column = min(max(cell.column, 0), read.table.columnCount - 1)
         let target = read.table.rows[row][column]
         return Info(background: target.backgroundHex,
-                    fullWidth: read.table.fullWidth,
-                    alignment: target.alignment)
-    }
-
-    private struct AlignmentOption {
-        let title: String
-        let value: RichTextCellAlignment
-        static let all: [AlignmentOption] = [
-            AlignmentOption(title: "居左", value: .left),
-            AlignmentOption(title: "居中", value: .center),
-            AlignmentOption(title: "居右", value: .right)
-        ]
+                    fullWidth: read.table.fullWidth)
     }
 
     private struct DestructiveOption {
@@ -131,6 +104,8 @@ enum RichTextTableCellMenu {
         let textView: NSTextView
         let controller: RichTextEditorController
         let cell: RichTextTableCellFrame
+        /// 菜单打开时已经选中的格子。弹出后选区可能被收成光标，颜色仍按这时的选区生效。
+        let targetCells: Set<RichTextTableLayout.CellAddress>
         weak var menu: NSMenu?
 
         init(textView: NSTextView,
@@ -139,6 +114,18 @@ enum RichTextTableCellMenu {
             self.textView = textView
             self.controller = controller
             self.cell = cell
+            var targets: Set<RichTextTableLayout.CellAddress> = [
+                RichTextTableLayout.CellAddress(row: cell.row, column: cell.column)
+            ]
+            if let storage = textView.textStorage, storage.length > 0 {
+                let probe = min(cell.tableProbe, storage.length - 1)
+                if let read = RichTextTableLayout.read(from: storage, at: probe) {
+                    targets.formUnion(RichTextTableLayout.cells(in: storage,
+                                                                selection: textView.selectedRange(),
+                                                                tableRange: read.range))
+                }
+            }
+            self.targetCells = targets
         }
 
         /// 菜单弹出时鼠标不在正文里，执行依赖选区的命令前先把光标放回目标格。
@@ -152,17 +139,9 @@ enum RichTextTableCellMenu {
             let colors = RichTextTableCellMenu.colors
             guard colors.indices.contains(sender.tag) else { return }
             controller.setTableCellBackground(colors[sender.tag],
-                                              row: cell.row,
-                                              column: cell.column,
+                                              cells: targetCells,
                                               probe: cell.tableProbe)
             menu?.cancelTracking()
-        }
-
-        @objc func align(_ sender: NSMenuItem) {
-            guard let raw = sender.representedObject as? String,
-                  let value = RichTextCellAlignment(rawValue: raw) else { return }
-            focusCell()
-            controller.setCellAlignment(value)
         }
 
         @objc func toggleFullWidth(_ sender: NSMenuItem) {

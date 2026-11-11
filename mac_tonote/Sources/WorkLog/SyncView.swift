@@ -75,7 +75,7 @@ struct SyncView: View {
     private var syncStatusCard: some View {
         card("同步状态") {
             VStack(spacing: 0) {
-                row("同步范围", subtitle: "笔记 + 任务，存于 \(BaiduPanConfig.remoteRoot)/manifest.json") {
+                row("同步范围", subtitle: "按篇存在 \(BaiduPanConfig.remoteRoot)/notes/") {
                     Text("笔记 · 任务")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Theme.textSecondary)
@@ -179,15 +179,11 @@ struct SyncView: View {
         card("云端目录结构（百度网盘 /apps/tong_log）") {
             VStack(alignment: .leading, spacing: 3) {
                 Text("/apps/tong_log/").foregroundColor(Theme.baiduDeep).fontWeight(.semibold)
-                Text("  ├─ manifest.json    # 全量索引：笔记本 / 笔记 / 标签 / 修订号")
-                Text("  ├─ notes/            # 笔记正文（一笔记一文件）")
-                Text("  │   ├─ 1729584921230.md")
-                Text("  │   ├─ 1729586304571.md  ← 正在编辑").highlightRow()
-                Text("  │   └─ …")
-                Text("  ├─ assets/           # 附件（按笔记隔离）")
-                Text("  │   └─ 1729586304571/img_0001.png")
-                Text("  ├─ trash/            # 回收站")
-                Text("  └─ .meta/sync_state.json")
+                Text("  ├─ notes/            # 一篇一个 json：正文、rev、updatedAt、deletedAt、purged")
+                Text("  ├─ todos/            # 一条任务一个 json")
+                Text("  ├─ attachments/      # 图片，路径与正文里的相对路径相同")
+                Text("  ├─ notebooks.json    # 自建笔记本名单和已删除名单")
+                Text("  └─ devices/          # 每台设备一份，用来手动下线")
             }
             .font(.system(size: 12.5, design: .monospaced))
             .foregroundColor(Theme.textSecondary)

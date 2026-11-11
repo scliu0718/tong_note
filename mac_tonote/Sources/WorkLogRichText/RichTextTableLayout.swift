@@ -41,6 +41,7 @@ enum RichTextTableLayout {
         textTable.numberOfColumns = table.columnCount
         textTable.collapsesBorders = true
         textTable.hidesEmptyCells = false
+        applyTableInset(textTable)
         // 默认每列固定 100pt；勾选「匹配笔记宽度」后按比例铺满编辑区。
         let fixedWidth = !table.fullWidth
         if fixedWidth {
@@ -284,14 +285,14 @@ enum RichTextTableLayout {
     }
 
     /// 只改目标格子的背景色：不换表格对象、不动列宽和边框、不重建整张表。
-    /// 设置单元格后宽度、光标、undo 栈和正在输入的文字都保持原样。
+    /// 选中多个格子时一次改全部；宽度、光标、undo 栈和正在输入的文字都保持原样。
     @discardableResult
     static func setCellBackground(_ color: NSColor,
                                   hex: String?,
-                                  row: Int,
-                                  column: Int,
+                                  cells: Set<CellAddress>,
                                   tableRange: NSRange,
                                   in storage: NSTextStorage) -> Bool {
+        guard !cells.isEmpty else { return false }
         let ns = storage.string as NSString
         let end = min(NSMaxRange(tableRange), ns.length)
         var changed = false
@@ -301,7 +302,7 @@ enum RichTextTableLayout {
             let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
             let probe = min(paragraph.location, ns.length - 1)
             if let cell = tableBlock(in: storage, at: probe),
-               cell.startingRow == row, cell.startingColumn == column,
+               cells.contains(CellAddress(row: cell.startingRow, column: cell.startingColumn)),
                let existing = storage.attribute(.paragraphStyle,
                                                 at: probe,
                                                 effectiveRange: nil) as? NSParagraphStyle {
@@ -364,6 +365,7 @@ enum RichTextTableLayout {
             table.setContentWidth(CGFloat(columns) * RichTextTable.fixedColumnWidth,
                                   type: .absoluteValueType)
         }
+        applyTableInset(table)
 
         storage.beginEditing()
         for item in items {
@@ -511,7 +513,61 @@ enum RichTextTableLayout {
             if next <= location { break }
             location = next
         }
+        if separateFromBodyText(in: storage) { changed = true }
         return changed
+    }
+
+    /// 表格下沿会伸进下一段大约 1.5pt，所以段前距多留 2pt。上沿改由表格自己的 margin 留出。
+    @discardableResult
+    static func separateFromBodyText(in storage: NSMutableAttributedString) -> Bool {
+        let ns = storage.string as NSString
+        guard ns.length > 0 else { return false }
+        var ranges: [NSRange] = []
+        var location = 0
+        while location < ns.length {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            ranges.append(paragraph)
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+
+        func isTable(_ range: NSRange) -> Bool {
+            let probe = min(range.location, ns.length - 1)
+            return tableBlock(in: storage, at: probe) != nil
+        }
+
+        var changed = false
+        storage.beginEditing()
+        for (index, paragraph) in ranges.enumerated() {
+            if isTable(paragraph) { continue }
+            let probe = min(paragraph.location, ns.length - 1)
+            guard let style = storage.attribute(.paragraphStyle, at: probe, effectiveRange: nil) as? NSParagraphStyle,
+                  let mutable = style.mutableCopy() as? NSMutableParagraphStyle else { continue }
+            let natural = naturalParagraphSpacing(at: probe, in: storage)
+            let followsTable = index > 0 && isTable(ranges[index - 1])
+            let wantedBefore = followsTable ? max(natural.before, tableVerticalMargin + 2) : natural.before
+            let wantedAfter = natural.after
+            if abs(mutable.paragraphSpacingBefore - wantedBefore) < 0.5,
+               abs(mutable.paragraphSpacing - wantedAfter) < 0.5 {
+                continue
+            }
+            mutable.paragraphSpacingBefore = wantedBefore
+            mutable.paragraphSpacing = wantedAfter
+            storage.addAttribute(.paragraphStyle, value: mutable, range: paragraph)
+            changed = true
+        }
+        storage.endEditing()
+        return changed
+    }
+
+    private static func naturalParagraphSpacing(at location: Int,
+                                                in storage: NSAttributedString) -> (before: CGFloat, after: CGFloat) {
+        let raw = storage.attribute(RichTextKeys.blockStyle, at: location, effectiveRange: nil) as? String
+        let style = raw.flatMap(RichTextBlockStyle.init(rawValue:)) ?? .paragraph
+        let level = (storage.attribute(RichTextKeys.listLevel, at: location, effectiveRange: nil) as? NSNumber)?.intValue ?? 0
+        let canonical = RichTextBridge.paragraphStyle(for: style, level: level)
+        return (canonical.paragraphSpacingBefore, canonical.paragraphSpacing)
     }
 
     // MARK: - 私有
@@ -559,6 +615,23 @@ enum RichTextTableLayout {
         return block
     }
 
+    /// 表格上沿到上方内容的距离。TextKit 会吃掉大约 2pt，所以实际写入时加 2。
+    static let tableTopMargin: CGFloat = 20
+    /// 表格下沿到下方文字的距离。
+    static let tableVerticalMargin: CGFloat = 10
+
+    /// 整张表右移，给左侧「增加行」灰圆留出位置。
+    /// 上下空隙不靠这里：NSTextTable 的纵向 margin 推不开相邻正文，见 `separateFromBodyText`。
+    static func applyTableInset(_ table: NSTextTable) {
+        table.setWidth(0, type: .absoluteValueType, for: .margin)
+        table.setWidth(RichTextTableGutterGeometry.tableLeadingMargin,
+                       type: .absoluteValueType,
+                       for: .margin,
+                       edge: .minX)
+        // 上边距放在表格上。正文前的段后距再加一份会叠成两倍，两张表之间又只有这里生效。
+        table.setWidth(tableTopMargin + 2, type: .absoluteValueType, for: .margin, edge: .minY)
+    }
+
     static func applyChrome(_ block: NSTextTableBlock,
                             weight: Double,
                             fixedWidth: Bool = false,
@@ -596,6 +669,7 @@ enum RichTextTableLayout {
         case .left: return .left
         case .center: return .center
         case .right: return .right
+        case .justify: return .justified
         }
     }
 
@@ -603,6 +677,7 @@ enum RichTextTableLayout {
         switch style?.alignment ?? .natural {
         case .center: return .center
         case .right: return .right
+        case .justified: return .justify
         default: return .left
         }
     }
@@ -728,6 +803,7 @@ enum RichTextTableLayout {
         guard let foundBlock else { return nil }
         let key = foundKey ?? "table-\(ObjectIdentifier(foundBlock.table))"
         let table = canonical[key] ?? foundBlock.table
+        applyTableInset(table)
         canonical[key] = table
         let needsRetarget = foundBlock.table !== table
         guard inconsistent || needsRetarget || foundKey == nil else { return nil }
