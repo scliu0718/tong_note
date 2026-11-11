@@ -17,6 +17,8 @@ public struct RichTextEditor: NSViewRepresentable {
     public var onEditorError: ((String) -> Void)?
     /// 只读模式（回收站笔记）：仍可选中复制文字，但不能修改正文
     public var readOnly: Bool = false
+    /// 正文距边框的留白。笔记要给表格圆点留位置，任务备注可以更紧。
+    public var textInset: CGSize = CGSize(width: 24, height: 24)
     /// 选区变化回调。
     /// - 传入 nil：当前无选区（或只读/窗口失焦），上层应收起浮动格式窗口；
     /// - 传入 rect：选区首字所在的屏幕坐标矩形，供上层定位浮动格式窗口。
@@ -28,6 +30,7 @@ public struct RichTextEditor: NSViewRepresentable {
                 attachments: AttachmentStore,
                 onEditorError: ((String) -> Void)? = nil,
                 readOnly: Bool = false,
+                textInset: CGSize = CGSize(width: 24, height: 24),
                 onSelectionChange: ((NSRect?) -> Void)? = nil) {
         self.noteID = noteID
         self._content = content
@@ -35,6 +38,7 @@ public struct RichTextEditor: NSViewRepresentable {
         self.attachments = attachments
         self.onEditorError = onEditorError
         self.readOnly = readOnly
+        self.textInset = textInset
         self.onSelectionChange = onSelectionChange
     }
 
@@ -63,7 +67,7 @@ public struct RichTextEditor: NSViewRepresentable {
         tv.isAutomaticSpellingCorrectionEnabled = false
         // 左右各留 24pt：表格左边界外侧要放「增加行」的小灰圆，放 4pt 会被裁掉；
         // 上方同样留 24pt，给顶部「增加列」的灰圆和蓝色圆留位置。
-        tv.textContainerInset = NSSize(width: 24, height: 24)
+        tv.textContainerInset = NSSize(width: textInset.width, height: textInset.height)
         tv.backgroundColor = .white
         tv.drawsBackground = true
         tv.isVerticallyResizable = true
@@ -113,6 +117,7 @@ public struct RichTextEditor: NSViewRepresentable {
         // 视图复用时 readOnly 可能随「进入/退出回收站」变化，每次更新都同步
         tv.isEditable = !readOnly
         tv.isSelectable = true
+        tv.textContainerInset = NSSize(width: textInset.width, height: textInset.height)
 
         // 粘贴回调要随笔记切换重新绑定，避免指向旧笔记的附件目录
         if let richTextView = tv as? RichTextNSTextView {

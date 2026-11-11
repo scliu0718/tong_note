@@ -279,4 +279,49 @@ final class RichTextTableEditorTests: XCTestCase {
         XCTAssertEqual(table?.rows[1][0].backgroundHex, "#D9E6F8")
         XCTAssertNil(table?.rows[1][1].backgroundHex)
     }
+
+    /// 不主动排整张表。补排应在下一拍把第一行的每一列都排完，横线才有完整行框。
+    func testRowFillLaysOutEntireFirstRow() throws {
+        let (textView, _, store) = makeView()
+        let document = RichTextDocument(blocks: [
+            RichTextBlock(style: .table, runs: [], table: RichTextTable.make(rows: 4, columns: 6))
+        ])
+        textView.textStorage?.setAttributedString(
+            RichTextBridge.attributedString(from: document, attachments: store)
+        )
+        let deadline = Date().addingTimeInterval(1)
+        while Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+
+        let layout = try XCTUnwrap(textView.layoutManager)
+        let container = try XCTUnwrap(textView.textContainer)
+        let storage = try XCTUnwrap(textView.textStorage)
+        let ns = storage.string as NSString
+        let laid = layout.glyphRange(
+            forBoundingRectWithoutAdditionalLayout: NSRect(x: -100, y: -100, width: 8_000, height: 8_000),
+            in: container)
+        var columns = Set<Int>()
+        var glyph = laid.location
+        let end = NSMaxRange(laid)
+        while glyph < end {
+            var fragmentGlyphs = NSRange(location: glyph, length: 0)
+            let fragment = layout.lineFragmentRect(forGlyphAt: glyph,
+                                                  effectiveRange: &fragmentGlyphs,
+                                                  withoutAdditionalLayout: true)
+            let step = max(NSMaxRange(fragmentGlyphs), glyph + 1)
+            if fragment.height > 0.5 {
+                let chars = layout.characterRange(forGlyphRange: NSRange(location: glyph, length: 1),
+                                                  actualGlyphRange: nil)
+                if chars.location < ns.length,
+                   let cell = RichTextTableLayout.tableBlock(in: storage, at: chars.location),
+                   cell.startingRow == 0 {
+                    columns.insert(cell.startingColumn)
+                }
+            }
+            if step <= glyph { break }
+            glyph = step
+        }
+        XCTAssertEqual(columns, Set(0..<6), "第一行的 6 列都应已排完，实际 \(columns.sorted())")
+    }
 }

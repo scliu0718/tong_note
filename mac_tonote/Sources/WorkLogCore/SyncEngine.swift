@@ -447,11 +447,14 @@ public final class SyncEngine: ObservableObject {
             return false
         case .useRemote:
             guard let remote else { return false }
-            let clean = SyncCursor(baseRev: remote.rev,
+            var clean = SyncCursor(baseRev: remote.rev,
                                    baseUpdatedAt: remote.updatedAt,
                                    serverMtime: listing?.serverMtime,
                                    dirty: false,
-                                   uploadedAttachments: [])
+                                   uploadedAttachments: cursor.uploadedAttachments)
+            if await downloadTodoImages(remote, cursor: &clean, store: store, token: token) == false {
+                clean.serverMtime = nil
+            }
             store.applySyncedTodo(remote, cursor: clean)
             return true
         case .upload(let rev):
@@ -476,6 +479,9 @@ public final class SyncEngine: ObservableObject {
         for _ in 0..<3 {
             try await DeviceRegistry.shared.ensureNotKicked(accessToken: token)
             publishing.rev = nextRev
+            if !publishing.purged {
+                try await uploadTodoImages(publishing, cursor: &attempt, store: store, token: token)
+            }
             try await uploadTodo(publishing, token: token)
             let check = try await downloadTodo(id: publishing.id, token: token)
             if check?.rev == publishing.rev,
@@ -517,8 +523,12 @@ public final class SyncEngine: ObservableObject {
                                      token: String,
                                      listingMtime: Int?) async throws {
         if SyncRules.remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt) {
-            let clean = SyncCursor(baseRev: remote.rev, baseUpdatedAt: remote.updatedAt,
-                                   serverMtime: listingMtime, dirty: false, uploadedAttachments: [])
+            var clean = SyncCursor(baseRev: remote.rev, baseUpdatedAt: remote.updatedAt,
+                                   serverMtime: listingMtime, dirty: false,
+                                   uploadedAttachments: cursor.uploadedAttachments)
+            if await downloadTodoImages(remote, cursor: &clean, store: store, token: token) == false {
+                clean.serverMtime = nil
+            }
             store.applySyncedTodo(remote, cursor: clean)
             var copy = conflictCopy(of: local)
             store.applySyncedTodo(copy, cursor: .unsynced)
@@ -526,8 +536,11 @@ public final class SyncEngine: ObservableObject {
             _ = try await publishTodo(&copy, rev: 1, cursor: &copyCursor, store: store, token: token, listingMtime: nil)
         } else {
             var copy = conflictCopy(of: remote)
-            store.applySyncedTodo(copy, cursor: .unsynced)
             var copyCursor = SyncCursor.unsynced
+            if await downloadTodoImages(copy, cursor: &copyCursor, store: store, token: token) == false {
+                copyCursor.serverMtime = nil
+            }
+            store.applySyncedTodo(copy, cursor: copyCursor)
             _ = try await publishTodo(&copy, rev: 1, cursor: &copyCursor, store: store, token: token, listingMtime: nil)
             var winner = local
             var winnerCursor = cursor
@@ -544,6 +557,53 @@ public final class SyncEngine: ObservableObject {
         copy.rev = 0
         copy.purged = false
         return copy
+    }
+
+    /// 任务备注里的图片与笔记共用 `attachments/` 目录，上传时带上相对路径。
+    private func uploadTodoImages(_ todo: Todo,
+                                  cursor: inout SyncCursor,
+                                  store: TodoStore,
+                                  token: String) async throws {
+        for path in NoteAttachmentIndex.relativePaths(in: todo.notes) where !cursor.uploadedAttachments.contains(path) {
+            let file = store.attachments.absoluteURL(for: path)
+            guard FileManager.default.fileExists(atPath: file.path) else { continue }
+            let data = try Data(contentsOf: file)
+            try await client.uploadData(data, to: BaiduPanConfig.remoteRoot + "/" + path, accessToken: token)
+            cursor.uploadedAttachments.append(path)
+            if let current = store.todo(with: todo.id) {
+                var persisted = cursor
+                persisted.dirty = true
+                store.applySyncedTodo(current, cursor: persisted)
+            }
+        }
+    }
+
+    /// 返回 false 表示还有图片没拉下来，下一轮要再试。
+    private func downloadTodoImages(_ todo: Todo,
+                                    cursor: inout SyncCursor,
+                                    store: TodoStore,
+                                    token: String) async -> Bool {
+        var complete = true
+        for path in NoteAttachmentIndex.relativePaths(in: todo.notes) {
+            if !store.attachments.fileExists(relativePath: path) {
+                do {
+                    let data = try await client.downloadData(BaiduPanConfig.remoteRoot + "/" + path, accessToken: token)
+                    let dest = store.attachments.absoluteURL(for: path)
+                    try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(),
+                                                           withIntermediateDirectories: true)
+                    try data.write(to: dest)
+                } catch BaiduPanError.notFound {
+                    continue
+                } catch {
+                    complete = false
+                    continue
+                }
+            }
+            if !cursor.uploadedAttachments.contains(path) {
+                cursor.uploadedAttachments.append(path)
+            }
+        }
+        return complete
     }
 
     // MARK: - 网盘读写

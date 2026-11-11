@@ -32,6 +32,15 @@ else
   echo "⚠ 未找到 baidupan.secret.json，登录授权将不可用（见 百度网盘开放平台接入指南.md）"
 fi
 
+# 使用说明（HTML + 界面图）随应用打包，登录页和设置页都能打开
+if [ -f "../docs/guide/index.html" ]; then
+  rm -rf "$APP/Contents/Resources/guide"
+  mkdir -p "$APP/Contents/Resources/guide"
+  cp -R "../docs/guide/." "$APP/Contents/Resources/guide/"
+else
+  echo "⚠ 未找到 ../docs/guide/index.html，使用说明入口将没有正文"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -87,9 +87,10 @@ public struct Note: Identifiable, Codable, Hashable {
         MarkdownConverter.plainText(from: body, format: contentFormat)
     }
 
-    /// 列表摘要（从正文派生）
+    /// 列表摘要（从正文派生）。富文本只剥标签，不解析整篇表格。
     public var snippet: String {
-        let trimmed = plainBody
+        let source = contentFormat == .richText ? RichTextHTMLCodec.visibleText(body) : plainBody
+        let trimmed = source
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "空笔记" }

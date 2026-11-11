@@ -177,6 +177,19 @@ struct LoginView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .frame(maxWidth: 340)
+
+            Button(action: { UserGuideWindow.show() }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("查看使用说明")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundColor(Theme.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help("打开使用说明")
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

@@ -24,6 +24,9 @@ final class RichTextNSTextView: NSTextView {
         container.heightTracksTextView = false
         container.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         let layoutManager = NSLayoutManager()
+        // 大表格有几百个格子。默认会先把整张表排完再显示，切换笔记时主线程能卡几秒。
+        // 非连续排版先出看得见的内容；整行补排见 scheduleTableRowFill。
+        layoutManager.allowsNonContiguousLayout = true
         layoutManager.addTextContainer(container)
         let storage = NSTextStorage()
         storage.addLayoutManager(layoutManager)
@@ -103,13 +106,45 @@ final class RichTextNSTextView: NSTextView {
             selector: #selector(tableSelectionDidChange(_:)),
             name: NSTextView.didChangeSelectionNotification,
             object: self)
+        if let storage = textStorage {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(tableTextDidEdit(_:)),
+                name: NSTextStorage.didProcessEditingNotification,
+                object: storage)
+        }
+    }
+
+    /// 载入或改字之后重建行范围，并开始按行补排。通知回调里不能再改文字。
+    @objc private func tableTextDidEdit(_ notification: Notification) {
+        guard let storage = notification.object as? NSTextStorage, storage === textStorage else { return }
+        let mask = storage.editedMask
+        guard mask.contains(.editedCharacters) || mask.contains(.editedAttributes) else { return }
+        if mask.contains(.editedCharacters) {
+            rebuildTableRowSpans()
+        } else {
+            let editedRange = storage.editedRange
+            for index in tableRowSpans.indices
+            where NSIntersectionRange(tableRowSpans[index].range, editedRange).length > 0 {
+                ensuredTableRows.remove(index)
+            }
+        }
+        scheduleTableRowFill()
     }
 
     /// 正文变长时 NSTextView 会改 frame，遮罩层必须一起长高，否则下方的表格没有灰圆。
     override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = abs(newSize.width - bounds.width) > 0.5
         super.setFrameSize(newSize)
         tableGutter?.frame = NSRect(origin: .zero, size: newSize)
         refreshTableGutter()
+        // 宽度一变，格子的横向位置全部作废。只清记录，让补排从屏幕上的整行重新来。
+        if widthChanged {
+            ensuredTableRows = []
+            tableRowFillGeneration += 1
+            tableRowFillScheduled = false
+        }
+        scheduleTableRowFill()
     }
 
     override func didChangeText() {
@@ -123,6 +158,8 @@ final class RichTextNSTextView: NSTextView {
     override func reflectScrolledClipView(_ aClipView: NSClipView) {
         super.reflectScrolledClipView(aClipView)
         refreshTableGutter()
+        // 滚进屏幕的整行优先补，不必等上面的空闲补排走到这里。
+        scheduleTableRowFill()
     }
 
     /// 打开或切换笔记后，把滚动位置钉在文档左上角。
@@ -169,8 +206,21 @@ final class RichTextNSTextView: NSTextView {
         scroll.reflectScrolledClipView(clip)
     }
 
-    /// 重新计算所有灰圆与格子矩形（文本变化、视图变宽、切换笔记后调用）。
+    private var gutterRefreshPending = false
+
+    /// 重新计算灰圆与格子矩形。同一轮里的改尺寸、滚动、载入合并成一次，
+    /// 并且只排看得见的格子，避免大表格切换时把整张表排完。
     func refreshTableGutter() {
+        guard !gutterRefreshPending else { return }
+        gutterRefreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.gutterRefreshPending = false
+            self.rebuildTableGutterNow()
+        }
+    }
+
+    private func rebuildTableGutterNow() {
         guard isEditable else {
             tableGutter?.layout = nil
             tableGutter?.activeDot = nil
@@ -181,6 +231,175 @@ final class RichTextNSTextView: NSTextView {
         let layout = RichTextTableGutterGeometry.layout(in: self)
         tableGutter?.layout = layout
         refreshActiveCell(using: layout)
+    }
+
+    /// 表格里的一整行。补排时按这个字符范围一次排完所有列，横线才接得上。
+    private struct TableRowSpan {
+        var range: NSRange
+    }
+
+    private var tableRowSpans: [TableRowSpan] = []
+    private var ensuredTableRows: Set<Int> = []
+    private var tableRowFillGeneration = 0
+    private var tableRowFillScheduled = false
+
+    /// 按文档顺序记下每一行的字符范围。只读属性，不排版。
+    private func rebuildTableRowSpans() {
+        tableRowFillGeneration += 1
+        tableRowFillScheduled = false
+        ensuredTableRows = []
+        tableRowSpans = []
+        guard let storage = textStorage, storage.length > 0 else { return }
+        let ns = storage.string as NSString
+        var location = 0
+        var currentKey: String?
+        var currentRow = -1
+        var start = 0
+        func close(at end: Int) {
+            guard currentKey != nil, end > start else { return }
+            tableRowSpans.append(TableRowSpan(range: NSRange(location: start, length: end - start)))
+        }
+        while location < ns.length {
+            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            let probe = min(paragraph.location, ns.length - 1)
+            let key = RichTextTableLayout.tableKey(in: storage, at: probe)
+            let row = RichTextTableLayout.tableBlock(in: storage, at: probe)?.startingRow
+            if let key, let row {
+                if key != currentKey || row != currentRow {
+                    close(at: paragraph.location)
+                    currentKey = key
+                    currentRow = row
+                    start = paragraph.location
+                }
+            } else if currentKey != nil {
+                close(at: paragraph.location)
+                currentKey = nil
+                currentRow = -1
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        if currentKey != nil { close(at: ns.length) }
+    }
+
+    /// 每次主队列回合只补一整行，然后重画。两行之间让出一帧，避免 35 行在同一次循环里排完。
+    private func scheduleTableRowFill() {
+        guard !tableRowFillScheduled else { return }
+        guard ensuredTableRows.count < tableRowSpans.count else { return }
+        tableRowFillScheduled = true
+        let generation = tableRowFillGeneration
+        let delay: TimeInterval = ensuredTableRows.isEmpty ? 0 : 0.016
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.tableRowFillGeneration == generation else { return }
+            self.fillOneTableRow()
+        }
+    }
+
+    private func fillOneTableRow() {
+        tableRowFillScheduled = false
+        guard let index = nextTableRowToEnsure(),
+              let layoutManager,
+              tableRowSpans.indices.contains(index) else { return }
+        let range = tableRowSpans[index].range
+        let length = textStorage?.length ?? 0
+        if range.location < length, range.length > 0, NSMaxRange(range) <= length {
+            layoutManager.ensureGlyphs(forCharacterRange: range)
+            layoutManager.ensureLayout(forCharacterRange: range)
+            layoutManager.invalidateDisplay(forCharacterRange: range)
+            let dirty = visibleRect.isEmpty ? bounds : visibleRect
+            setNeedsDisplay(dirty)
+            refreshTableGutter()
+        }
+        ensuredTableRows.insert(index)
+        scheduleTableRowFill()
+    }
+
+    /// 先补屏幕里已经露出一部分的整行（含右边还没滚出来的列）；
+    /// 屏幕还没被完整的行盖住时，从视口上沿继续往下补；盖住之后再按文档顺序空闲补。
+    private func nextTableRowToEnsure() -> Int? {
+        let pending = tableRowSpans.indices.filter { !ensuredTableRows.contains($0) }
+        guard !pending.isEmpty else { return nil }
+        guard let layoutManager, let textContainer else { return pending[0] }
+        let visible = containerRectForRowFill()
+
+        let wide = NSRect(x: -20_000, y: visible.minY - 40, width: 40_000, height: visible.height + 80)
+        let laid = layoutManager.glyphRange(forBoundingRectWithoutAdditionalLayout: wide, in: textContainer)
+        if laid.length > 0 {
+            let chars = layoutManager.characterRange(forGlyphRange: laid, actualGlyphRange: nil)
+            if let index = pending.first(where: {
+                NSIntersectionRange(tableRowSpans[$0].range, chars).length > 0
+            }) {
+                return index
+            }
+        }
+
+        if !tableRowsCover(visible, layoutManager: layoutManager, textContainer: textContainer) {
+            let probe = NSPoint(x: max(visible.minX, 1), y: max(visible.minY, 0) + 4)
+            var fraction: CGFloat = 0
+            let glyph = layoutManager.glyphIndex(for: probe,
+                                                 in: textContainer,
+                                                 fractionOfDistanceThroughGlyph: &fraction)
+            if glyph < layoutManager.numberOfGlyphs {
+                let character = layoutManager.characterIndexForGlyph(at: glyph)
+                if let probed = tableRowSpans.firstIndex(where: { NSLocationInRange(character, $0.range) }) {
+                    if !ensuredTableRows.contains(probed) { return probed }
+                    if let next = pending.first(where: { $0 > probed }) { return next }
+                }
+            }
+        }
+        return pending[0]
+    }
+
+    private func containerRectForRowFill() -> NSRect {
+        let origin = textContainerOrigin
+        var rect = visibleRect
+        if rect.width < 1 || rect.height < 1 {
+            rect = NSRect(x: 0, y: 0, width: max(bounds.width, 600), height: 900)
+        }
+        rect.origin.x -= origin.x
+        rect.origin.y -= origin.y
+        return rect
+    }
+
+    /// 已经补完的行是否从上到下盖住当前视口。没盖住就继续补屏幕里的行，不先去排屏幕外的。
+    private func tableRowsCover(_ visible: NSRect,
+                                layoutManager: NSLayoutManager,
+                                textContainer: NSTextContainer) -> Bool {
+        guard visible.height > 1 else { return false }
+        var intervals: [(CGFloat, CGFloat)] = []
+        for index in ensuredTableRows {
+            guard let spanY = fragmentY(ofRow: index,
+                                        layoutManager: layoutManager,
+                                        textContainer: textContainer) else { continue }
+            intervals.append(spanY)
+        }
+        guard !intervals.isEmpty else { return false }
+        intervals.sort { $0.0 < $1.0 }
+        var cursor = visible.minY + 6
+        let bottom = visible.maxY - 6
+        for interval in intervals {
+            if interval.0 > cursor + 2, interval.0 < bottom { return false }
+            cursor = max(cursor, interval.1)
+            if cursor >= bottom { return true }
+        }
+        return cursor >= bottom
+    }
+
+    private func fragmentY(ofRow index: Int,
+                           layoutManager: NSLayoutManager,
+                           textContainer: NSTextContainer) -> (CGFloat, CGFloat)? {
+        guard tableRowSpans.indices.contains(index) else { return nil }
+        let range = tableRowSpans[index].range
+        guard range.length > 0 else { return nil }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: range.location, length: 1),
+                                              actualCharacterRange: nil)
+        guard glyphs.length > 0 else { return nil }
+        let rect = layoutManager.lineFragmentRect(forGlyphAt: glyphs.location,
+                                                  effectiveRange: nil,
+                                                  withoutAdditionalLayout: true)
+        guard rect.height > 0.5 else { return nil }
+        return (rect.minY, rect.maxY)
     }
 
     private func refreshActiveCell(using layout: RichTextTableGutterLayout? = nil) {
@@ -248,7 +467,7 @@ final class RichTextNSTextView: NSTextView {
             super.mouseDown(with: event)
             return
         }
-        RichTextTableDebug.log("mouseDown (\(Int(point.x)),\(Int(point.y))) dots=\(layout.dots.count)")
+        RichTextTableDebug.log("mouseDown (\(Self.finiteInt(point.x)),\(Self.finiteInt(point.y))) dots=\(layout.dots.count)")
         let nearest = RichTextTableGutterGeometry.dot(at: point, in: layout)
 
         // 1. 单元格右上角的下箭头 → 单元格菜单（别抢走边沿灰圆的点击）
@@ -275,19 +494,22 @@ final class RichTextNSTextView: NSTextView {
             if dx <= 22 && dy <= 22 { resolved = current }
         }
         guard let dot = resolved else {
-            var nearestDistance = CGFloat.greatestFiniteMagnitude
-            var nearestInfo = "none"
-            for candidate in layout.dots {
-                let dx = candidate.point.x - point.x
-                let dy = candidate.point.y - point.y
-                let delta = (dx * dx + dy * dy).squareRoot()
-                if delta < nearestDistance {
-                    nearestDistance = delta
-                    nearestInfo = "\(candidate.kind == .column ? "col" : "row")@(\(Int(candidate.point.x)),\(Int(candidate.point.y)))"
+            if !layout.dots.isEmpty {
+                var nearestDistance = CGFloat.greatestFiniteMagnitude
+                var nearestInfo = "none"
+                for candidate in layout.dots {
+                    let dx = candidate.point.x - point.x
+                    let dy = candidate.point.y - point.y
+                    let delta = (dx * dx + dy * dy).squareRoot()
+                    if delta.isFinite, delta < nearestDistance {
+                        nearestDistance = delta
+                        nearestInfo = "\(candidate.kind == .column ? "col" : "row")@(\(Self.finiteInt(candidate.point.x)),\(Self.finiteInt(candidate.point.y)))"
+                    }
                 }
+                let vis = visibleRect
+                let distance = nearestDistance == CGFloat.greatestFiniteMagnitude ? -1 : Self.finiteInt(nearestDistance)
+                RichTextTableDebug.log("miss：没命中，最近=\(nearestInfo) 距离=\(distance)pt 视口左缘=\(Self.finiteInt(vis.minX)) 点击=(\(Self.finiteInt(point.x)),\(Self.finiteInt(point.y)))")
             }
-            let vis = visibleRect
-            RichTextTableDebug.log("miss：没命中，最近=\(nearestInfo) 距离=\(Int(nearestDistance))pt 视口左缘=\(Int(vis.minX)) 点击=(\(Int(point.x)),\(Int(point.y)))")
             super.mouseDown(with: event)
             return
         }
@@ -330,6 +552,14 @@ final class RichTextNSTextView: NSTextView {
         let length = textStorage?.length ?? -1
         let dots = tableGutter?.layout?.dots.count ?? -1
         RichTextTableDebug.log("after insert storageLen=\(length) dots=\(dots)")
+    }
+
+    /// 点击坐标偶发是无穷大。直接 `Int(...)` 会在主线程触发陷阱，点一下就闪退。
+    private static func finiteInt(_ value: CGFloat) -> Int {
+        guard value.isFinite else { return 0 }
+        if value >= CGFloat(Int.max) { return Int.max }
+        if value <= CGFloat(Int.min) { return Int.min }
+        return Int(value)
     }
 
     private static func log(_ message: String) {

@@ -21,7 +21,8 @@ let package = Package(
         .executableTarget(
             name: "WorkLog",
             dependencies: ["WorkLogCore", "WorkLogRichText"],
-            path: "Sources/WorkLog"
+            path: "Sources/WorkLog",
+            linkerSettings: [.linkedFramework("WebKit")]
         ),
         .testTarget(
             name: "WorkLogCoreTests",

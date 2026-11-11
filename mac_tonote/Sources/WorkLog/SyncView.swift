@@ -345,6 +345,26 @@ struct SyncView: View {
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
+            Button(action: { UserGuideWindow.show() }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Theme.accent)
+                    Text("使用说明")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.forward")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Theme.textQuaternary)
+                }
+                .padding(14)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .help("查看怎么使用同笔记")
             Spacer()
             Text("同笔记 · 数据属于你自己\n无需订阅 · 无服务器存储")
                 .font(.system(size: 11))

@@ -216,6 +216,7 @@ enum RichTextTableGutterGeometry {
         var probe: Int
         var cells: [CellRect]
         var weightsRaw: String?
+        var columnCount: Int
     }
 
     private struct Frame {
@@ -223,6 +224,8 @@ enum RichTextTableGutterGeometry {
         var bounds: NSRect
         var columnEdges: [CGFloat]
         var rowEdges: [CGFloat]
+        /// 要画灰圆的行边界下标。nil 表示每一道 rowEdges 都画。
+        var rowDotIndexes: [Int]?
         var cells: [CellRect]
     }
 
@@ -259,7 +262,10 @@ enum RichTextTableGutterGeometry {
                 ))
             }
             // 加行圆的横坐标锁在正文起点，表格再往右挪时灰圆仍与上面的文字对齐。
-            for (index, edge) in frame.rowEdges.enumerated() {
+            // 只排了屏幕里的若干行时，下标仍是表格里的真实行号，不能按数组序号从 0 重数。
+            let rowDotIndexes = frame.rowDotIndexes ?? Array(frame.rowEdges.indices)
+            for index in rowDotIndexes where frame.rowEdges.indices.contains(index) {
+                let edge = frame.rowEdges[index]
                 dots.append(RichTextTableGutterDot(
                     kind: .row,
                     index: index,
@@ -383,47 +389,76 @@ enum RichTextTableGutterGeometry {
         let ns = storage.string as NSString
         let origin = textView.textContainerOrigin
         var groups: [String: Group] = [:]
-
-        var location = 0
-        while location < ns.length {
-            let paragraph = ns.paragraphRange(for: NSRange(location: location, length: 0))
-            let probe = min(paragraph.location, ns.length - 1)
-            if let key = RichTextTableLayout.tableKey(in: storage, at: probe),
-               let cell = RichTextTableLayout.tableBlock(in: storage, at: probe) {
-                let glyph = layoutManager.glyphIndexForCharacter(at: probe)
-                if glyph < layoutManager.numberOfGlyphs {
-                    let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-                    let rect = fragment.offsetBy(dx: origin.x, dy: origin.y)
-                    var group = groups[key] ?? Group(probe: paragraph.location,
-                                                     cells: [],
-                                                     weightsRaw: storage.attribute(
-                                                        RichTextTableLayout.weightsKey,
-                                                        at: probe,
-                                                        effectiveRange: nil) as? String)
-                    if let last = group.cells.indices.last,
-                       group.cells[last].row == cell.startingRow,
-                       group.cells[last].column == cell.startingColumn {
-                        // 同一格里换段：矩形取并集，字符范围向后延
-                        group.cells[last].rect = group.cells[last].rect.union(rect)
-                        let start = group.cells[last].characterRange.location
-                        group.cells[last].characterRange = NSRange(location: start,
-                                                                   length: NSMaxRange(paragraph) - start)
-                    } else {
-                        group.cells.append(CellRect(row: cell.startingRow,
-                                                    column: cell.startingColumn,
-                                                    rect: rect,
-                                                    characterRange: paragraph))
+        // 只读已经排完的行框。主动 glyphIndex / 按矩形要行框会把没排完的格子排一半，边框就会断。
+        let laid = layoutManager.glyphRange(
+            forBoundingRectWithoutAdditionalLayout: NSRect(x: -20_000, y: -20_000,
+                                                           width: 80_000, height: 80_000),
+            in: textContainer)
+        var glyph = laid.location
+        let laidEnd = NSMaxRange(laid)
+        while glyph < laidEnd {
+            var fragmentGlyphs = NSRange(location: glyph, length: 0)
+            let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyph,
+                                                          effectiveRange: &fragmentGlyphs,
+                                                          withoutAdditionalLayout: true)
+            let step = max(NSMaxRange(fragmentGlyphs), glyph + 1)
+            if fragment.width > 0.5, fragment.height > 0.5 {
+                let chars = layoutManager.characterRange(forGlyphRange: NSRange(location: glyph, length: 1),
+                                                        actualGlyphRange: nil)
+                if chars.location < ns.length {
+                    let paragraph = ns.paragraphRange(for: NSRange(location: chars.location, length: 0))
+                    let probe = min(paragraph.location, ns.length - 1)
+                    if let key = RichTextTableLayout.tableKey(in: storage, at: probe),
+                       let cell = RichTextTableLayout.tableBlock(in: storage, at: probe) {
+                        let rect = fragment.offsetBy(dx: origin.x, dy: origin.y)
+                        var group = groups[key] ?? Group(
+                            probe: paragraph.location,
+                            cells: [],
+                            weightsRaw: storage.attribute(
+                                RichTextTableLayout.weightsKey,
+                                at: probe,
+                                effectiveRange: nil) as? String,
+                            columnCount: cell.table.numberOfColumns)
+                        if let last = group.cells.indices.last,
+                           group.cells[last].row == cell.startingRow,
+                           group.cells[last].column == cell.startingColumn {
+                            group.cells[last].rect = group.cells[last].rect.union(rect)
+                            let start = group.cells[last].characterRange.location
+                            group.cells[last].characterRange = NSRange(location: start,
+                                                                       length: NSMaxRange(paragraph) - start)
+                        } else {
+                            group.cells.append(CellRect(row: cell.startingRow,
+                                                        column: cell.startingColumn,
+                                                        rect: rect,
+                                                        characterRange: paragraph))
+                        }
+                        groups[key] = group
                     }
-                    groups[key] = group
                 }
             }
-            let next = NSMaxRange(paragraph)
-            if next <= location { break }
-            location = next
+            if step <= glyph { break }
+            glyph = step
         }
 
-        return groups.values.compactMap { frame(from: $0) }
-            .sorted { $0.bounds.minY < $1.bounds.minY }
+        return groups.values.compactMap { group in
+            let cells = completeRows(in: group.cells, columnCount: group.columnCount)
+            guard !cells.isEmpty else { return nil }
+            var trimmed = group
+            trimmed.cells = cells
+            return frame(from: trimmed)
+        }
+        .sorted { $0.bounds.minY < $1.bounds.minY }
+    }
+
+    /// 一行里每一列都有行框才算排完。缺列的行画出来横线是断的，先不拿去算灰圆。
+    private static func completeRows(in cells: [CellRect], columnCount: Int) -> [CellRect] {
+        guard columnCount > 0 else { return [] }
+        let expected = Set(0..<columnCount)
+        let byRow = Dictionary(grouping: cells, by: \.row)
+        let ready = Set(byRow.compactMap { row, items -> Int? in
+            Set(items.map(\.column)) == expected ? row : nil
+        })
+        return cells.filter { ready.contains($0.row) }
     }
 
     private static func frame(from group: Group) -> Frame? {
@@ -446,19 +481,43 @@ enum RichTextTableGutterGeometry {
         let rightMost = lastColumnMaxX ?? (columnEdges.last ?? 0)
         columnEdges.append(rightMost + columnTrailingInset)
 
+        let presentRows = Set(group.cells.map(\.row))
+        let contiguousRows = (0..<rowCount).allSatisfy { presentRows.contains($0) }
+        var rowDotIndexes: [Int]?
         var rowEdges: [CGFloat] = []
-        for row in 0..<rowCount {
-            let cells = group.cells.filter { $0.row == row }
-            if let minimum = cells.map(\.rect.minY).min() {
-                rowEdges.append(minimum - verticalChrome)
-            } else {
+        if contiguousRows {
+            for row in 0..<rowCount {
+                let cells = group.cells.filter { $0.row == row }
+                if let minimum = cells.map(\.rect.minY).min() {
+                    rowEdges.append(minimum - verticalChrome)
+                } else {
+                    return nil
+                }
+            }
+            let lastRowMaxY = group.cells.filter { $0.row == rowCount - 1 }
+                .map(\.rect.maxY).max()
+            let bottomMost = lastRowMaxY ?? (rowEdges.last ?? 0)
+            rowEdges.append(bottomMost + verticalChrome)
+        } else {
+            // 屏幕上只排了中间若干行。边界按下标留出空位，灰圆仍用真实行号。
+            let maxRow = rowCount - 1
+            rowEdges = Array(repeating: 0, count: maxRow + 2)
+            var dots: [Int] = []
+            var seen = Set<Int>()
+            for row in presentRows.sorted() {
+                let cells = group.cells.filter { $0.row == row }
+                guard let minimum = cells.map(\.rect.minY).min(),
+                      let maximum = cells.map(\.rect.maxY).max() else { continue }
+                rowEdges[row] = minimum - verticalChrome
+                rowEdges[row + 1] = maximum + verticalChrome
+                if seen.insert(row).inserted { dots.append(row) }
+                if seen.insert(row + 1).inserted { dots.append(row + 1) }
+            }
+            rowDotIndexes = dots.sorted()
+            guard let first = rowDotIndexes?.first, let last = rowDotIndexes?.last, last > first else {
                 return nil
             }
         }
-        let lastRowMaxY = group.cells.filter { $0.row == rowCount - 1 }
-            .map(\.rect.maxY).max()
-        let bottomMost = lastRowMaxY ?? (rowEdges.last ?? 0)
-        rowEdges.append(bottomMost + verticalChrome)
 
         // TextKit 把整行合成一条 fragment 时，各列 minX 会挤在一起，
         // 按列宽权重（或等宽）重新切一遍列边界。
@@ -474,7 +533,9 @@ enum RichTextTableGutterGeometry {
             }
         }
         // 行边界必须递增；异常排版时退回按行高均分，避免灰圆叠在一起。
-        if rowEdges.count > 1,
+        // 缺行时数组里有占位 0，不能拿来均分。
+        if contiguousRows,
+           rowEdges.count > 1,
            zip(rowEdges, rowEdges.dropFirst()).contains(where: { $0.1 - $0.0 < 4 }) {
             let top = rowEdges.first ?? 0
             let bottom = rowEdges.last ?? top
@@ -485,14 +546,15 @@ enum RichTextTableGutterGeometry {
 
         let left = columnEdges.first ?? 0
         let right = columnEdges.last ?? 0
-        let top = rowEdges.first ?? 0
-        let bottom = rowEdges.last ?? 0
+        let top = rowDotIndexes.flatMap { indexes in indexes.first.map { rowEdges[$0] } } ?? rowEdges.first ?? 0
+        let bottom = rowDotIndexes.flatMap { indexes in indexes.last.map { rowEdges[$0] } } ?? rowEdges.last ?? 0
         let bounds = NSRect(x: left, y: top, width: right - left, height: bottom - top)
         guard bounds.width > 8, bounds.height > 4 else { return nil }
         return Frame(probe: group.probe,
                      bounds: bounds,
                      columnEdges: columnEdges,
                      rowEdges: rowEdges,
+                     rowDotIndexes: rowDotIndexes,
                      cells: group.cells)
     }
 

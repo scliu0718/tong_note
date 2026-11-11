@@ -6,10 +6,10 @@ import WorkLogRichText
 
 /// 选择本地图片（NSOpenPanel）
 enum ImagePicker {
-    static func pickImage() -> URL? {
+    static func pickImage(message: String = "选择一张图片插入笔记正文") -> URL? {
         let panel = NSOpenPanel()
         panel.title = "插入图片"
-        panel.message = "选择一张图片插入笔记正文"
+        panel.message = message
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -527,7 +527,7 @@ struct EditorView: View {
     /// 正文字数（不含 HTML 标签与附件路径）
     private var plainWordCount: Int {
         let text = content.format == .richText
-            ? RichTextHTMLCodec.decode(content.body).plainText
+            ? RichTextHTMLCodec.visibleText(content.body)
             : MarkdownConverter.plainText(fromMarkdown: content.body)
         return text
             .replacingOccurrences(of: "\n", with: "")

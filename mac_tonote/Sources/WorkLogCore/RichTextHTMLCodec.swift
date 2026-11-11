@@ -133,6 +133,26 @@ public enum RichTextHTMLCodec {
 
     // MARK: - 解码
 
+    /// 去掉标签后的可见文字。列表摘要和字数不必建成完整文档，大表格也能立刻算完。
+    public static func visibleText(_ html: String) -> String {
+        guard html.contains("<") else { return html }
+        var out = String()
+        out.reserveCapacity(min(html.count, 8000))
+        var index = html.startIndex
+        while index < html.endIndex {
+            if html[index] == "<" {
+                let rest = html.index(after: index)
+                if rest < html.endIndex, let end = html[rest...].firstIndex(of: ">") {
+                    index = html.index(after: end)
+                    continue
+                }
+            }
+            out.append(html[index])
+            index = html.index(after: index)
+        }
+        return HTMLTreeBuilder.decodeEntities(out)
+    }
+
     public static func decode(_ html: String) -> RichTextDocument {
         let nodes = HTMLTreeBuilder.parse(html)
         var blocks: [RichTextBlock] = []

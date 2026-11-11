@@ -1,5 +1,6 @@
 import SwiftUI
 import WorkLogCore
+import WorkLogRichText
 
 /// 任务面板：待完成 / 进行中 / 已完成 / 终止 四组，支持折叠、勾选、流转、删除、编辑备注与日期。
 /// 任何任务变更后防抖自动同步到百度网盘。
@@ -17,6 +18,8 @@ struct TodoView: View {
     @State private var showCalendar = false
     @State private var collapsed: Set<String> = []
     @State private var autoSyncTask: Task<Void, Never>?
+    @StateObject private var notesController = RichTextEditorController()
+    @State private var imageError: String?
 
     private enum Filter: String, CaseIterable, Identifiable {
         case all = "全部"
@@ -50,6 +53,14 @@ struct TodoView: View {
             quickAddBar
         }
         .background(Theme.panelBg)
+        .alert("无法插入图片", isPresented: Binding(
+            get: { imageError != nil },
+            set: { if !$0 { imageError = nil } }
+        )) {
+            Button("好", role: .cancel) { imageError = nil }
+        } message: {
+            Text(imageError ?? "")
+        }
     }
 
     // MARK: 头部
@@ -222,8 +233,9 @@ struct TodoView: View {
                         .strikethrough(todo.status == .done, color: Theme.textQuaternary)
                         .lineLimit(2)
                     HStack(spacing: 6) {
-                        if !todo.notes.isEmpty {
-                            Text(todo.notes)
+                        let preview = notesPreview(todo.notes)
+                        if !preview.isEmpty {
+                            Text(preview)
                                 .font(.system(size: 11))
                                 .foregroundColor(Theme.textTertiary)
                                 .lineLimit(1)
@@ -385,12 +397,24 @@ struct TodoView: View {
                         .font(.system(size: 10.5))
                         .foregroundColor(Theme.textQuaternary)
                     Spacer(minLength: 0)
+                    Button(action: { insertImage(into: todo) }) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Theme.textSecondary)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("插入图片")
                 }
-                TextEditor(text: notesBinding(todo))
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.textPrimary)
-                    .frame(minHeight: 56, maxHeight: 130)
-                    .padding(8)
+                RichTextEditor(noteID: todo.id,
+                               content: notesContentBinding(todo),
+                               controller: notesController,
+                               attachments: noteStore.attachments,
+                               onEditorError: { imageError = $0 },
+                               textInset: CGSize(width: 8, height: 6))
+                    .id(todo.id)
+                    .frame(height: 120)
                     .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
@@ -559,15 +583,36 @@ struct TodoView: View {
         return v
     }
 
-    private func notesBinding(_ todo: Todo) -> Binding<String> {
-        Binding(get: { store.todo(with: todo.id)?.notes ?? "" },
-                set: { newValue in
-                    if var t = store.todo(with: todo.id) {
-                        t.notes = newValue
-                        store.update(t)
-                        scheduleAutoSync()
-                    }
-                })
+    private func notesContentBinding(_ todo: Todo) -> Binding<NoteContent> {
+        Binding(get: {
+            NoteContent(body: store.todo(with: todo.id)?.notes ?? "", format: .richText)
+        }, set: { newValue in
+            guard var t = store.todo(with: todo.id), t.notes != newValue.body else { return }
+            t.notes = newValue.body
+            store.update(t)
+            scheduleAutoSync()
+        })
+    }
+
+    /// 列表里只显示可见文字。只有图片时显示「图片」，避免把 HTML 标签铺出来。
+    private func notesPreview(_ notes: String) -> String {
+        let text = RichTextHTMLCodec.visibleText(notes)
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { return text }
+        if !NoteAttachmentIndex.relativePaths(in: notes).isEmpty { return "图片" }
+        return ""
+    }
+
+    private func insertImage(into todo: Todo) {
+        guard let url = ImagePicker.pickImage(message: "选择一张图片插入任务备注") else { return }
+        notesController.noteID = todo.id
+        notesController.attachments = noteStore.attachments
+        do {
+            try notesController.insertImage(from: url)
+        } catch {
+            imageError = error.localizedDescription
+        }
     }
 
     // MARK: 自动同步

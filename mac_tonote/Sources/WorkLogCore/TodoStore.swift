@@ -108,6 +108,8 @@ public final class TodoStore: ObservableObject {
     @Published public private(set) var todos: [Todo] = []
 
     private let fileURL: URL
+    /// 任务备注里的图片，目录与笔记附件相同：`attachments/<任务 id>/`。
+    public let attachments: AttachmentStore
     private let cursors: SyncCursorStore
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -123,6 +125,7 @@ public final class TodoStore: ObservableObject {
     public init(directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("todos.json")
+        attachments = AttachmentStore(rootDirectory: directory)
         cursors = SyncCursorStore(fileURL: directory.appendingPathComponent("todo-sync.json"))
         encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

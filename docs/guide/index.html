@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同笔记使用说明</title>
+<style>
+  :root {
+    --green: #1A9E5C;
+    --ink: #1D1D1F;
+    --muted: #6E6E73;
+    --line: #E5E5E8;
+    --bg: #F5F5F7;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+  }
+  header, main { width: min(820px, calc(100% - 48px)); margin: 0 auto; }
+  header { padding: 28px 0 8px; }
+  h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.02em; }
+  header p { margin: 0; color: var(--muted); }
+  nav {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; gap: 8px; flex-wrap: wrap;
+    width: min(820px, calc(100% - 48px));
+    margin: 16px auto 0;
+    padding: 10px 0 12px;
+    background: linear-gradient(var(--bg) 70%, transparent);
+  }
+  nav a {
+    color: var(--ink); text-decoration: none;
+    background: white; border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600;
+  }
+  nav a:hover { border-color: var(--green); color: var(--green); }
+  section {
+    background: white; border: 1px solid var(--line); border-radius: 16px;
+    padding: 22px 22px 18px; margin: 14px 0;
+  }
+  h2 { margin: 0 0 8px; font-size: 20px; }
+  p { margin: 0 0 12px; }
+  ul { margin: 0 0 14px; padding-left: 1.2em; }
+  li + li { margin-top: 4px; }
+  figure { margin: 0; }
+  img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--line); border-radius: 12px; background: white;
+  }
+  figcaption { margin-top: 8px; color: var(--muted); font-size: 13px; }
+  footer { width: min(820px, calc(100% - 48px)); margin: 8px auto 28px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>同笔记怎么用</h1>
+  <p>笔记写在你自己的百度网盘里。先记在这台 Mac 上，联网后自动同步。</p>
+</header>
+<nav>
+  <a href="#login">登录</a>
+  <a href="#home">主界面</a>
+  <a href="#editor">写笔记</a>
+  <a href="#table">表格</a>
+  <a href="#tasks">快任务</a>
+  <a href="#sync">同步</a>
+</nav>
+<main>
+  <section id="login">
+    <h2>登录</h2>
+    <p>用百度网盘账号登录。两种方式都可以：</p>
+    <ul>
+      <li>点蓝色按钮，在弹出的窗口里授权。</li>
+      <li>点「浏览器扫码登录」，用百度 App 或百度网盘 App 扫一扫。</li>
+    </ul>
+    <figure>
+      <img src="images/login.png" alt="登录页：百度网盘账号登录和浏览器扫码登录">
+      <figcaption>登录后，同笔记只读写你网盘里的笔记目录，授权信息留在这台电脑上。</figcaption>
+    </figure>
+  </section>
+
+  <section id="home">
+    <h2>主界面</h2>
+    <p>左边是笔记本和标签，中间是笔记列表，右边是正在写的内容。</p>
+    <ul>
+      <li>点绿色「＋ 新建笔记」开始一篇新的。</li>
+      <li>列表上方可以搜索，也可以一键同步。</li>
+      <li>侧栏顶部的齿轮打开同步和存储。</li>
+    </ul>
+    <figure>
+      <img src="images/home.png" alt="主界面：侧栏、笔记列表和编辑区">
+    </figure>
+  </section>
+
+  <section id="editor">
+    <h2>写笔记</h2>
+    <p>标题下面是工具栏。选中文字再点对应按钮。</p>
+    <ul>
+      <li><b>T</b> 选择标题或列表。</li>
+      <li><b>B</b> 加粗，旁边是斜体、下划线和删除线。</li>
+      <li>金色的 <b>A</b> 改文字颜色，画笔图标改背景色。</li>
+      <li>照片图标插入图片，也可以直接把截图粘贴进来。</li>
+    </ul>
+    <p>不用点保存。停下之后就写到本机，右上角会显示「已保存到本地」。</p>
+    <figure>
+      <img src="images/editor.png" alt="编辑器工具栏、带颜色的文字和插入的图片">
+    </figure>
+  </section>
+
+  <section id="table">
+    <h2>表格</h2>
+    <p>点工具栏里的表格图标，在格子上划选行和列，就能插入一张表。</p>
+    <ul>
+      <li>光标点进格子后，可以继续输入，也能设置对齐。</li>
+      <li>格子右上角的箭头用来改背景、增加或删除行列。</li>
+      <li>表格外沿的小圆点用来加一行或加一列。</li>
+    </ul>
+    <figure>
+      <img src="images/table.png" alt="笔记里的表格，外沿有用来增加行列的圆点">
+    </figure>
+  </section>
+
+  <section id="tasks">
+    <h2>快任务</h2>
+    <p>笔记列表顶部的「快任务」打开任务页。任务按状态分成四组：待完成、进行中、已完成、已终止。</p>
+    <ul>
+      <li>展开一条任务，可以写备注、插入图片。</li>
+      <li>可以设置截止时间。过了日期还没完成，会标成逾期。</li>
+      <li>底部输入标题，回车就新建一条。</li>
+    </ul>
+    <figure>
+      <img src="images/tasks.png" alt="快任务：分组、备注、图片和截止时间">
+    </figure>
+  </section>
+
+  <section id="sync">
+    <h2>同步</h2>
+    <p>点侧栏齿轮，打开「同步与存储」。这里能看到最近一次同步，也可以马上再同步全部。</p>
+    <p>平时不用守着这个页面。打开应用、回到窗口、以及你停止输入大约 1.5 秒之后，都会自动同步一次。</p>
+    <figure>
+      <img src="images/settings.png" alt="同步与存储：同步状态和再次同步">
+    </figure>
+  </section>
+
+  <section>
+    <h2>换电脑、同步失败时</h2>
+    <ul>
+      <li>换一台电脑：用同一个百度网盘账号登录，笔记会同步过来。</li>
+      <li>同步失败：已经写在这台电脑上的内容还在。检查网络后，再点一次同步。</li>
+    </ul>
+  </section>
+</main>
+<footer>同笔记 · 数据属于你自己</footer>
+</body>
+</html>
