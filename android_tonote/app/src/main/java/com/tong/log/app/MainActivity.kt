@@ -120,15 +120,15 @@ private fun AppRoot() {
         composable("devices") { DevicesScreen(onBack = { navController.popBackStack() }) }
     }
 
-    // 启动即同步 + 前台每 45 秒同步；顺带刷新当前百度账号，供「我的 / 同步与存储」展示
+    // 启动即同步 + 前台每 45 秒同步；每轮都顺带刷新账号，
+    // 避免首次网络未就绪时「当前百度账号」一直停在「获取中…」
     LaunchedEffect(Unit) {
-        if (BaiduPanConfig.isConfigured) {
-            runCatching { AuthState.refreshAccount() }
-            SyncEngine.syncRound()
-        }
         while (true) {
+            if (BaiduPanConfig.isConfigured) {
+                runCatching { AuthState.refreshAccount() }
+                SyncEngine.syncRound()
+            }
             delay(45_000)
-            if (BaiduPanConfig.isConfigured) SyncEngine.syncRound()
         }
     }
 }
