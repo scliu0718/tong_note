@@ -305,9 +305,11 @@ public sealed class ShellView : UserControl
                 new TextBlock { Text = "同步与存储", FontSize = 22, FontWeight = FontWeight.Bold },
                 new TextBlock
                 {
-                    Text = BaiduPanConfig.IsConfigured
-                        ? "百度网盘凭证已读取。授权和按篇同步还在迁移。"
-                        : "还没有读到 baidupan.secret.json，授权不可用。",
+                    Text = new BaiduPanTokenStore(_session.Root).Load() != null
+                        ? "已登录百度网盘。按篇同步还在迁移。"
+                        : BaiduPanConfig.IsConfigured
+                            ? "凭证已读取。登录和扫码会打开浏览器，授权后回到同笔记。"
+                            : "还没有读到 baidupan.secret.json，授权不可用。",
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = Palette.TextSecondary,
                 },

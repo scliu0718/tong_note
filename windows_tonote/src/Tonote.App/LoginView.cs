@@ -8,7 +8,7 @@ namespace Tonote.App;
 
 public sealed class LoginView : UserControl
 {
-    public LoginView(Action enterLocal)
+    public LoginView(BaiduLogin login, Action enterLocal)
     {
         var banner = new TextBlock
         {
@@ -19,22 +19,22 @@ public sealed class LoginView : UserControl
             MaxWidth = 340,
             IsVisible = false,
         };
-
-        var login = Login(banner, () =>
+        login.Notice += (text, error) =>
         {
-            banner.Text = BaiduPanConfig.IsConfigured
-                ? "凭证已关联。Windows 端的授权窗口还在接入，可以先写本机笔记。"
-                : "尚未配置 AppKey / AppSecret。请把 baidupan.secret.json 放在 windows_tonote 目录后重新打开。";
+            banner.Text = text;
+            banner.Foreground = error ? Palette.Red : Palette.TextSecondary;
             banner.IsVisible = true;
-        }, enterLocal);
+        };
+
+        var form = Login(banner, () => login.Start("popup"), () => login.Start("page"), enterLocal);
         var layout = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,*"),
             Background = Palette.WindowBg,
         };
         layout.Children.Add(Brand());
-        layout.Children.Add(login);
-        Grid.SetColumn(login, 1);
+        layout.Children.Add(form);
+        Grid.SetColumn(form, 1);
         Content = layout;
     }
 
@@ -142,7 +142,7 @@ public sealed class LoginView : UserControl
         };
     }
 
-    private static Control Login(TextBlock banner, Action showPending, Action enterLocal)
+    private static Control Login(TextBlock banner, Action accountLogin, Action scanLogin, Action enterLocal)
     {
         var panel = new StackPanel
         {
@@ -179,10 +179,10 @@ public sealed class LoginView : UserControl
                     Foreground = BaiduPanConfig.IsConfigured ? Palette.Accent : Palette.Red,
                     HorizontalAlignment = HorizontalAlignment.Center,
                 },
-                PrimaryButton("使用百度网盘账号登录", showPending),
+                PrimaryButton("使用百度网盘账号登录", accountLogin),
                 banner,
                 OrDivider(),
-                SecondaryButton("浏览器扫码登录", showPending),
+                SecondaryButton("浏览器扫码登录", scanLogin),
                 new TextBlock
                 {
                     Text = "登录即代表你授权同笔记通过百度网盘开放平台读写 /apps/tong_log 目录。授权信息只保存在本机。",

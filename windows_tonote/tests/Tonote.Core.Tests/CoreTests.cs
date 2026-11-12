@@ -171,5 +171,88 @@ public class CoreTests
         Assert.Equal("/apps/tong_log", BaiduPanConfig.RemoteRoot);
     }
 
+    [Fact]
+    public void AuthorizeUrlMatchesTheMacQueryAndCallbackParsesCode()
+    {
+        var path = Path.Combine(Temp(), "baidupan.secret.json");
+        File.WriteAllText(path, """{"appKey":"app-key","appSecret":"app-secret","appID":"9"}""");
+        BaiduPanConfig.Load([path]);
+
+        var url = BaiduPanAuth.AuthorizeUrl("STATE-1", "page");
+
+        Assert.StartsWith("https://openapi.baidu.com/oauth/2.0/authorize?", url, StringComparison.Ordinal);
+        Assert.Contains("response_type=code", url, StringComparison.Ordinal);
+        Assert.Contains("client_id=app-key", url, StringComparison.Ordinal);
+        Assert.Contains("redirect_uri=tongnote%3A%2F%2Foauth%2Fcallback", url, StringComparison.Ordinal);
+        Assert.Contains("scope=basic%2Cnetdisk", url, StringComparison.Ordinal);
+        Assert.Contains("display=page", url, StringComparison.Ordinal);
+        Assert.Contains("state=STATE-1", url, StringComparison.Ordinal);
+
+        Assert.True(BaiduPanAuth.TryParseCallback(
+            "tongnote://oauth/callback?code=abc&state=STATE-1",
+            out var callback));
+        Assert.Equal("abc", callback.Code);
+        Assert.Equal("STATE-1", callback.State);
+        Assert.Null(callback.Error);
+
+        Assert.True(BaiduPanAuth.TryParseCallback(
+            "tongnote://oauth/callback?error=access_denied&state=STATE-1",
+            out var denied));
+        Assert.Equal("access_denied", denied.Error);
+        Assert.False(BaiduPanAuth.TryParseCallback("https://example.com/", out _));
+    }
+
+    [Fact]
+    public async Task ExchangeCodeStoresTokenInTheMacShape()
+    {
+        var path = Path.Combine(Temp(), "baidupan.secret.json");
+        File.WriteAllText(path, """{"appKey":"app-key","appSecret":"app-secret","appID":"9"}""");
+        BaiduPanConfig.Load([path]);
+
+        var handler = new StubHandler("""
+            {"access_token":"token-1","refresh_token":"refresh-1","expires_in":2592000,"scope":"basic netdisk"}
+            """);
+        using var http = new HttpClient(handler);
+        var token = await BaiduPanClient.ExchangeCodeAsync("the-code", http);
+
+        Assert.Equal("token-1", token.AccessToken);
+        Assert.Equal("refresh-1", token.RefreshToken);
+        Assert.Equal(2592000, token.ExpiresIn);
+        Assert.Contains("grant_type=authorization_code", handler.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("code=the-code", handler.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("client_id=app-key", handler.RequestUrl, StringComparison.Ordinal);
+
+        var dir = Temp();
+        new BaiduPanTokenStore(dir).Save(token);
+        var json = File.ReadAllText(Path.Combine(dir, "baidupan-token.json"));
+        Assert.Contains("\"accessToken\": \"token-1\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"refreshToken\": \"refresh-1\"", json, StringComparison.Ordinal);
+        Assert.Matches("""
+            "createdAt": "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
+            """, json);
+
+        var loaded = new BaiduPanTokenStore(dir).Load();
+        Assert.Equal("token-1", loaded!.AccessToken);
+        Assert.False(loaded.IsExpired);
+    }
+
+    private sealed class StubHandler : HttpMessageHandler
+    {
+        private readonly string _body;
+
+        public StubHandler(string body) => _body = body;
+
+        public string RequestUrl { get; private set; } = "";
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestUrl = request.RequestUri?.ToString() ?? "";
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(_body),
+            });
+        }
+    }
+
     private static string Temp() => Directory.CreateTempSubdirectory("tonote-win-").FullName;
 }
