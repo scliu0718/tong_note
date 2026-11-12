@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 白色笔记本体（居中，占安全区） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,32 h28 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -4,4 h-28 a4,4 0 0 1 -4,-4 v-36 a4,4 0 0 1 4,-4 z" />
+    <!-- 三条横线 -->
+    <path
+        android:strokeColor="#1A9E5C"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M44,44 h20 M44,54 h20 M44,64 h14" />
+</vector>
