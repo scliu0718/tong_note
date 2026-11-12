@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Tonote.Core</RootNamespace>
+    <AssemblyName>Tonote.Core</AssemblyName>
+    <Description>同笔记 Windows 端核心库，笔记 JSON 与 Mac 版对齐。</Description>
+  </PropertyGroup>
+</Project>

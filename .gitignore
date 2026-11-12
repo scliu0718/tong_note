@@ -4,4 +4,7 @@ baidupan.secret.json
 # 构建产物
 .build/
 *.app/
+# Windows 工程目录名以 .App 结尾，不要当成 macOS 应用包
+!windows_tonote/src/Tonote.App/
+!windows_tonote/src/Tonote.App/**
 .DS_Store

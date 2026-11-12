@@ -1,0 +1,12 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Tonote.App.MainWindow"
+        Title="同笔记"
+        Width="1120"
+        Height="700"
+        MinWidth="960"
+        MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F7">
+  <ContentControl x:Name="Root" />
+</Window>
