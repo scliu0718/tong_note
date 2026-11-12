@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkLog · App 端 UI 设计稿</title>
+<style>
+  :root{
+    --bg:#e9e9ec;
+    --window-bg:#f5f5f7;
+    --sidebar-bg:#ececef;
+    --panel-bg:#ffffff;
+    --editor-bg:#ffffff;
+    --text-1:#1d1d1f;
+    --text-2:#48484a;
+    --text-3:#86868b;
+    --text-4:#a1a1a6;
+    --line:#e0e0e4;
+    --line-soft:#ececef;
+    --accent:#1a9e5c;
+    --accent-hover:#147a46;
+    --accent-tint:#e6f4ec;
+    --accent-tint-2:#cfe9d9;
+    --baidu:#06a7ff;
+    --baidu-deep:#0084d6;
+    --baidu-tint:#e5f5ff;
+    --red:#e5484d;
+    --red-tint:#fcebeb;
+    --amber:#f5a623;
+    --amber-tint:#fdf1dc;
+    --shadow-sm:0 1px 2px rgba(20,20,22,.06),0 1px 6px rgba(20,20,22,.05);
+    --shadow-md:0 6px 24px rgba(20,20,22,.12),0 2px 8px rgba(20,20,22,.07);
+    --shadow-lg:0 18px 50px rgba(20,20,22,.22),0 4px 14px rgba(20,20,22,.10);
+    --radius:10px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    --mono:"SF Mono",Menlo,Consolas,"PingFang SC",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);font-family:var(--font);color:var(--text-1);-webkit-font-smoothing:antialiased}
+  body{padding:28px 32px 40px;display:flex;flex-direction:column;align-items:center;gap:20px}
+
+  /* ===== 顶部说明条 ===== */
+  .doc-header{width:1120px;max-width:100%;display:flex;align-items:flex-end;justify-content:space-between}
+  .doc-header h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .doc-header .sub{font-size:13px;color:var(--text-3);margin-top:4px}
+  .doc-header .tag{font-size:11px;color:var(--accent);background:var(--accent-tint);padding:4px 10px;border-radius:999px;font-weight:600}
+  .tabs{display:flex;gap:6px;background:#e3e3e7;padding:5px;border-radius:12px;flex-wrap:wrap}
+  .tab{border:none;background:transparent;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer;font-family:var(--font);transition:.15s}
+  .tab:hover{color:var(--text-1)}
+  .tab.active{background:#fff;color:var(--text-1);box-shadow:var(--shadow-sm)}
+
+  /* ===== 舞台 ===== */
+  .stage{display:flex;gap:30px;align-items:flex-start;justify-content:center}
+
+  /* ===== 手机外框 ===== */
+  .phone{width:390px;height:844px;background:#000;border-radius:54px;padding:10px;box-shadow:var(--shadow-lg);position:relative;flex-shrink:0}
+  .phone-screen{width:100%;height:100%;background:var(--window-bg);border-radius:44px;overflow:hidden;display:flex;flex-direction:column;position:relative}
+  .statusbar{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;flex-shrink:0;font-size:15px;font-weight:600;color:var(--text-1)}
+  .statusbar .time{font-weight:700}
+  .statusbar .icons{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-1)}
+  .statusbar .icons svg{width:16px;height:12px}
+  .statusbar .batt{width:24px;height:12px;border:1px solid rgba(0,0,0,.35);border-radius:3.5px;padding:1.5px;position:relative}
+  .statusbar .batt::after{content:"";position:absolute;right:-3px;top:3px;width:2px;height:5px;background:rgba(0,0,0,.35);border-radius:0 2px 2px 0}
+  .statusbar .batt i{display:block;height:100%;width:70%;background:#000;border-radius:1.5px}
+
+  /* ===== 每个 screen ===== */
+  .screen{flex:1;display:none;flex-direction:column;overflow:hidden;background:var(--window-bg)}
+  .screen.active{display:flex}
+
+  /* ===== 通用导航栏 ===== */
+  .nav{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;background:var(--window-bg)}
+  .nav .back{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:50%;color:var(--text-1);cursor:pointer}
+  .nav .back svg{width:20px;height:20px}
+  .nav .nav-title{font-size:17px;font-weight:700;position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+  .nav .nav-right{display:flex;align-items:center;gap:6px}
+  .nav-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:50%;color:var(--text-1);cursor:pointer}
+  .nav-icon svg{width:20px;height:20px}
+  .nav .avatar-sm{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#19b46a,#0e8a48);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+  /* ===== 底部 Tab 栏 ===== */
+  .tabbar{height:62px;flex-shrink:0;background:rgba(250,250,251,.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;position:relative}
+  .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;color:var(--text-4);cursor:pointer}
+  .tabbar .item svg{width:23px;height:23px}
+  .tabbar .item.active{color:var(--accent);font-weight:600}
+  .home-ind{height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:transparent}
+  .home-ind i{width:120px;height:5px;border-radius:3px;background:rgba(0,0,0,.85)}
+
+  /* ===== 登录页 ===== */
+  .login-scr{background:linear-gradient(165deg,#17c26b 0%,#0f9d52 58%,#0c7a40 100%);color:#fff;position:relative;overflow:hidden}
+  .login-scr::before{content:"";position:absolute;right:-110px;top:-110px;width:340px;height:340px;border-radius:50%;background:rgba(255,255,255,.08)}
+  .login-scr::after{content:"";position:absolute;left:-50px;bottom:-150px;width:300px;height:300px;border-radius:50%;background:rgba(255,255,255,.06)}
+  .login-hero{flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:36px 28px 12px;position:relative;z-index:1}
+  .brand-row{display:flex;align-items:center;gap:13px}
+  .brand-icon{width:48px;height:48px;border-radius:13px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+  .brand-icon svg{width:27px;height:27px}
+  .brand-name{font-size:20px;font-weight:700}
+  .brand-en{font-size:11px;opacity:.8;font-weight:500;letter-spacing:.05em}
+  .pitch{margin-top:34px}
+  .pitch h2{font-size:30px;font-weight:700;line-height:1.22;letter-spacing:-.02em;margin-bottom:14px}
+  .pitch p{font-size:13.5px;line-height:1.7;opacity:.92}
+  .feat-list{display:flex;flex-direction:column;gap:12px;margin-top:26px}
+  .feat{display:flex;align-items:center;gap:10px;font-size:12.5px;opacity:.94}
+  .feat .ck{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .feat .ck svg{width:11px;height:11px}
+  .login-foot{font-size:10.5px;opacity:.66;padding:14px 0 4px}
+  .login-sheet{background:#fff;border-radius:24px 24px 0 0;padding:22px 24px 26px;color:var(--text-1);display:flex;flex-direction:column;gap:14px;flex-shrink:0}
+  .login-sheet .welcome{font-size:16px;font-weight:700;text-align:center}
+  .login-sheet .welcome-sub{font-size:12px;color:var(--text-3);text-align:center;margin-top:-8px}
+  .baidu-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;background:var(--baidu);color:#fff;border:none;border-radius:12px;padding:14px 20px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);box-shadow:0 4px 14px rgba(6,167,255,.28)}
+  .baidu-btn svg{width:19px;height:19px}
+  .divider{display:flex;align-items:center;gap:12px;width:100%;color:var(--text-4);font-size:11px}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+  .scan-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;background:#fff;color:var(--baidu-deep);border:1.5px solid var(--baidu);border-radius:12px;padding:13px 20px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)}
+  .scan-btn svg{width:19px;height:19px}
+  .privacy{font-size:10.5px;color:var(--text-4);text-align:center;line-height:1.6}
+
+  /* ===== 笔记列表页 ===== */
+  .chips{display:flex;gap:8px;padding:4px 16px 10px;overflow:hidden;flex-shrink:0}
+  .chip{white-space:nowrap;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:500;color:var(--text-2);background:#f0f0f2;cursor:pointer;border:none;font-family:var(--font)}
+  .chip.on{background:var(--accent);color:#fff;font-weight:600}
+  .chip.add{background:transparent;border:1px dashed var(--line);color:var(--text-3)}
+  .searchbar{padding:0 16px 10px;flex-shrink:0}
+  .search{display:flex;align-items:center;gap:8px;background:#f2f2f4;border-radius:10px;padding:9px 12px}
+  .search svg{width:15px;height:15px;color:var(--text-4);flex-shrink:0}
+  .search input{border:none;background:transparent;outline:none;font-size:13px;color:var(--text-1);width:100%;font-family:var(--font)}
+  .search input::placeholder{color:var(--text-4)}
+  .sortbar{display:flex;gap:14px;padding:2px 16px 8px;font-size:12px;color:var(--text-3);border-bottom:1px solid var(--line-soft);flex-shrink:0}
+  .sortbar span{cursor:pointer;padding-bottom:6px;border-bottom:2px solid transparent}
+  .sortbar span.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .quick-row{display:flex;gap:10px;padding:12px 16px 6px;flex-shrink:0}
+  .quick-card{flex:1;border:1px solid var(--line-soft);border-radius:12px;padding:11px 12px;background:#fff;display:flex;align-items:center;gap:9px;cursor:pointer;position:relative}
+  .quick-card .ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .quick-card .ic svg{width:18px;height:18px}
+  .quick-card.sync .ic{background:var(--accent-tint);color:var(--accent)}
+  .quick-card.task .ic{background:var(--amber-tint);color:var(--amber)}
+  .quick-card .t{font-size:12.5px;font-weight:600;color:var(--text-1)}
+  .quick-card .s{font-size:10px;color:var(--text-4);margin-top:1px}
+  .quick-card .badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px}
+  .note-scroll{flex:1;overflow:hidden;padding:4px 16px 12px}
+  .note-card{padding:13px 14px;border-radius:12px;cursor:pointer;border:1px solid transparent;position:relative}
+  .note-card.active{background:var(--accent-tint);border-color:var(--accent-tint-2)}
+  .note-card .t{font-size:14px;font-weight:600;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+  .note-card .t .pin{color:var(--amber);font-size:11px}
+  .note-card .s{font-size:12px;color:var(--text-3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px}
+  .note-card .meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-4)}
+  .note-card .meta .tagchip{background:#efeff1;color:var(--text-3);padding:2px 8px;border-radius:999px;font-size:10px}
+  .note-card.active .meta .tagchip{background:#d5ecdd;color:var(--accent-hover)}
+  .note-card::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:1px;background:var(--line-soft)}
+  .note-card:last-child::after{display:none}
+  .fab{position:absolute;right:20px;bottom:24px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(26,158,92,.4);cursor:pointer}
+  .fab svg{width:26px;height:26px}
+
+  /* ===== 编辑器 ===== */
+  .editor-scr{background:var(--editor-bg)}
+  .ed-meta{display:flex;align-items:center;gap:6px;padding:0 16px 4px;flex-wrap:wrap;flex-shrink:0}
+  .ed-meta .chip{background:#f2f2f4;color:var(--text-3);padding:2px 9px;border-radius:6px;font-size:11px;white-space:nowrap}
+  .ed-meta .chip.nb{color:var(--accent-hover);background:var(--accent-tint);font-weight:600}
+  .ed-meta .time{font-size:11px;color:var(--text-4)}
+  .ed-meta .sync-ok{margin-left:auto;font-size:11px;color:var(--accent);font-weight:500;display:flex;align-items:center;gap:4px}
+  .ed-meta .sync-ok::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .ed-title{font-size:21px;font-weight:700;border:none;outline:none;width:100%;color:var(--text-1);font-family:var(--font);padding:6px 16px 8px;flex-shrink:0}
+  .ed-body{flex:1;overflow:hidden;padding:6px 18px 14px}
+  .ed-content{font-size:14.5px;line-height:1.8;color:var(--text-2)}
+  .ed-content h2{font-size:17px;font-weight:700;color:var(--text-1);margin:18px 0 8px}
+  .ed-content h3{font-size:15px;font-weight:600;color:var(--text-1);margin:14px 0 6px}
+  .ed-content p{margin-bottom:10px}
+  .ed-content ul{margin:0 0 10px 18px}
+  .ed-content li{margin-bottom:5px}
+  .ed-content .hl{background:#fff3d6;padding:1px 5px;border-radius:4px;color:#8a5a00}
+  .ed-content .tag-inline{color:var(--accent);font-weight:600}
+  .ed-content blockquote{border-left:3px solid var(--accent);padding:5px 12px;margin:10px 0;background:#f7faf8;color:var(--text-3);font-size:13px;border-radius:0 6px 6px 0}
+  .ed-content .img-ph{height:120px;border-radius:10px;background:linear-gradient(135deg,#eef2f0,#dfe8e2);display:flex;align-items:center;justify-content:center;color:var(--text-4);font-size:11px;margin:8px 0}
+  /* 表格示意 */
+  .m-table{margin:10px 0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .m-table .trow{display:flex;border-bottom:1px solid var(--line)}
+  .m-table .trow:last-child{border-bottom:none}
+  .m-table .tcell{flex:1;padding:9px 11px;font-size:12px;color:var(--text-2);border-right:1px solid var(--line)}
+  .m-table .tcell:last-child{border-right:none}
+  .m-table .tcell.hd{background:#f5f6f7;font-weight:600;color:var(--text-1)}
+  .m-table .tcell.sel{background:var(--accent-tint);position:relative}
+  .m-table .tcell.sel::after{content:"";position:absolute;right:6px;top:6px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  /* 底部格式工具条 */
+  .fmtbar{flex-shrink:0;background:#fafafb;border-top:1px solid var(--line);padding:9px 12px}
+  .fmtbar .row{display:flex;align-items:center;gap:2px;overflow:hidden}
+  .fmt-btn{min-width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-2);cursor:pointer;padding:0 7px;font-size:12px;font-weight:600}
+  .fmt-btn svg{width:18px;height:18px}
+  .fmt-btn.on{background:var(--accent-tint);color:var(--accent)}
+  .fmt-sep{width:1px;height:18px;background:var(--line);margin:0 4px;flex-shrink:0}
+  .fmt-btn.label{color:var(--text-3)}
+  /* 键盘示意 */
+  .keyboard{flex-shrink:0;height:170px;background:#d1d3d9;display:flex;flex-direction:column;gap:6px;padding:8px;border-top:1px solid #c5c6cb}
+  .kb-row{display:flex;gap:6px;flex:1}
+  .kb-key{flex:1;background:#fbfbfc;border-radius:5px;box-shadow:0 1px 0 #b9bbc1;font-size:12px;color:var(--text-2);display:flex;align-items:center;justify-content:center}
+  .kb-key.space{flex:5}
+  /* 底部 sheet（单元格菜单） */
+  .sheet-mask{position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;z-index:30}
+  .sheet{width:100%;background:#fff;border-radius:20px 20px 0 0;padding:6px 18px 26px;box-shadow:0 -10px 30px rgba(0,0,0,.12)}
+  .sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 14px}
+  .sheet h4{font-size:14px;font-weight:700;margin-bottom:10px}
+  .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .sw{width:30px;height:30px;border-radius:8px;border:1px solid var(--line-soft);cursor:pointer;position:relative}
+  .sw.none{background:#fff;display:flex;align-items:center;justify-content:center}
+  .sw.none::after{content:"";width:16px;height:1.6px;background:var(--red);transform:rotate(-45deg)}
+  .sw.sel{border:2px solid var(--accent)}
+  .sheet .opt{display:flex;align-items:center;justify-content:space-between;padding:13px 2px;border-bottom:1px solid var(--line-soft);font-size:13.5px;color:var(--text-1);cursor:pointer}
+  .sheet .opt:last-child{border-bottom:none}
+  .sheet .opt .r{color:var(--text-4);font-size:12px;display:flex;align-items:center;gap:6px}
+  .sheet .opt.danger{color:var(--red)}
+  .sheet .opt .chev{color:var(--text-4)}
+  .sheet .opt .chev svg{width:15px;height:15px}
+  .sheet .seg{display:flex;background:#f0f0f2;border-radius:9px;padding:3px;margin-bottom:12px}
+  .sheet .seg span{flex:1;text-align:center;padding:7px 0;font-size:12px;color:var(--text-3);border-radius:7px;cursor:pointer}
+  .sheet .seg span.on{background:#fff;color:var(--text-1);font-weight:600;box-shadow:var(--shadow-sm)}
+
+  /* ===== 任务页 ===== */
+  .todo-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 4px;flex-shrink:0}
+  .todo-stats{font-size:12px;color:var(--text-3)}
+  .todo-stats b{color:var(--text-1);font-weight:600}
+  .todo-filter{display:flex;gap:6px;padding:10px 16px 4px;flex-shrink:0}
+  .todo-filter .fchip{padding:5px 13px;border-radius:999px;font-size:12px;font-weight:500;color:var(--text-2);background:#f0f0f2;cursor:pointer;border:none;font-family:var(--font)}
+  .todo-filter .fchip.on{background:var(--accent);color:#fff}
+  .todo-scroll{flex:1;overflow:hidden;padding:6px 16px 8px}
+  .tgroup{margin-bottom:10px}
+  .tgroup-h{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text-2);padding:8px 2px 6px;cursor:pointer}
+  .tgroup-h .dot{width:8px;height:8px;border-radius:50%}
+  .tgroup-h .n{color:var(--text-4);font-weight:500;margin-left:2px}
+  .tgroup-h .chev{margin-left:auto;color:var(--text-4)}
+  .tgroup-h .chev svg{width:13px;height:13px}
+  .todo-item{display:flex;align-items:flex-start;gap:11px;padding:11px 12px;border-radius:11px;background:#fff;border:1px solid var(--line-soft);margin-bottom:7px}
+  .todo-item .chk{width:21px;height:21px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;cursor:pointer;margin-top:1px;position:relative}
+  .todo-item .chk.done{background:var(--accent);border-color:var(--accent)}
+  .todo-item .chk.done::after{content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+  .todo-item .body{flex:1;min-width:0}
+  .todo-item .tt{font-size:13.5px;color:var(--text-1);line-height:1.4}
+  .todo-item .tt.done{color:var(--text-4);text-decoration:line-through}
+  .todo-item .sub{font-size:11px;color:var(--text-4);margin-top:3px;display:flex;align-items:center;gap:6px}
+  .todo-item .deadline{font-size:10.5px;padding:2px 8px;border-radius:999px;background:#f0f0f2;color:var(--text-3)}
+  .todo-item .deadline.overdue{background:var(--red-tint);color:var(--red);font-weight:600}
+  .todo-item .btn{font-size:11px;font-weight:600;padding:4px 10px;border-radius:7px;cursor:pointer;flex-shrink:0}
+  .todo-item .btn.start{background:var(--accent-tint);color:var(--accent-hover)}
+  .todo-item .btn.finish{background:var(--amber-tint);color:#b9770a}
+  .todo-item .btn.term{color:var(--text-4)}
+  .todo-add{flex-shrink:0;padding:8px 16px 6px;background:var(--window-bg);border-top:1px solid var(--line-soft)}
+  .todo-add .box{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;box-shadow:var(--shadow-sm)}
+  .todo-add .plus{width:20px;height:20px;color:var(--accent);flex-shrink:0}
+  .todo-add .plus svg{width:20px;height:20px}
+  .todo-add input{border:none;outline:none;font-size:13.5px;color:var(--text-1);width:100%;font-family:var(--font)}
+  .todo-add input::placeholder{color:var(--text-4)}
+
+  /* ===== 我的页 ===== */
+  .me-scroll{flex:1;overflow:hidden;padding:10px 16px 16px}
+  .me-account{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .me-account .avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#19b46a,#0e8a48);color:#fff;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .me-account .who{font-size:16px;font-weight:700}
+  .me-account .mail{font-size:12px;color:var(--text-3);margin-top:3px}
+  .me-account .sync-state{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--accent);font-weight:500}
+  .me-account .sync-state::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .usage-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .usage-card .big{font-size:22px;font-weight:700}
+  .usage-card .big small{font-size:11px;color:var(--text-4);font-weight:400}
+  .usage-card .bar{height:6px;border-radius:3px;background:#e5e5e8;margin:11px 0 8px;overflow:hidden}
+  .usage-card .bar i{display:block;height:100%;width:12%;background:var(--baidu);border-radius:3px}
+  .usage-card .tip{font-size:11px;color:var(--text-4)}
+  .me-group{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:14px}
+  .me-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+  .me-item:last-child{border-bottom:none}
+  .me-item .ic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .me-item .ic svg{width:17px;height:17px}
+  .me-item .l{font-size:13.5px;color:var(--text-1);flex:1}
+  .me-item .r{font-size:12px;color:var(--text-4);display:flex;align-items:center;gap:4px}
+  .me-item .r .badge{background:var(--accent-tint);color:var(--accent-hover);padding:1px 8px;border-radius:999px;font-size:10px;font-weight:600}
+  .me-item .chev{color:var(--text-4)}
+  .me-item .chev svg{width:15px;height:15px}
+  .me-item.logout{color:var(--red);justify-content:center;font-weight:600}
+  .me-item.logout .l{color:var(--red);text-align:center;font-size:14px}
+  .me-foot{font-size:10.5px;color:var(--text-4);text-align:center;line-height:1.7}
+
+  /* ===== 同步页 ===== */
+  .sync-scroll{flex:1;overflow:hidden;padding:12px 16px 16px}
+  .sync-scroll .lead{font-size:12px;color:var(--text-3);margin-bottom:12px}
+  .sync-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin-bottom:12px}
+  .sync-card .ct{font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .sync-card .ct svg{width:16px;height:16px;color:var(--accent)}
+  .srow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+  .srow:last-child{border-bottom:none}
+  .srow .l{font-size:13px;color:var(--text-2)}
+  .srow .l small{display:block;font-size:10.5px;color:var(--text-4);margin-top:2px}
+  .srow .r{font-size:13px;color:var(--text-1);font-weight:500;display:flex;align-items:center;gap:8px}
+  .toggle{width:40px;height:24px;border-radius:12px;background:#d1d1d6;position:relative;cursor:pointer;border:none}
+  .toggle.on{background:var(--accent)}
+  .toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .toggle.on::after{left:18px}
+  .btn-sync{background:var(--accent);color:#fff;border:none;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px}
+  .btn-sync svg{width:14px;height:14px}
+  .btn-outline{background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;font-family:var(--font)}
+  .tree{font-family:var(--mono);font-size:11.5px;line-height:1.9;background:#fafafb;border:1px solid var(--line-soft);border-radius:10px;padding:13px 15px;color:var(--text-2)}
+  .tree .d{color:var(--baidu-deep);font-weight:600}
+  .tree .c{color:var(--text-4)}
+
+  /* ===== 设计说明面板 ===== */
+  .notes{width:384px;flex-shrink:0;display:flex;flex-direction:column;gap:14px}
+  .note-panel{display:none;background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm)}
+  .note-panel.active{display:block}
+  .note-panel h3{font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .note-panel h3 .idx{font-size:11px;color:var(--accent);background:var(--accent-tint);padding:2px 8px;border-radius:999px;font-weight:600}
+  .note-panel .lead{font-size:12px;color:var(--text-3);line-height:1.6;margin-bottom:12px}
+  .note-panel .map{font-size:10.5px;color:var(--text-4);background:#f7f7f8;border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.7}
+  .note-panel .map b{color:var(--text-3);font-weight:600}
+  .note-panel ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .note-panel li{font-size:12.5px;color:var(--text-2);line-height:1.6;padding-left:20px;position:relative}
+  .note-panel li::before{content:"";position:absolute;left:4px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .note-panel li.adjust::before{background:var(--baidu)}
+  .note-panel li b{color:var(--text-1);font-weight:600}
+
+  @media (max-width:1120px){
+    body{padding:18px 12px}
+    .doc-header{width:100%}
+    .stage{flex-direction:column;align-items:center}
+    .notes{width:390px}
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div>
+    <h1>WorkLog · App 端 UI 设计稿</h1>
+    <div class="sub">类印象笔记的跨端笔记应用 · 移动端（iOS / Android）设计 · 数据存于百度网盘 <span style="font-family:var(--mono)">/apps/tong_log</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="tag">App · 浅色主题 · 底部 Tab 导航</span>
+    <div class="tabs">
+      <button class="tab active" data-screen="login">登录</button>
+      <button class="tab" data-screen="notes">笔记</button>
+      <button class="tab" data-screen="editor">编辑器</button>
+      <button class="tab" data-screen="todo">任务</button>
+      <button class="tab" data-screen="me">我的</button>
+      <button class="tab" data-screen="sync">同步与存储</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <!-- ================= 手机 ================= -->
+  <div class="phone">
+    <div class="phone-screen">
+      <div class="statusbar">
+        <span class="time">9:41</span>
+        <span class="icons">
+          <svg viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="5" width="3" height="7" rx="1"/><rect x="9" y="2.5" width="3" height="9.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+          <svg viewBox="0 0 16 12" fill="none"><path d="M8 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" fill="currentColor"/><path d="M8 6c-1.6 0-3 .7-4 1.8l-1.2-1.3A8 8 0 0 1 8 4a8 8 0 0 1 5.2 2.5L12 7.8C11 6.7 9.6 6 8 6Z" fill="currentColor"/><path d="M8 2A12 12 0 0 0 1 5.5L2.3 6.8A10 10 0 0 1 8 3.8a10 10 0 0 1 5.7 3l1.3-1.3A12 12 0 0 0 8 2Z" fill="currentColor"/></svg>
+          <span class="batt"><i></i></span>
+        </span>
+      </div>
+
+      <!-- ============ 登录 ============ -->
+      <div class="screen active" id="screen-login">
+        <div class="login-scr" style="flex:1;display:flex;flex-direction:column">
+          <div class="login-hero">
+            <div class="brand-row">
+              <div class="brand-icon">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="#fff" stroke-width="1.7"/><path d="M8 9h8M8 12.5h8M8 16h5" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </div>
+              <div>
+                <div class="brand-name">WorkLog</div>
+                <div class="brand-en">工作日志 · 笔记</div>
+              </div>
+            </div>
+            <div class="pitch">
+              <h2>你的每一份记录，<br>都交给你自己保管。</h2>
+              <p>不用订阅、不锁数据。笔记直接写入你自己的百度网盘，随时可导出、可迁移。</p>
+              <div class="feat-list">
+                <div class="feat"><span class="ck"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l5 5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>数据存于百度网盘，Mac / 手机跨端同步</div>
+                <div class="feat"><span class="ck"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l5 5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>富文本笔记 + 图片附件，格式开放可迁移</div>
+                <div class="feat"><span class="ck"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l5 5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>离线编辑，联网自动增量同步</div>
+              </div>
+            </div>
+            <div class="login-foot">WorkLog 不会读取你网盘中 /apps/tong_log 目录以外的任何文件</div>
+          </div>
+          <div class="login-sheet">
+            <div class="welcome">欢迎使用 WorkLog</div>
+            <div class="welcome-sub">使用百度网盘账号登录，笔记将存储于你的网盘</div>
+            <button class="baidu-btn">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V18l4-2.5L16 18v-3.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7Z" fill="#fff"/><circle cx="9.5" cy="8.5" r="1.3" fill="#06a7ff"/><circle cx="14.5" cy="8.5" r="1.3" fill="#06a7ff"/></svg>
+              使用百度网盘账号登录
+            </button>
+            <div class="divider">或</div>
+            <button class="scan-btn">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><path d="M14 14h3v3h-3zM20 14h1M14 20h1M20 20h1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              扫码授权登录
+            </button>
+            <div class="privacy">登录即授权 WorkLog 通过百度网盘开放平台读写<br><span style="font-family:var(--mono)">/apps/tong_log</span> 目录。授权信息仅保存在本机。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 笔记列表 ============ -->
+      <div class="screen" id="screen-notes">
+        <div class="nav">
+          <div class="avatar-sm">WL</div>
+          <div class="nav-title">笔记</div>
+          <div class="nav-right">
+            <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+          </div>
+        </div>
+        <div class="chips">
+          <span class="chip on">全部笔记</span>
+          <span class="chip">工作日志</span>
+          <span class="chip">读书笔记</span>
+          <span class="chip">投资研究</span>
+          <span class="chip">灵感速记</span>
+          <span class="chip add">＋ 新建笔记本</span>
+        </div>
+        <div class="searchbar">
+          <div class="search">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input placeholder="搜索笔记、标签…">
+          </div>
+        </div>
+        <div class="sortbar">
+          <span class="on">最近更新</span><span>按创建</span><span>按标题</span>
+        </div>
+        <div class="quick-row">
+          <div class="quick-card sync">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="t">快同步</div><div class="s">多设备共享</div></div>
+          </div>
+          <div class="quick-card task">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="m8.5 12.2 2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="t">快任务</div><div class="s">待完成 3 · 进行中 1</div></div>
+            <span class="badge">4</span>
+          </div>
+        </div>
+        <div class="note-scroll">
+          <div class="note-card active">
+            <div class="t"><span class="pin">📌</span>长江材料 复盘 · 10月22日</div>
+            <div class="s">早盘低开震荡，午后在 20.5 一线反复争夺…缩量企稳，短线继续观察 20.2 支撑。</div>
+            <div class="meta"><span>今天 14:32</span><span class="tagchip">A股复盘</span></div>
+          </div>
+          <div class="note-card">
+            <div class="t">第四季度工作 OKR 草稿</div>
+            <div class="s">Q4 核心目标：完成量化系统 V4.03 的实盘验证，跑通盘前报告自动化…</div>
+            <div class="meta"><span>昨天 18:05</span><span class="tagchip">待办</span></div>
+          </div>
+          <div class="note-card">
+            <div class="t">《非对称风险》读书笔记</div>
+            <div class="s">「风险共担」一章：不要听那些不承担后果的人的建议。决策者必须…</div>
+            <div class="meta"><span>10月20日</span><span class="tagchip">读书</span></div>
+          </div>
+          <div class="note-card">
+            <div class="t">产品经理周会纪要</div>
+            <div class="s">1. 登录链路改为网盘 OAuth；2. 同步改为增量；3. 移动端下周评审…</div>
+            <div class="meta"><span>10月20日</span><span class="tagchip">会议纪要</span></div>
+          </div>
+          <div class="note-card">
+            <div class="t">筹码峰用法整理</div>
+            <div class="s">单峰密集 + 量价齐升是最稳的启动形态；双峰则看上方套牢盘压力…</div>
+            <div class="meta"><span>10月18日</span><span class="tagchip">A股复盘</span></div>
+          </div>
+        </div>
+        <div class="fab"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+      </div>
+
+      <!-- ============ 编辑器 ============ -->
+      <div class="screen" id="screen-editor">
+        <div class="editor-scr" style="flex:1;display:flex;flex-direction:column">
+          <div class="nav">
+            <div class="back"><svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="nav-title">长江材料 复盘</div>
+            <div class="nav-right">
+              <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></div>
+            </div>
+          </div>
+          <input class="ed-title" value="长江材料 复盘 · 10月22日">
+          <div class="ed-meta">
+            <span class="chip nb">工作日志</span>
+            <span class="chip">A股复盘</span>
+            <span class="time">编辑于 14:32</span>
+            <span class="sync-ok">已同步</span>
+          </div>
+          <div class="ed-body">
+            <div class="ed-content">
+              <p>今日<span class="tag-inline"> #长江材料(001296)</span> 走势回顾与明日预案。</p>
+              <h2>盘面回顾</h2>
+              <p>早盘低开 <span class="hl">-1.2%</span>，午后在 <span class="hl">20.5 附近</span> 反复争夺，收盘 <strong style="color:var(--red)">+0.39%</strong>，全天成交缩量，属<span class="tag-inline">缩量企稳</span>。</p>
+              <h3>持仓指标</h3>
+              <div class="m-table">
+                <div class="trow"><div class="tcell hd">收盘价</div><div class="tcell hd">持仓成本</div><div class="tcell hd">浮盈亏</div></div>
+                <div class="trow"><div class="tcell sel">20.50</div><div class="tcell">20.60</div><div class="tcell" style="color:var(--accent)">-0.49%</div></div>
+                <div class="trow"><div class="tcell hd">换手率</div><div class="tcell hd">量能</div><div class="tcell hd">均线</div></div>
+                <div class="trow"><div class="tcell">2.1%</div><div class="tcell">缩量</div><div class="tcell">5 日走平</div></div>
+              </div>
+              <h2>关键观察</h2>
+              <ul>
+                <li>量能：缩量回踩，抛压减弱，上方 20.8 套牢盘压制。</li>
+                <li>筹码：20.2–20.5 区间密集，下方支撑夯实。</li>
+              </ul>
+              <blockquote>若放量站稳 20.8 看 21.2；失守 20.2 则减仓，止损 19.8。本文仅为个人记录，不构成投资建议。</blockquote>
+            </div>
+          </div>
+          <div class="fmtbar">
+            <div class="row">
+              <span class="fmt-btn label">T</span>
+              <span class="fmt-btn on"><svg viewBox="0 0 24 24" fill="none"><path d="M7 5h10v3h-3.5v11h-3V8H7V5Z" fill="currentColor"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M10 5h4l3 7-3 7h-4l3-7-3-7Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="skewX(-10)"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M6 5v14M18 5v14M6 12h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M6 7h12M6 12h12M6 17h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+              <span class="fmt-sep"></span>
+              <span class="fmt-btn label">14</span>
+              <span class="fmt-btn label" style="color:var(--accent)">A</span>
+              <span class="fmt-btn label">🖌</span>
+              <span class="fmt-sep"></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M9 12h11M6 18h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6h6M10 6l-3 9h2l3-9Z" fill="currentColor"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M10 14l-5-5 5-5M14 20l5-5-5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M7 9l4-4 6 6-4 4-6-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 3l8 8M3 21l4.5-1 6.5-6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><circle cx="8.5" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 15l4.5-4 3.5 3.5 3-3 5 5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+              <span class="fmt-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v16H4zM4 9h16M4 14h16M9 4v16M15 4v16" stroke="currentColor" stroke-width="1.6"/></svg></span>
+            </div>
+          </div>
+          <div class="keyboard">
+            <div class="kb-row"><div class="kb-key">q</div><div class="kb-key">w</div><div class="kb-key">e</div><div class="kb-key">r</div><div class="kb-key">t</div><div class="kb-key">y</div><div class="kb-key">u</div><div class="kb-key">i</div><div class="kb-key">o</div><div class="kb-key">p</div></div>
+            <div class="kb-row"><div class="kb-key">a</div><div class="kb-key">s</div><div class="kb-key">d</div><div class="kb-key">f</div><div class="kb-key">g</div><div class="kb-key">h</div><div class="kb-key">j</div><div class="kb-key">k</div><div class="kb-key">l</div></div>
+            <div class="kb-row"><div class="kb-key" style="flex:1.6">⇧</div><div class="kb-key">z</div><div class="kb-key">x</div><div class="kb-key">c</div><div class="kb-key">v</div><div class="kb-key">b</div><div class="kb-key">n</div><div class="kb-key">m</div><div class="kb-key" style="flex:1.6">⌫</div></div>
+            <div class="kb-row"><div class="kb-key" style="flex:1.6">123</div><div class="kb-key space">空格</div><div class="kb-key" style="flex:1.6">换行</div></div>
+          </div>
+
+          <!-- 单元格菜单 sheet（示意） -->
+          <div class="sheet-mask">
+            <div class="sheet">
+              <div class="grab"></div>
+              <h4>单元格背景</h4>
+              <div class="swatches">
+                <span class="sw none"></span>
+                <span class="sw" style="background:#F2F2F4"></span>
+                <span class="sw" style="background:#D8D9DE"></span>
+                <span class="sw" style="background:#B9BCC5"></span>
+                <span class="sw" style="background:#FBE4D6"></span>
+                <span class="sw sel" style="background:#FCEFB4"></span>
+                <span class="sw" style="background:#DCEFD8"></span>
+                <span class="sw" style="background:#D6EFF0"></span>
+                <span class="sw" style="background:#D9E6F8"></span>
+                <span class="sw" style="background:#C86DD7"></span>
+                <span class="sw" style="background:#F7CE46"></span>
+                <span class="sw" style="background:#35A45A"></span>
+              </div>
+              <div class="seg"><span class="on">居左</span><span>居中</span><span>居右</span><span>两端</span></div>
+              <div class="opt">匹配笔记宽度 <span class="r">已开启</span></div>
+              <div class="opt">在上方插入行 <span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+              <div class="opt">在下方插入行 <span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+              <div class="opt">删除当前行</div>
+              <div class="opt">删除当前列</div>
+              <div class="opt danger">删除表格</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 任务 ============ -->
+      <div class="screen" id="screen-todo">
+        <div class="nav">
+          <div class="avatar-sm">WL</div>
+          <div class="nav-title">任务</div>
+          <div class="nav-right">
+            <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+        <div class="todo-head">
+          <span class="todo-stats">待完成 <b>3</b> · 进行中 <b>1</b> · 已完成 <b>5</b> · 逾期 <b>1</b></span>
+          <span class="todo-stats" style="color:var(--text-4)">上次同步 14:32</span>
+        </div>
+        <div class="todo-filter">
+          <span class="fchip on">全部</span>
+          <span class="fchip">仅未完成</span>
+        </div>
+        <div class="todo-scroll">
+          <div class="tgroup">
+            <div class="tgroup-h"><span class="dot" style="background:var(--red)"></span>待完成 <span class="n">3</span><span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            <div class="todo-item">
+              <span class="chk"></span>
+              <div class="body">
+                <div class="tt">整理 A 股复盘模板</div>
+                <div class="sub"><span class="deadline overdue">今天 18:00 · 逾期</span></div>
+              </div>
+              <span class="btn start">开始</span>
+            </div>
+            <div class="todo-item">
+              <span class="chk"></span>
+              <div class="body">
+                <div class="tt">补齐量化系统 V4.03 文档</div>
+                <div class="sub"><span class="deadline">11月20日</span></div>
+              </div>
+              <span class="btn start">开始</span>
+            </div>
+            <div class="todo-item">
+              <span class="chk"></span>
+              <div class="body"><div class="tt">约谈打印机供应商</div></div>
+              <span class="btn term">终止</span>
+            </div>
+          </div>
+          <div class="tgroup">
+            <div class="tgroup-h"><span class="dot" style="background:var(--amber)"></span>进行中 <span class="n">1</span><span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            <div class="todo-item">
+              <span class="chk"></span>
+              <div class="body"><div class="tt">移动端 UI 设计评审</div><div class="sub"><span class="deadline">今天</span></div></div>
+              <span class="btn finish">完成</span>
+            </div>
+          </div>
+          <div class="tgroup">
+            <div class="tgroup-h"><span class="dot" style="background:var(--accent)"></span>已完成 <span class="n">5</span><span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            <div class="todo-item">
+              <span class="chk done"></span>
+              <div class="body"><div class="tt done">跑通盘前报告自动化</div><div class="sub">昨天完成</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="todo-add">
+          <div class="box">
+            <span class="plus"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <input placeholder="添加任务，回车确认">
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 我的 ============ -->
+      <div class="screen" id="screen-me">
+        <div class="nav">
+          <div class="avatar-sm">WL</div>
+          <div class="nav-title">我的</div>
+          <div class="nav-right"><div class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5A7 7 0 0 0 19 12Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div></div>
+        </div>
+        <div class="me-scroll">
+          <div class="me-account">
+            <div class="avatar">WL</div>
+            <div>
+              <div class="who">老王的工作台</div>
+              <div class="mail">wang***@163.com</div>
+            </div>
+            <div class="sync-state">已同步</div>
+          </div>
+          <div class="usage-card">
+            <div class="big">2.4 GB <small>/ 2 TB</small></div>
+            <div class="bar"><i></i></div>
+            <div class="tip">百度网盘 · 笔记 128 篇 · 附件 312 个</div>
+          </div>
+          <div class="me-group">
+            <div class="me-item">
+              <div class="ic" style="background:var(--accent-tint);color:var(--accent)"><svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="l">同步与存储</div>
+              <div class="r">刚刚<span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            </div>
+            <div class="me-item">
+              <div class="ic" style="background:var(--baidu-tint);color:var(--baidu-deep)"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+              <div class="l">登录设备</div>
+              <div class="r"><span class="badge">2 台</span><span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            </div>
+            <div class="me-item">
+              <div class="ic" style="background:#f0f0f2;color:var(--text-3)"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h12l4 4v8a1 1 0 0 1-1 1H4V7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M16 7V5a1 1 0 0 0-1-1H7" stroke="currentColor" stroke-width="1.7"/></svg></div>
+              <div class="l">回收站</div>
+              <div class="r"><span class="badge" style="background:#f0f0f2;color:var(--text-3)">3</span><span class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+            </div>
+            <div class="me-item">
+              <div class="ic" style="background:#f0f0f2;color:var(--text-3)"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 9h6M9 12h6M9 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+              <div class="l">关于与帮助</div>
+              <div class="chev"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </div>
+          </div>
+          <div class="me-group">
+            <div class="me-item logout"><div class="l">退出登录</div></div>
+          </div>
+          <div class="me-foot">WorkLog · 数据属于你自己<br>无需订阅 · 无服务器存储</div>
+        </div>
+      </div>
+
+      <!-- ============ 同步与存储 ============ -->
+      <div class="screen" id="screen-sync">
+        <div class="nav">
+          <div class="back"><svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="nav-title">同步与存储</div>
+          <div class="nav-right"></div>
+        </div>
+        <div class="sync-scroll">
+          <div class="lead">笔记数据存放于你自己的百度网盘，WorkLog 仅做读写，不另建服务器。</div>
+          <div class="sync-card">
+            <div class="ct"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>同步状态</div>
+            <div class="srow"><div class="l">自动同步<small>联网时自动增量同步</small></div><div class="r"><span class="toggle on"></span></div></div>
+            <div class="srow"><div class="l">最近同步<small>上次成功同步时间</small></div><div class="r" style="color:var(--accent)">14:32:08 · 刚刚</div></div>
+            <div class="srow"><div class="l">立即同步</div><div class="r"><button class="btn-sync"><svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>同步全部</button></div></div>
+          </div>
+          <div class="sync-card">
+            <div class="ct"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z" stroke="currentColor" stroke-width="1.6"/></svg>云端目录结构</div>
+            <div class="tree">
+              <div><span class="d">/apps/tong_log/</span></div>
+              <div>&nbsp;&nbsp;├─ <span class="d">notes/</span> <span class="c"># 每篇笔记一个 JSON</span></div>
+              <div>&nbsp;&nbsp;├─ <span class="d">todos/</span> <span class="c"># 每条任务一个 JSON</span></div>
+              <div>&nbsp;&nbsp;├─ <span class="d">attachments/</span> <span class="c"># 图片附件</span></div>
+              <div>&nbsp;&nbsp;├─ <span>notebooks.json</span></div>
+              <div>&nbsp;&nbsp;├─ <span class="d">devices/</span> <span class="c"># 登录设备</span></div>
+              <div>&nbsp;&nbsp;└─ <span>avatar.json</span></div>
+            </div>
+          </div>
+          <div class="sync-card">
+            <div class="ct"><svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.6"/><path d="M19 10c1.5 0 2.5 1 2.5 2.5S20.5 15 19 15M5 10c-1.5 0-2.5 1-2.5 2.5S3.5 15 5 15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12 3v3M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>账号与安全</div>
+            <div class="srow"><div class="l">百度网盘账号</div><div class="r">wang***@163.com</div></div>
+            <div class="srow"><div class="l">授权方式<small>百度网盘开放平台 OAuth 2.0</small></div><div class="r"><button class="btn-outline">重新授权</button></div></div>
+            <div class="srow"><div class="l">退出登录</div><div class="r"><button class="btn-outline" style="color:var(--red);border-color:#f3d2d3">退出</button></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 底部 Tab 栏 ============ -->
+      <div class="tabbar">
+        <div class="item active"><svg viewBox="0 0 24 24" fill="none"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3v4h4M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>笔记</div>
+        <div class="item"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="m8.5 12.2 2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>任务</div>
+        <div class="item"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M4 20c1.2-3.5 4.4-5 8-5s6.8 1.5 8 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>我的</div>
+      </div>
+      <div class="home-ind"><i></i></div>
+    </div>
+  </div>
+
+  <!-- ================= 设计说明 ================= -->
+  <div class="notes">
+    <div class="note-panel active" id="note-login">
+      <h3><span class="idx">01</span>登录</h3>
+      <div class="lead">移动端登录页。品牌区与 Mac 端保持同一绿色渐变与卖点文案，操作区改为底部上滑卡片（sheet），单手即可触达。</div>
+      <div class="map"><b>功能点映射：</b>A-01 登录态路由 · A-02/A-03 两种授权入口 · A-05 授权参数 · A-06 token · A-13 登录中状态</div>
+      <ul>
+        <li class="adjust"><b>授权方式适配</b>：「系统授权窗口 / 浏览器扫码」改为「唤起系统浏览器或百度 App 完成 OAuth 回调」，回调经 <span style="font-family:var(--mono)">tongnote://oauth/callback</span> 回 App。</li>
+        <li class="adjust"><b>扫码登录降级</b>：移动端自己无法扫自己，扫码仅作为「用另一台设备扫此屏」的备用，主路径是「一键授权跳转」。</li>
+        <li><b>品牌一致</b>：沿用 Mac 的绿色渐变、品牌图标、三句卖点与隐私声明，保证跨端识别度。</li>
+        <li class="adjust"><b>目录文案更正</b>：统一写 <span style="font-family:var(--mono)">/apps/tong_log</span>（Mac 稿页脚曾误写 worklog）。</li>
+      </ul>
+    </div>
+
+    <div class="note-panel" id="note-notes">
+      <h3><span class="idx">02</span>笔记（首页）</h3>
+      <div class="lead">底部 Tab「笔记」为首页。Mac 的「三栏并排」重构为「单栏列表 + 顶部横向筛选 + 右下角 FAB」。</div>
+      <div class="map"><b>功能点映射：</b>N-02 三栏→底部导航 · B-06 新建笔记→FAB · B-07/C-05 笔记本筛选 · L-01/L-02/L-03 固定卡片 · L-04 搜索 · L-05 排序 · L-07 置顶 · L-08 右键→长按菜单</div>
+      <ul>
+        <li class="adjust"><b>三栏 → 底部 Tab</b>：侧栏（笔记本/标签/回收站）拆分为「笔记 Tab 顶部 chips」+「我的 Tab 入口」，编辑器独立成页。</li>
+        <li class="adjust"><b>侧栏按钮 → FAB</b>：新建笔记由右上角圆形「＋」悬浮按钮承载，符合拇指热区。</li>
+        <li class="adjust"><b>右键菜单 → 长按</b>：置顶 / 删除（回收站为恢复 / 彻底删除）由右键改为长按卡片弹出 Action Sheet。</li>
+        <li><b>保留能力</b>：搜索、三种排序、置顶图钉、标签胶囊、每条笔记下方发丝分割线、固定卡片（快同步 / 快任务）全部保留。</li>
+      </ul>
+    </div>
+
+    <div class="note-panel" id="note-editor">
+      <h3><span class="idx">03</span>编辑器</h3>
+      <div class="lead">全屏编辑页。Mac 顶部 16 项工具栏重构为「键盘上方横向滚动的格式条」，贴合拇指操作；表格交互从 hover 改为点选。</div>
+      <div class="map"><b>功能点映射：</b>E-01 标题 · E-02 笔记本 · E-03 标签 · E-06 字数 · F-01~F-11 富文本 · LI 列表 · I 图片 · T-01~T-14 表格</div>
+      <ul>
+        <li class="adjust"><b>工具栏 → 底部格式条</b>：T 样式 / B / I / U / S / 字号 / 文字色 / 背景色 / 列表 / 引用 / 代码 / 链接 / 图片 / 表格，横向滚动，与系统输入法键盘同时出现。</li>
+        <li class="adjust"><b>表格 hover → 点选</b>：桌面端「边沿灰圆 hover 变蓝加号」在触屏不可用，改为「点选单元格 → 弹出底部 sheet 菜单」，对齐 / 背景色 / 增删行列 / 删除表格全收进该菜单（右侧已示意）。</li>
+        <li class="adjust"><b>选中文字 → 格式浮层</b>：移动端恢复「选中即浮出格式条」比点击工具栏更自然（Mac 端该浮窗当前关闭，移动端建议启用）。</li>
+        <li><b>保留能力</b>：四级标题 40/32/24/18、正文 14pt、列表 Tab 层级、编号顺延、图片 480 上限、表格固定 100pt 列宽 + 匹配笔记宽度。</li>
+      </ul>
+    </div>
+
+    <div class="note-panel" id="note-todo">
+      <h3><span class="idx">04</span>任务</h3>
+      <div class="lead">底部 Tab「任务」对应 Mac 的「快任务」。四状态分组 + 底部固定快捷添加。</div>
+      <div class="map"><b>功能点映射：</b>TD-01 任务页 · TD-02 快捷添加 · TD-03 四状态流转 · TD-04 筛选 · TD-05 折叠 · TD-06/TD-07 统计与逾期 · TD-11 同步</div>
+      <ul>
+        <li><b>底部快捷添加</b>：输入框固定在底部，回车即建，替代 Mac 的「输入框 + 添加按钮」。</li>
+        <li><b>状态流转</b>：点圆圈完成 / 取消完成；「开始 / 完成 / 终止 / 恢复」按钮置于行右侧。</li>
+        <li class="adjust"><b>展开详情 → 全屏编辑页</b>：备注富文本与截止时间不再行内展开，改为点击任务进入独立页（复用编辑器 + 日期选择器）。</li>
+        <li><b>逾期表现</b>：红字 + 浅红底胶囊，统计串与排序保持一致。</li>
+      </ul>
+    </div>
+
+    <div class="note-panel" id="note-me">
+      <h3><span class="idx">05</span>我的</h3>
+      <div class="lead">底部 Tab「我的」承接 Mac 侧栏底部与设置面板的个人信息、存储与入口。</div>
+      <div class="map"><b>功能点映射：</b>AV 头像 · B-10 存储计量 · B-09/R 回收站 · D-03/D-04 设备管理 · SE 设置 · A-11 退出登录</div>
+      <ul>
+        <li><b>账号卡</b>：头像 + 昵称 + 百度账号 + 同步状态绿点（点头像进头像选择）。</li>
+        <li><b>存储卡</b>：已用 / 总量 + 进度条，延续 Mac 右侧栏。</li>
+        <li class="adjust"><b>入口收拢</b>：同步与存储 / 登录设备 / 回收站 / 关于帮助 统一为列表项，替代 Mac 分散在侧栏与 sheet 的入口。</li>
+        <li><b>退出登录</b>：独立红色按钮，二次确认（只清凭证，不清本地笔记）。</li>
+      </ul>
+    </div>
+
+    <div class="note-panel" id="note-sync">
+      <h3><span class="idx">06</span>同步与存储</h3>
+      <div class="lead">Mac 的「同步与存储」sheet 双栏重构为单栏滚动卡片。</div>
+      <div class="map"><b>功能点映射：</b>SE-01 同步状态 · SE-02 云端目录 · SE-03 账号安全 · SE-04 登录设备 · SE-05 存储空间 · S-05/S-10 手动同步与状态</div>
+      <ul>
+        <li class="adjust"><b>双栏 → 单栏滚动</b>：主区四卡 + 右侧栏（存储/数据说明）合并为纵向卡片流。</li>
+        <li><b>同步状态</b>：自动同步开关、最近同步、立即同步按钮；状态徽标四色（待同步/同步中/已同步/失败）。</li>
+        <li class="adjust"><b>目录树更准确</b>：补上 Mac 稿遗漏的 <span style="font-family:var(--mono)">todos/</span>、<span style="font-family:var(--mono)">devices/</span>、<span style="font-family:var(--mono)">avatar.json</span>，并修正为 <span style="font-family:var(--mono)">notes/*.json</span> 按篇存储。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  const tabs=document.querySelectorAll('.tab');
+  const screens=document.querySelectorAll('.screen');
+  const notes=document.querySelectorAll('.note-panel');
+  const tabbar=document.querySelector('.tabbar');
+  const homeInd=document.querySelector('.home-ind');
+  // 无底部 Tab 的页面
+  const NO_TABBAR={'login':1,'editor':1,'sync':1};
+
+  function show(screenName){
+    tabs.forEach(t=>t.classList.toggle('active',t.dataset.screen===screenName));
+    screens.forEach(s=>s.classList.toggle('active',s.id==='screen-'+screenName));
+    notes.forEach(n=>n.classList.toggle('active',n.id==='note-'+screenName));
+    tabbar.style.display = NO_TABBAR[screenName] ? 'none' : 'flex';
+    homeInd.style.display = (screenName==='editor') ? 'none' : 'flex';
+  }
+
+  tabs.forEach(t=>t.addEventListener('click',()=>show(t.dataset.screen)));
+  show('login');
+</script>
+</body>
+</html>
