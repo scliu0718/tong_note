@@ -1,10 +1,34 @@
-# 敏感凭证（勿提交）
+# ── 敏感凭证（勿提交） ─────────────────────────────
 baidupan.secret.json
+*.secret.json
+*.jks
+*.keystore
+keystore.properties
 
-# 构建产物
+# ── 本地环境配置（含本机 SDK 路径） ─────────────────
+local.properties
+
+# ── 构建产物 ──────────────────────────────────────
 .build/
+.gradle/
+.kotlin/
+build/
+captures/
+*.hprof
 *.app/
 # Windows 工程目录名以 .App 结尾，不要当成 macOS 应用包
 !windows_tonote/src/Tonote.App/
 !windows_tonote/src/Tonote.App/**
+
+# ── 依赖目录 ──────────────────────────────────────
+node_modules/
+Pods/
+
+# ── 系统与编辑器 ──────────────────────────────────
 .DS_Store
+Thumbs.db
+desktop.ini
+*.iml
+.idea/
+.vscode/
+*.swp

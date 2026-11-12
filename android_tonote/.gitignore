@@ -1,5 +1,6 @@
 *.iml
 .gradle/
+.kotlin/
 /local.properties
 .idea/
 .DS_Store
@@ -8,5 +9,10 @@
 /captures
 .externalNativeBuild
 .cxx
+*.hprof
+# 签名文件与密钥永不入库
+*.jks
+*.keystore
+keystore.properties
 # 百度网盘凭证（与本机 mac 端一致，不进 git）
 app/src/main/assets/baidupan.secret.json
