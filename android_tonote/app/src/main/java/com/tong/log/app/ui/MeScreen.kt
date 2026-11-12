@@ -76,7 +76,7 @@ fun MeScreen(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(avatar.glyph, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        AvatarGlyph(avatar, 56.dp)
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {

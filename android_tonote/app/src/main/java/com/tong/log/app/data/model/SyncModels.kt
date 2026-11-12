@@ -43,24 +43,26 @@ object Notebooks {
     fun isBuiltIn(name: String) = builtIn.contains(name)
 }
 
-/** 头像预设（存 id 到 preferences）。 */
+/** 头像预设（存 id 到 preferences）；glyph 与 Mac 端 AvatarStore.presets 保持一致。 */
 data class AvatarPreset(
     val id: String,
     val glyph: String,
     val color1: Long,
-    val color2: Long
+    val color2: Long,
+    val isSymbol: Boolean = false
 )
 
 object AvatarPresets {
+    // 顺序、id、渐变色逐项对齐 mac_tonote/Sources/WorkLogCore/AvatarStore.swift
     val list = listOf(
         AvatarPreset("tong", "同", 0xFF19B46AL, 0xFF0E8A48L),
-        AvatarPreset("leaf", "叶", 0xFF35A45AL, 0xFF147A46L),
-        AvatarPreset("note", "记", 0xFF2F7BEEL, 0xFF1A5BD6L),
-        AvatarPreset("book", "书", 0xFFC86DD7L, 0xFF8E3FB0L),
-        AvatarPreset("pen", "笔", 0xFFF59E42L, 0xFFC9790AL),
-        AvatarPreset("star", "星", 0xFFF7CE46L, 0xFFC79A00L),
-        AvatarPreset("moon", "月", 0xFF5B5B60L, 0xFF2C2C2EL),
-        AvatarPreset("heart", "心", 0xFFE5484DL, 0xFFB02A2FL)
+        AvatarPreset("leaf", "leaf.fill", 0xFF34C77BL, 0xFF0E8A48L, true),
+        AvatarPreset("note", "note.text", 0xFF3AA0FFL, 0xFF0B68D6L, true),
+        AvatarPreset("book", "book.closed.fill", 0xFF8B7BF0L, 0xFF5B45D6L, true),
+        AvatarPreset("pen", "pencil", 0xFFF5A623L, 0xFFD97A06L, true),
+        AvatarPreset("star", "star.fill", 0xFFF2C14EL, 0xFFD9930BL, true),
+        AvatarPreset("moon", "moon.stars.fill", 0xFF5B7FB5L, 0xFF2F4C7EL, true),
+        AvatarPreset("heart", "heart.fill", 0xFFEF7A85L, 0xFFD0465CL, true)
     )
     fun byId(id: String) = list.firstOrNull { it.id == id } ?: list.first()
 }

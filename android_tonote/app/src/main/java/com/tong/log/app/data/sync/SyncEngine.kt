@@ -76,14 +76,15 @@ object SyncEngine {
             migrateNotesIfNeeded(token)
             val noteCount = syncNotes(token)
             val localNotes = NoteStore.notes.value.size
-            syncNotebooks(token)
+            runCatching { syncNotebooks(token) }
+                .onFailure { debugLog("笔记本同步失败：${it.message}") }
             val todoCount = syncTodos(token)
             _status.value = Status(
                 state = "success",
                 lastMessage = "笔记 $noteCount 篇 · 任务 $todoCount 条",
                 lastSyncDate = Iso8601.now()
             )
-            debugLog("同步成功 云端笔记 $noteCount 篇 / 本地 $localNotes 篇")
+            debugLog("同步成功 处理笔记 $noteCount 篇 / 本地 $localNotes 篇")
         } catch (e: DeviceKickedException) {
             kicked = true
             _status.value = Status(state = "failed", lastMessage = e.message ?: "本机已被下线", lastSyncDate = _status.value.lastSyncDate)
@@ -117,10 +118,14 @@ object SyncEngine {
     private suspend fun syncNotes(token: String): Int {
         val remoteMtimes = BaiduPanClient.listJsonFiles(notesDir, token)
         val ids = (NoteStore.notes.value.map { it.id } + remoteMtimes.keys).distinct()
+        var done = 0
         for (id in ids) {
-            syncOneNote(id, remoteMtimes[id.uppercase()], token)
+            // 单篇失败（上传冲突、附件缺失等）绝不能中断整轮，否则云端其余笔记全拉不下来
+            runCatching { syncOneNote(id, remoteMtimes[id.uppercase()], token) }
+                .onSuccess { done++ }
+                .onFailure { debugLog("笔记同步失败 $id：${it.message}") }
         }
-        return ids.size
+        return done
     }
 
     private suspend fun syncOneNote(id: String, serverMtime: Long?, token: String) {
@@ -131,7 +136,8 @@ object SyncEngine {
             val bytes = BaiduPanClient.downloadData("$notesDir/$id.json", token)
             AppStorage.json.decodeFromString(Note.serializer(), String(bytes))
         } catch (e: Exception) {
-            debugLog("下载笔记失败 $id：${e.message}")
+            // serverMtime 为空说明云端本来就没有这篇（本地新建），不是错误
+            if (serverMtime != null) debugLog("下载笔记失败 $id：${e.message}")
             null
         }
 
@@ -266,10 +272,13 @@ object SyncEngine {
     private suspend fun syncTodos(token: String): Int {
         val remoteMtimes = BaiduPanClient.listJsonFiles(todosDir, token)
         val ids = (TodoStore.todos.value.map { it.id } + remoteMtimes.keys).distinct()
+        var done = 0
         for (id in ids) {
-            syncOneTodo(id, remoteMtimes[id.uppercase()], token)
+            runCatching { syncOneTodo(id, remoteMtimes[id.uppercase()], token) }
+                .onSuccess { done++ }
+                .onFailure { debugLog("任务同步失败 $id：${it.message}") }
         }
-        return ids.size
+        return done
     }
 
     private suspend fun syncOneTodo(id: String, serverMtime: Long?, token: String) {

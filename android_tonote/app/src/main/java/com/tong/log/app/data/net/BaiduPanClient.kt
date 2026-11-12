@@ -45,6 +45,16 @@ object BaiduPanClient {
     @Volatile
     private var downloadByPathBlocked = false
 
+    /**
+     * 一次性在 use 作用域内读尽响应体。
+     * 绝不能写 `execute().use { it }` 再在外部读 resp.body —— use 退出即关闭 response，
+     * 之后读 body 会抛 `IllegalStateException: closed`，曾导致每轮同步都静默失败。
+     */
+    private fun executeText(req: Request): Pair<Int, String> =
+        client.newCall(req).execute().use { resp ->
+            resp.code to (resp.body?.string() ?: "")
+        }
+
     // ---------- OAuth ----------
 
     fun buildAuthorizeUrl(state: String, display: String): String =
@@ -157,9 +167,9 @@ object BaiduPanClient {
                 .appendQueryParameter("desc", "1")
                 .build().toString()
             val req = Request.Builder().url(url).get().header("User-Agent", UA).build()
-            val resp = client.newCall(req).execute().use { it }
-            if (!resp.isSuccessful) throw BaiduPanException("列目录失败 HTTP ${resp.code}")
-            val body = resp.body?.string() ?: break
+            val (code, body) = executeText(req)
+            if (code >= 400) throw BaiduPanException("列目录失败 HTTP $code")
+            if (body.isEmpty()) break
             val parsed = runCatching { AppStorage.json.decodeFromString<ListResponse>(body) }.getOrNull()
                 ?: throw BaiduPanException("列目录响应异常：${body.take(200)}")
             val errno = parsed.errno ?: 0
@@ -195,8 +205,8 @@ object BaiduPanClient {
                 .appendQueryParameter("threshold", "0")
                 .build().toString()
             val req = Request.Builder().url(url).get().header("User-Agent", UA).build()
-            val resp = client.newCall(req).execute().use { it }
-            val body = resp.body?.string() ?: throw BaiduPanException("下载元信息为空：$path")
+            val (_, body) = executeText(req)
+            if (body.isEmpty()) throw BaiduPanException("下载元信息为空：$path")
             val parsed = runCatching { AppStorage.json.decodeFromString<DownloadResponse>(body) }.getOrNull()
                 ?: throw BaiduPanException("下载响应异常：${body.take(200)}")
             dlink = parsed.list.firstOrNull()?.dlink?.takeIf { it.isNotEmpty() }
@@ -209,6 +219,11 @@ object BaiduPanClient {
         // 2) 兜底：path 被开放平台拒绝时，用 fs_id 走 filemetas&dlink=1 取直链
         if (dlink == null) {
             val fsId = cachedFsId(path) ?: findFsId(path, token)
+            if (fsId != null) dlink = dlinkByFsId(fsId, token)
+        }
+        // 3) 刚上传的文件云端列表可能有延迟，强刷一次父目录再试
+        if (dlink == null) {
+            val fsId = findFsId(path, token)
             if (fsId != null) dlink = dlinkByFsId(fsId, token)
         }
 
@@ -240,8 +255,8 @@ object BaiduPanClient {
                 .appendQueryParameter("start", start.toString())
                 .build().toString()
             val req = Request.Builder().url(url).get().header("User-Agent", UA).build()
-            val resp = client.newCall(req).execute().use { it }
-            val body = resp.body?.string() ?: return null
+            val (code, body) = executeText(req)
+            if (code >= 400 || body.isEmpty()) return null
             val parsed = runCatching { AppStorage.json.decodeFromString<ListResponse>(body) }.getOrNull()
                 ?: return null
             if ((parsed.errno ?: 0) != 0 || parsed.list.isEmpty()) return null
@@ -266,8 +281,8 @@ object BaiduPanClient {
             .appendQueryParameter("dlink", "1")
             .build().toString()
         val req = Request.Builder().url(url).get().header("User-Agent", UA).build()
-        val resp = client.newCall(req).execute().use { it }
-        val body = resp.body?.string() ?: return null
+        val (code, body) = executeText(req)
+        if (code >= 400 || body.isEmpty()) return null
         val root = runCatching { AppStorage.json.decodeFromString<JsonObject>(body) }.getOrNull()
             ?: return null
         val errno = (root["errno"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
@@ -279,14 +294,16 @@ object BaiduPanClient {
 
     suspend fun deleteRemote(path: String, token: String) = withContext(Dispatchers.IO) {
         val filelist = "[\"$path\"]"
+        // 与 Mac 端一致：method / opera / access_token 必须在 query，放 body 会 400
         val form = FormBody.Builder()
-            .add("method", "filemanager")
-            .add("opera", "delete")
             .add("async", "0")
             .add("filelist", filelist)
-            .add("access_token", token)
             .build()
-        val url = Uri.parse(BaiduPanConfig.FILE_API).buildUpon().toString()
+        val url = Uri.parse(BaiduPanConfig.FILE_API).buildUpon()
+            .appendQueryParameter("method", "filemanager")
+            .appendQueryParameter("opera", "delete")
+            .appendQueryParameter("access_token", token)
+            .build().toString()
         val req = Request.Builder().url(url).post(form).header("User-Agent", UA).build()
         client.newCall(req).execute().use { resp ->
             val body = resp.body?.string() ?: ""
@@ -313,9 +330,8 @@ object BaiduPanClient {
         val blockList = "[" + md5s.joinToString(",") { "\"$it\"" } + "]"
 
         // 1) precreate
+        // 开放平台要求 method / access_token 在 query（放 form body 会 HTTP 400 Unsupported open api）
         val preForm = FormBody.Builder()
-            .add("method", "precreate")
-            .add("access_token", token)
             .add("path", path)
             .add("size", data.size.toString())
             .add("isdir", "0")
@@ -323,12 +339,15 @@ object BaiduPanClient {
             .add("block_list", blockList)
             .add("rtype", "3")
             .build()
-        val preUrl = Uri.parse(BaiduPanConfig.FILE_API).buildUpon().toString()
-        val preResp = client.newCall(
+        val preUrl = Uri.parse(BaiduPanConfig.FILE_API).buildUpon()
+            .appendQueryParameter("method", "precreate")
+            .appendQueryParameter("access_token", token)
+            .build().toString()
+        val (preCode, preBody) = executeText(
             Request.Builder().url(preUrl).post(preForm).header("User-Agent", UA).build()
-        ).execute().use { it }
-        if (!preResp.isSuccessful) throw BaiduPanException("precreate HTTP ${preResp.code}")
-        val preBody = preResp.body?.string() ?: throw BaiduPanException("precreate 响应为空")
+        )
+        if (preCode >= 400) throw BaiduPanException("precreate HTTP $preCode")
+        if (preBody.isEmpty()) throw BaiduPanException("precreate 响应为空")
         val pre = runCatching { AppStorage.json.decodeFromString<PrecreateResponse>(preBody) }.getOrNull()
             ?: throw BaiduPanException("precreate 响应异常：${preBody.take(200)}")
         val uploadId = pre.uploadIdValue ?: throw BaiduPanException("precreate 缺 uploadid")
@@ -347,8 +366,6 @@ object BaiduPanClient {
 
         // 3) create
         val createForm = FormBody.Builder()
-            .add("method", "create")
-            .add("access_token", token)
             .add("path", path)
             .add("size", data.size.toString())
             .add("isdir", "0")
@@ -356,14 +373,20 @@ object BaiduPanClient {
             .add("block_list", blockList)
             .add("rtype", "3")
             .build()
-        val createResp = client.newCall(
-            Request.Builder().url(preUrl).post(createForm).header("User-Agent", UA).build()
-        ).execute().use { it }
-        val createBody = createResp.body?.string() ?: throw BaiduPanException("create 响应为空")
+        val createUrl = Uri.parse(BaiduPanConfig.FILE_API).buildUpon()
+            .appendQueryParameter("method", "create")
+            .appendQueryParameter("access_token", token)
+            .build().toString()
+        val (_, createBody) = executeText(
+            Request.Builder().url(createUrl).post(createForm).header("User-Agent", UA).build()
+        )
+        if (createBody.isEmpty()) throw BaiduPanException("create 响应为空")
         val created = runCatching { AppStorage.json.decodeFromString<CreateResponse>(createBody) }.getOrNull()
         if (created == null || (created.errno != null && created.errno != 0)) {
             throw BaiduPanException("create 失败：${createBody.take(200)}")
         }
+        // create 会返回 fs_id，缓存后 publish 的回读校验能立刻走 filemetas，不必等云端列表刷新
+        created.fsId?.let { if (it != 0L) fsIdCache[path] = it }
     }
 
     private fun uploadChunk(
@@ -371,18 +394,19 @@ object BaiduPanClient {
         path: String, uploadId: String, seq: Int, token: String
     ) {
         val chunk = data.copyOfRange(from, to)
+        // multipart 只带 file；path / uploadid / partseq 与 Mac 端一样放在 query
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart(
                 "file", "blob",
                 chunk.toRequestBody("application/octet-stream".toMediaType())
             )
-            .addFormDataPart("path", path)
-            .addFormDataPart("uploadid", uploadId)
-            .addFormDataPart("partseq", seq.toString())
             .build()
         val url = Uri.parse(BaiduPanConfig.SUPERFILE2).buildUpon()
             .appendQueryParameter("method", "upload")
             .appendQueryParameter("type", "tmpfile")
+            .appendQueryParameter("path", path)
+            .appendQueryParameter("uploadid", uploadId)
+            .appendQueryParameter("partseq", seq.toString())
             .appendQueryParameter("access_token", token)
             .build().toString()
         client.newCall(

@@ -7,7 +7,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -172,20 +171,13 @@ private fun MainScaffold(navController: NavController) {
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    Modifier
-                                        .size(27.dp)
-                                        .background(Color.White, RoundedCornerShape(8.dp))
-                                        .border(1.dp, line, RoundedCornerShape(8.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        item.icon,
-                                        contentDescription = item.label,
-                                        tint = line,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                // 不要图标外的方框，线框图标直接放大显示
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.label,
+                                    tint = line,
+                                    modifier = Modifier.size(28.dp)
+                                )
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     item.label,
@@ -253,7 +245,7 @@ private fun AvatarPicker(onDismiss: () -> Unit) {
                                 .clickable { AvatarStore.select(preset.id) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(preset.glyph, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            AvatarGlyph(preset, 52.dp)
                             if (currentId == preset.id) {
                                 Text("✓", Modifier.align(Alignment.BottomEnd).padding(2.dp), color = Color.White, fontSize = 12.sp)
                             }
