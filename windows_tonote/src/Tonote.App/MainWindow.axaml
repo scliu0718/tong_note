@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Tonote.App.MainWindow"
         Title="同笔记"
+        Icon="avares://Tonote.App/Assets/tonote.png"
         Width="1120"
         Height="700"
         MinWidth="960"

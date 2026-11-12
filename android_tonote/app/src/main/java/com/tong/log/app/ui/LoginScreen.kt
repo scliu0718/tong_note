@@ -95,7 +95,7 @@ fun LoginScreen(onLogin: () -> Unit, error: String?) {
             Column(Modifier.fillMaxWidth().widthIn(max = 300.dp)) {
                 listOf(
                     "数据存储于百度网盘，跨 Mac / Windows / iOS / Android 同步",
-                    "富文本笔记 + 图片附件，格式开放可迁移",
+                    "笔记、表格、任务和附件，格式开放可迁移",
                     "离线编辑，联网自动增量同步"
                 ).forEach {
                     Row(verticalAlignment = Alignment.Top) {

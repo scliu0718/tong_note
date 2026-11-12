@@ -71,7 +71,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# 生成应用图标（绿色渐变 + 白色「同」字）
+# 生成应用图标（绿色渐变 + 白色「同」，右下角收成笔尖）
 echo "▶ 生成应用图标..."
 PY=""
 if command -v python3 >/dev/null 2>&1 && python3 -c "import PIL" 2>/dev/null; then

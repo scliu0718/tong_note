@@ -69,7 +69,7 @@ struct LoginView: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 featureRow("数据存储于百度网盘，跨 Mac / Windows / iOS / Android 同步")
-                featureRow("Markdown 笔记 + 附件，格式开放可迁移")
+                featureRow("笔记、表格、任务和附件，格式开放可迁移")
                 featureRow("离线编辑，联网自动增量同步")
             }
         }

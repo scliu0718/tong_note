@@ -8,6 +8,7 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationTitle>同笔记</ApplicationTitle>
+    <ApplicationIcon>Assets\tonote.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.0" />
@@ -17,6 +18,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tonote.Core\Tonote.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\tonote.png" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\baidupan.secret.json" Link="baidupan.secret.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\baidupan.secret.json')" />
