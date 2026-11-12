@@ -69,11 +69,13 @@ object SyncEngine {
         }
         _status.value = Status(state = "syncing", lastMessage = "", lastSyncDate = _status.value.lastSyncDate)
         var kicked = false
+        debugLog("同步开始")
         try {
             val token = BaiduPanClient.validToken()
             DeviceRegistry.ensureNotKicked(token)
             migrateNotesIfNeeded(token)
             val noteCount = syncNotes(token)
+            val localNotes = NoteStore.notes.value.size
             syncNotebooks(token)
             val todoCount = syncTodos(token)
             _status.value = Status(
@@ -81,11 +83,14 @@ object SyncEngine {
                 lastMessage = "笔记 $noteCount 篇 · 任务 $todoCount 条",
                 lastSyncDate = Iso8601.now()
             )
+            debugLog("同步成功 云端笔记 $noteCount 篇 / 本地 $localNotes 篇")
         } catch (e: DeviceKickedException) {
             kicked = true
             _status.value = Status(state = "failed", lastMessage = e.message ?: "本机已被下线", lastSyncDate = _status.value.lastSyncDate)
+            debugLog("同步失败（被下线）：${e.message}")
         } catch (e: Exception) {
             _status.value = Status(state = "failed", lastMessage = e.message ?: "同步失败", lastSyncDate = _status.value.lastSyncDate)
+            debugLog("同步失败：${e.javaClass.simpleName} ${e.message}")
         }
         if (needsAnotherRound && !kicked) {
             needsAnotherRound = false
@@ -126,6 +131,7 @@ object SyncEngine {
             val bytes = BaiduPanClient.downloadData("$notesDir/$id.json", token)
             AppStorage.json.decodeFromString(Note.serializer(), String(bytes))
         } catch (e: Exception) {
+            debugLog("下载笔记失败 $id：${e.message}")
             null
         }
 
@@ -432,6 +438,18 @@ object SyncEngine {
 
     @kotlinx.serialization.Serializable
     data class LegacyManifest(val notes: List<Note> = emptyList())
+
+    /**
+     * 同步诊断日志落在 App 私有目录 files/tonote/sync-debug.log，
+     * 可用 adb shell run-as com.tong.log.app cat files/tonote/sync-debug.log 查看。
+     */
+    private fun debugLog(message: String) {
+        try {
+            val f = File(AppStorage.rootDir, "sync-debug.log")
+            f.appendText("${Iso8601.now()} $message\n")
+        } catch (_: Exception) {
+        }
+    }
 
     fun isLoggedIn(): Boolean = BaiduPanTokenStore.current() != null
 }

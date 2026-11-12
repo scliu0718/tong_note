@@ -27,7 +27,8 @@ fun TrashScreen(onBack: () -> Unit) {
     val trash = notes.filter { it.isTrashed && !it.purged }
     var confirmDelete by remember { mutableStateOf<Note?>(null) }
 
-    Column(Modifier.fillMaxSize().background(Bg)) {
+    // 二级页面没有 Scaffold 自动处理系统栏，标题栏必须避开状态栏
+    Column(Modifier.fillMaxSize().background(Bg).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically

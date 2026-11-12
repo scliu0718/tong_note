@@ -24,9 +24,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
     val status by SyncEngine.status.collectAsState()
+    val account by AuthState.account.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize().background(Bg)) {
+    // 二级页面没有 Scaffold 自动处理系统栏，必须自己避开状态栏
+    Column(Modifier.fillMaxSize().background(Bg).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -115,8 +117,20 @@ fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
             // 账号安全卡
             SyncCard(title = "账号与安全") {
                 Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("百度网盘账号", Modifier.weight(1f), fontSize = 13.sp, color = TextSecondary)
-                    Text("已授权", fontSize = 13.sp, color = TextPrimary)
+                    Column(Modifier.weight(1f)) {
+                        Text("当前百度账号", fontSize = 13.sp, color = TextSecondary)
+                        Text(
+                            "百度网盘 OAuth 2.0 · 已授权",
+                            fontSize = 10.sp,
+                            color = TextQuaternary
+                        )
+                    }
+                    Text(
+                        account?.displayName?.takeIf { it.isNotBlank() } ?: "获取中…",
+                        fontSize = 13.sp,
+                        color = Green,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
                 Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

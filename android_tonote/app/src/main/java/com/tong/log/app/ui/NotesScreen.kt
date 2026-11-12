@@ -59,6 +59,8 @@ fun NotesScreen(
     onNewNote: (String) -> Unit
 ) {
     val notes by NoteStore.notes.collectAsState()
+    val account by AuthState.account.collectAsState()
+    val accountName = account?.displayName?.takeIf { it.isNotBlank() } ?: "获取中…"
     val notebooks = remember { NotebookStore.all }
     var selectedNotebook by remember { mutableStateOf(Notebooks.ALL) }
     var query by remember { mutableStateOf("") }
@@ -95,7 +97,10 @@ fun NotesScreen(
                 Text("同", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(10.dp))
-            Text("笔记", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Column {
+                Text("笔记", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("当前百度账号：$accountName", fontSize = 10.sp, color = TextTertiary)
+            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { /* 搜索焦点 */ }) {
                 Icon(Icons.Default.Search, contentDescription = "搜索", tint = TextPrimary)

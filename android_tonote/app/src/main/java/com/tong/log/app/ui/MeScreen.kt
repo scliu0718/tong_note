@@ -40,6 +40,8 @@ fun MeScreen(
     val avatarId by AvatarStore.currentId.collectAsState()
     val avatar = AvatarPresets.byId(avatarId)
     val syncStatus by SyncEngine.status.collectAsState()
+    val account by AuthState.account.collectAsState()
+    val accountName = account?.displayName?.takeIf { it.isNotBlank() } ?: "正在获取百度账号…"
     val trashCount = NoteStore.trashNotes.size
 
     Column(Modifier.fillMaxSize().background(Bg)) {
@@ -78,9 +80,15 @@ fun MeScreen(
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {
-                        Text("老王的工作台", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("当前百度账号", fontSize = 11.sp, color = TextQuaternary)
+                        Spacer(Modifier.height(2.dp))
+                        Text(accountName, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         Spacer(Modifier.height(3.dp))
-                        Text("百度网盘账号已授权", fontSize = 12.sp, color = TextTertiary)
+                        Text(
+                            if (account == null) "百度网盘账号已授权" else "百度网盘 · 已授权 · uk ${account?.uk ?: "—"}",
+                            fontSize = 11.sp,
+                            color = TextTertiary
+                        )
                     }
                     Spacer(Modifier.weight(1f))
                     Text(

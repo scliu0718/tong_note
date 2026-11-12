@@ -47,7 +47,8 @@ fun DevicesScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { load() }
 
-    Column(Modifier.fillMaxSize().background(Bg)) {
+    // 二级页面没有 Scaffold 自动处理系统栏，标题栏必须避开状态栏
+    Column(Modifier.fillMaxSize().background(Bg).statusBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically

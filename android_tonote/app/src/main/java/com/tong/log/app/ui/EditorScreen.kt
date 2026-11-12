@@ -82,7 +82,8 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Color.White)) {
+    // 编辑器是二级页面，标题栏必须避开状态栏
+    Column(Modifier.fillMaxSize().background(Color.White).statusBarsPadding()) {
         // 顶部导航
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),

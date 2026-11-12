@@ -124,6 +124,7 @@ fun LoginScreen(onLogin: () -> Unit, error: String?) {
             Modifier
                 .fillMaxWidth()
                 .background(Color.White, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 22.dp)
         ) {
             Text("欢迎使用同笔记", Modifier.align(Alignment.CenterHorizontally), fontSize = 16.sp, fontWeight = FontWeight.Bold)

@@ -7,22 +7,26 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +42,7 @@ import com.tong.log.app.data.store.AvatarStore
 import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.sync.SyncEngine
 import com.tong.log.app.ui.*
-import com.tong.log.app.ui.theme.TongNoteTheme
+import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -116,15 +120,20 @@ private fun AppRoot() {
         composable("devices") { DevicesScreen(onBack = { navController.popBackStack() }) }
     }
 
-    // 启动即同步 + 前台每 45 秒同步
+    // 启动即同步 + 前台每 45 秒同步；顺带刷新当前百度账号，供「我的 / 同步与存储」展示
     LaunchedEffect(Unit) {
-        if (BaiduPanConfig.isConfigured) SyncEngine.syncRound()
+        if (BaiduPanConfig.isConfigured) {
+            runCatching { AuthState.refreshAccount() }
+            SyncEngine.syncRound()
+        }
         while (true) {
             delay(45_000)
             if (BaiduPanConfig.isConfigured) SyncEngine.syncRound()
         }
     }
 }
+
+private data class NavTab(val label: String, val icon: ImageVector)
 
 @Composable
 private fun MainScaffold(navController: NavController) {
@@ -134,22 +143,60 @@ private fun MainScaffold(navController: NavController) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFFFAFAFB)) {
-                NavigationBarItem(
-                    selected = tab == 0, onClick = { tab = 0 },
-                    icon = { Icon(Icons.Default.Description, contentDescription = null) },
-                    label = { Text("笔记", fontSize = 10.sp) }
-                )
-                NavigationBarItem(
-                    selected = tab == 1, onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
-                    label = { Text("任务", fontSize = 10.sp) }
-                )
-                NavigationBarItem(
-                    selected = tab == 2, onClick = { tab = 2 },
-                    icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                    label = { Text("我的", fontSize = 10.sp) }
-                )
+            // 选中态给整个选项（图标 + 文字）加浅绿底色，而不是只包住图标。
+            // 图标统一为白底线框：未选中黑色线框，选中绿色线框。
+            val tabs = listOf(
+                NavTab("笔记", Icons.Outlined.Description),
+                NavTab("任务", Icons.Outlined.CheckCircle),
+                NavTab("我的", Icons.Outlined.Person)
+            )
+            NavigationBar(containerColor = Color(0xFFFAFAFB), tonalElevation = 0.dp) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    tabs.forEachIndexed { index, item ->
+                        val selected = tab == index
+                        val line = if (selected) Green else TextPrimary
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (selected) GreenTint else Color.Transparent)
+                                .clickable { tab = index },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    Modifier
+                                        .size(27.dp)
+                                        .background(Color.White, RoundedCornerShape(8.dp))
+                                        .border(1.dp, line, RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        item.icon,
+                                        contentDescription = item.label,
+                                        tint = line,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    item.label,
+                                    fontSize = 10.sp,
+                                    color = if (selected) GreenHover else TextSecondary,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     ) { padding ->

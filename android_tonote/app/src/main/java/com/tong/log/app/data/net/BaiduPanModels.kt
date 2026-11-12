@@ -37,11 +37,19 @@ data class BaiduPanToken(
 
 @Serializable
 data class UserInfo(
+    val errno: Int? = null,
     @SerialName("baidu_name") val baiduName: String? = null,
     @SerialName("netdisk_name") val netdiskName: String? = null,
     @SerialName("uk") val uk: Long? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null
-)
+) {
+    /** 界面上展示的账号名：百度账号 > 网盘昵称 > uk。 */
+    val displayName: String
+        get() = baiduName?.takeIf { it.isNotBlank() }
+            ?: netdiskName?.takeIf { it.isNotBlank() }
+            ?: uk?.toString()
+            ?: ""
+}
 
 @Serializable
 data class Quota(val total: Long = 0, val used: Long = 0)
@@ -58,6 +66,7 @@ data class FileMeta(
 @Serializable
 data class ListResponse(
     val errno: Int? = null,
+    @SerialName("show_msg") val showMsg: String? = null,
     val list: List<FileMeta> = emptyList()
 )
 
@@ -87,5 +96,6 @@ data class DownloadMeta(
 @Serializable
 data class DownloadResponse(
     val errno: Int? = null,
+    @SerialName("show_msg") val showMsg: String? = null,
     val list: List<DownloadMeta> = emptyList()
 )
