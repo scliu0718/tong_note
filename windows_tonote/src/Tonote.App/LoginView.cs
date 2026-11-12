@@ -83,7 +83,7 @@ public sealed class LoginView : UserControl
                     TextWrapping = TextWrapping.Wrap,
                     MaxWidth = 400,
                 },
-                Feature("数据存于百度网盘，跨 Mac / Windows / iOS / Android 同步"),
+                Feature("数据存储于百度网盘，跨 Mac / Windows / iOS / Android 同步"),
                 Feature("Markdown 与受控 HTML，格式开放可迁移"),
                 Feature("离线编辑，联网自动增量同步"),
             },
