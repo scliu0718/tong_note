@@ -18,4 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Tonote.Core\Tonote.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\baidupan.secret.json" Link="baidupan.secret.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\baidupan.secret.json')" />
+  </ItemGroup>
 </Project>

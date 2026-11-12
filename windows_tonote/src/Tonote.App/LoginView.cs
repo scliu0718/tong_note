@@ -1,4 +1,5 @@
 using Avalonia;
+using Tonote.Core;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -21,7 +22,9 @@ public sealed class LoginView : UserControl
 
         var login = Login(banner, () =>
         {
-            banner.Text = "Windows 端的百度网盘授权还在接入。可以先写本机笔记，同步下一步做。";
+            banner.Text = BaiduPanConfig.IsConfigured
+                ? "凭证已关联。Windows 端的授权窗口还在接入，可以先写本机笔记。"
+                : "尚未配置 AppKey / AppSecret。请把 baidupan.secret.json 放在 windows_tonote 目录后重新打开。";
             banner.IsVisible = true;
         }, enterLocal);
         var layout = new Grid
@@ -166,6 +169,15 @@ public sealed class LoginView : UserControl
                     HorizontalAlignment = HorizontalAlignment.Center,
                     TextWrapping = TextWrapping.Wrap,
                     TextAlignment = TextAlignment.Center,
+                },
+                new TextBlock
+                {
+                    Text = BaiduPanConfig.IsConfigured
+                        ? "已读取 baidupan.secret.json"
+                        : "还没有读到 baidupan.secret.json",
+                    FontSize = 12,
+                    Foreground = BaiduPanConfig.IsConfigured ? Palette.Accent : Palette.Red,
+                    HorizontalAlignment = HorizontalAlignment.Center,
                 },
                 PrimaryButton("使用百度网盘账号登录", showPending),
                 banner,

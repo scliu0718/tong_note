@@ -156,5 +156,20 @@ public class CoreTests
         Assert.EndsWith($"{Path.DirectorySeparatorChar}tonote", AppPaths.RootFor(true, "/tmp/data"));
     }
 
+    [Fact]
+    public void SecretFileSuppliesAppKeyWithoutLivingInSource()
+    {
+        var dir = Temp();
+        var path = Path.Combine(dir, "baidupan.secret.json");
+        File.WriteAllText(path, """{"appKey":"test-key","appSecret":"test-secret","appID":"1"}""");
+
+        BaiduPanConfig.Load([path]);
+
+        Assert.True(BaiduPanConfig.IsConfigured);
+        Assert.Equal("test-key", BaiduPanConfig.AppKey);
+        Assert.Equal("1", BaiduPanConfig.AppId);
+        Assert.Equal("/apps/tong_log", BaiduPanConfig.RemoteRoot);
+    }
+
     private static string Temp() => Directory.CreateTempSubdirectory("tonote-win-").FullName;
 }

@@ -303,7 +303,14 @@ public sealed class ShellView : UserControl
             Children =
             {
                 new TextBlock { Text = "同步与存储", FontSize = 22, FontWeight = FontWeight.Bold },
-                new TextBlock { Text = "百度网盘登录、按篇同步和设备下线还在迁移。", TextWrapping = TextWrapping.Wrap, Foreground = Palette.TextSecondary },
+                new TextBlock
+                {
+                    Text = BaiduPanConfig.IsConfigured
+                        ? "百度网盘凭证已读取。授权和按篇同步还在迁移。"
+                        : "还没有读到 baidupan.secret.json，授权不可用。",
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = Palette.TextSecondary,
+                },
                 new TextBlock { Text = "本机目录", Foreground = Palette.TextTertiary, FontSize = 12 },
                 new TextBlock { Text = _session.Root, TextWrapping = TextWrapping.Wrap },
                 new TextBlock { Text = "笔记文件是 notes.json，任务是 todos.json，和 Mac 版字段一致。", TextWrapping = TextWrapping.Wrap, Foreground = Palette.TextSecondary },
