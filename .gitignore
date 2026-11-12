@@ -32,3 +32,7 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# ── AI 助手工作空间（本机状态，不入库） ─────────────
+# 若希望把项目记忆共享给其他机器，删掉这一行后单独提交 .workbuddy/memory/MEMORY.md
+.workbuddy/
