@@ -21,7 +21,11 @@
 - 版本号**只在 `gradle/libs.versions.toml` 里改**，不要在 `build.gradle.kts` 里写死版本字符串
 - `settings.gradle.kts` 里的**阿里云镜像不能删**（本机网络环境依赖它，删了依赖拉不下来）
 - 命令：`./gradlew assembleDebug`
-- 项目**没有** ktlint / detekt / 单元测试。不要"顺手补一套"，见第 9 节
+- 项目**没有** ktlint / detekt。不要"顺手补一套"，见第 9 节
+- 唯一的测试是 `app/src/test/.../SyncRulesTest.kt`（34 条，纯 JVM，无 Android 依赖）
+  - 跑测试：`./gradlew :app:testDebugUnitTest`
+  - **改 `SyncRules` 必须先跑这组测试**。它锁的是跨端合并语义，不是为了刷覆盖率
+  - 除非用户明确要求，不要引入 Mockito / Robolectric / Turbine 等测试栈
 
 ---
 
@@ -139,7 +143,8 @@ client.newCall(req).execute().use { resp -> resp.code to (resp.body?.string() ?:
 | 全是 `object` 单例 + 全局可变状态 | 刻意选择的轻量架构。**不要引入 Hilt / Koin** |
 | 没有 ViewModel 层 | 同上。补一层等于重写所有 Screen |
 | 中文硬编码、无 `strings.xml` | 单语言项目，改造要动 10+ 文件，收益为零 |
-| 没有测试、没有 lint | 现状如此。不要"顺手补一套测试框架" |
+| 没有 lint | 现状如此。不要"顺手补 ktlint / detekt" |
+| 测试只覆盖 `SyncRules`，其余无测试 | 只有纯 JVM 的合并规则值得测。**不要给 Screen / Store / 网络层补测试**，那需要 Robolectric 或真机 |
 | `MainActivity` 里 `when (tab)` 硬编码索引 | 与底部导航顺序强耦合，要改就连导航栏一起改 |
 | `EditorScreen` 用 WebView 承载富文本 | 三端共用同一套 HTML，换成原生编辑器会破坏跨端一致性 |
 
@@ -148,9 +153,10 @@ client.newCall(req).execute().use { resp -> resp.code to (resp.body?.string() ?:
 ## 10. 提交前检查
 
 1. `./gradlew assembleDebug` 必须 0 error
-2. 不要提交：`app/build/`、`.gradle/`、`local.properties`、`.idea/`、`baidupan.secret.json`
-3. 若改了第 4 节的数据契约，在提交说明里显式标注影响 Mac / Windows 端
-4. 提交信息沿用现有风格：`fix(android): …` / `feat: …` / `docs(android): …`
+2. 动了 `data/sync/` 下任何逻辑，`./gradlew :app:testDebugUnitTest` 必须全绿
+3. 不要提交：`app/build/`、`.gradle/`、`.kotlin/`、`local.properties`、`.idea/`、`baidupan.secret.json`、`*.jks`
+4. 若改了第 4 节的数据契约，在提交说明里显式标注影响 Mac / Windows 端
+5. 提交信息沿用现有风格：`fix(android): …` / `feat: …` / `docs(android): …`
 
 ---
 
@@ -167,8 +173,8 @@ client.newCall(req).execute().use { resp -> resp.code to (resp.body?.string() ?:
 
 ## 12. 已知待办
 
-- 无自动化测试（同步合并规则是最该测的部分）
-- 仓库根 `.gitignore` 缺 Android 构建产物规则（`app/build/`、`.gradle/`、`local.properties`），目前靠提交时自觉
+- 无 lint 检查；单测仅覆盖 `SyncRules`
+- `SyncEngine` 的并发/重入路径（`needsAnotherRound`、1500ms 防抖）没有测试，改动时靠人工校验
 
 ---
 

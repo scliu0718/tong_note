@@ -62,4 +62,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     debugImplementation(libs.androidx.ui.tooling)
+
+    // 纯 JVM 单测：SyncRules 是三方合并逻辑，不依赖 Android 框架，直接跑在本地 JVM
+    testImplementation(libs.junit)
 }
