@@ -4,6 +4,8 @@ import com.tong.log.app.data.model.Iso8601
 import com.tong.log.app.data.model.Todo
 import com.tong.log.app.data.model.TodoStatus
 import com.tong.log.app.data.model.newUuid
+import com.tong.log.app.data.sync.SyncCursorStore
+import com.tong.log.app.data.sync.SyncEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,7 +35,14 @@ object TodoStore {
             )
             .toList()
 
-    fun todo(id: String): Todo? = _todos.value.firstOrNull { it.id == id }
+    fun todo(id: String): Todo? = _todos.value.firstOrNull { it.id.equals(id, ignoreCase = true) }
+
+    /** 用户改动必须标脏并防抖同步；同步引擎写回一律走 upsert，避免同步风暴。 */
+    private fun markChanged(ids: List<String>) {
+        if (ids.isEmpty()) return
+        ids.forEach { SyncCursorStore.markDirty(it, true) }
+        runCatching { SyncEngine.schedule() }
+    }
 
     fun load() {
         _todos.value = AppStorage.readJson(AppStorage.todosFile, emptyList<Todo>())
@@ -48,14 +57,17 @@ object TodoStore {
         val t = Todo(id = newUuid(), title = title.trim())
         _todos.value = listOf(t) + _todos.value
         save()
+        markChanged(listOf(t.id))
         return t
     }
 
     fun update(todo: Todo) {
         _todos.value = _todos.value.map { if (it.id == todo.id) todo else it }
         save()
+        markChanged(listOf(todo.id))
     }
 
+    /** 同步引擎写回用，不标脏。 */
     fun upsert(todo: Todo) {
         _todos.value = if (_todos.value.any { it.id == todo.id }) {
             _todos.value.map { if (it.id == todo.id) todo else it }
@@ -70,6 +82,7 @@ object TodoStore {
             if (it.id == id) it.copy(title = title, updatedAt = Iso8601.now()) else it
         }
         save()
+        markChanged(listOf(id))
     }
 
     fun setNotes(id: String, notes: String) {
@@ -77,6 +90,7 @@ object TodoStore {
             if (it.id == id) it.copy(notes = notes, updatedAt = Iso8601.now()) else it
         }
         save()
+        markChanged(listOf(id))
     }
 
     fun setPlannedAt(id: String, date: LocalDate?) {
@@ -87,6 +101,7 @@ object TodoStore {
             if (it.id == id) it.copy(plannedAt = iso, updatedAt = Iso8601.now()) else it
         }
         save()
+        markChanged(listOf(id))
     }
 
     fun setStatus(id: String, status: String) {
@@ -101,6 +116,7 @@ object TodoStore {
             } else it
         }
         save()
+        markChanged(listOf(id))
     }
 
     fun toggleDone(id: String) {
@@ -113,14 +129,19 @@ object TodoStore {
             if (it.id == id) it.copy(purged = true, updatedAt = Iso8601.now()) else it
         }
         save()
+        markChanged(listOf(id))
     }
 
     fun clearCompleted() {
+        val ids = _todos.value.filter {
+            it.status == TodoStatus.DONE || it.status == TodoStatus.TERMINATED
+        }.map { it.id }
         _todos.value = _todos.value.map {
             if (it.status == TodoStatus.DONE || it.status == TodoStatus.TERMINATED) {
                 it.copy(purged = true, updatedAt = Iso8601.now())
             } else it
         }
         save()
+        markChanged(ids)
     }
 }

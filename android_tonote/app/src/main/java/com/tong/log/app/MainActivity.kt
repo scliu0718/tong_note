@@ -66,6 +66,10 @@ class MainActivity : ComponentActivity() {
                 val err = AuthState.handleCallback(uri)
                 if (err != null) {
                     Toast.makeText(this@MainActivity, err, Toast.LENGTH_SHORT).show()
+                } else {
+                    // 授权成功立即拉一轮云端数据，不要让用户等 45 秒轮询；
+                    // 首次登录与「重新授权」都走这里。syncRound 自带并发排队。
+                    SyncEngine.syncRound()
                 }
             }
         }
@@ -127,7 +131,9 @@ private fun AppRoot() {
                 runCatching { AuthState.refreshAccount() }
                 SyncEngine.syncRound()
             }
-            delay(45_000)
+            // 同步失败（含部分篇目失败）时 10 秒后重试，避免「登录空数据」要干等 45 秒
+            val failed = SyncEngine.status.value.state == "failed"
+            delay(if (failed) 10_000L else 45_000L)
         }
     }
 }

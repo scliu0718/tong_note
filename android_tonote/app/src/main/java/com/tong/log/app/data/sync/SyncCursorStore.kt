@@ -23,23 +23,32 @@ object SyncCursorStore {
         AppStorage.writeJson(AppStorage.todoSyncFile, todoCursors.toMap())
     }
 
-    fun cursor(id: String, isTodo: Boolean): SyncCursor? =
-        (if (isTodo) todoCursors else noteCursors)[id]
+    /** 云端文件名统一大写，本地 id 可能是小写；所有读写都归到同一个 key，避免游标丢失。 */
+    private fun MutableMap<String, SyncCursor>.keyFor(id: String): String =
+        if (containsKey(id)) id else keys.firstOrNull { it.equals(id, ignoreCase = true) } ?: id
+
+    fun cursor(id: String, isTodo: Boolean): SyncCursor? {
+        val map = if (isTodo) todoCursors else noteCursors
+        return map[map.keyFor(id)]
+    }
 
     fun markDirty(id: String, isTodo: Boolean) {
         val map = if (isTodo) todoCursors else noteCursors
-        val cur = map[id] ?: SyncCursor()
-        map[id] = cur.copy(dirty = true)
+        val key = map.keyFor(id)
+        val cur = map[key] ?: SyncCursor()
+        map[key] = cur.copy(dirty = true)
         save()
     }
 
     fun set(cursor: SyncCursor, id: String, isTodo: Boolean) {
-        (if (isTodo) todoCursors else noteCursors)[id] = cursor
+        val map = if (isTodo) todoCursors else noteCursors
+        map[map.keyFor(id)] = cursor
         save()
     }
 
     fun clear(id: String, isTodo: Boolean) {
-        (if (isTodo) todoCursors else noteCursors).remove(id)
+        val map = if (isTodo) todoCursors else noteCursors
+        map.remove(map.keyFor(id))
         save()
     }
 }

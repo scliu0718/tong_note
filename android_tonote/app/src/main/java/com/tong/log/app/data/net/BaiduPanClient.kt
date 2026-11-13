@@ -3,6 +3,7 @@ package com.tong.log.app.data.net
 import android.net.Uri
 import com.tong.log.app.data.store.AppStorage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -193,11 +194,46 @@ object BaiduPanClient {
     }
 
     suspend fun downloadData(path: String, token: String): ByteArray = withContext(Dispatchers.IO) {
-        var dlink: String? = null
-        var directError = ""
+        var lastError: Exception? = null
+        repeat(3) { attempt ->
+            if (attempt > 0) delay(300L * attempt)
+            val link = try {
+                obtainDlink(path, token, refresh = attempt > 0)
+            } catch (e: Exception) {
+                lastError = e
+                null
+            }
+            if (link != null) {
+                try {
+                    val realUrl = Uri.parse(link).buildUpon()
+                        .appendQueryParameter("access_token", token).build().toString()
+                    val realReq = Request.Builder().url(realUrl).get().header("User-Agent", UA).build()
+                    client.newCall(realReq).execute().use { r ->
+                        if (r.code >= 400) {
+                            lastError = BaiduPanException("直链 HTTP ${r.code}：$path")
+                        } else {
+                            val bytes = r.body?.bytes()
+                            if (bytes == null || bytes.isEmpty()) {
+                                lastError = BaiduPanException("下载内容为空：$path")
+                            } else {
+                                return@withContext bytes
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    lastError = e
+                }
+            }
+        }
+        // 三次都失败一律作为临时错误上抛。调用方只在「列目录里根本没有这个 id」时
+        // 才认定云端无文件；绝不因为直链 404 / 风控 / 网络抖动而拿本地版本覆盖云端。
+        // 也不能用「列目录查不到」来推断不存在：网络中断时查不到同样会返回 null。
+        throw lastError ?: BaiduPanException("下载失败：$path")
+    }
 
-        // 1) 首选方式与 Mac 端一致：method=download&path= 直接取直链
-        if (!downloadByPathBlocked) {
+    /** 取下载直链：首试 method=download&path，被拒后走 filemetas&fsids&dlink=1。 */
+    private suspend fun obtainDlink(path: String, token: String, refresh: Boolean): String? {
+        if (!refresh && !downloadByPathBlocked) {
             val url = Uri.parse(BaiduPanConfig.FILE_API).buildUpon()
                 .appendQueryParameter("method", "download")
                 .appendQueryParameter("access_token", token)
@@ -206,35 +242,24 @@ object BaiduPanClient {
                 .build().toString()
             val req = Request.Builder().url(url).get().header("User-Agent", UA).build()
             val (_, body) = executeText(req)
-            if (body.isEmpty()) throw BaiduPanException("下载元信息为空：$path")
-            val parsed = runCatching { AppStorage.json.decodeFromString<DownloadResponse>(body) }.getOrNull()
-                ?: throw BaiduPanException("下载响应异常：${body.take(200)}")
-            dlink = parsed.list.firstOrNull()?.dlink?.takeIf { it.isNotEmpty() }
-            if (dlink == null) {
-                directError = "errno=${parsed.errno} ${parsed.showMsg ?: ""}".trim()
-                if ((parsed.errno ?: 0) != 0) downloadByPathBlocked = true
+            if (body.isNotEmpty()) {
+                val parsed = runCatching { AppStorage.json.decodeFromString<DownloadResponse>(body) }.getOrNull()
+                if (parsed != null) {
+                    val direct = parsed.list.firstOrNull()?.dlink?.takeIf { it.isNotEmpty() }
+                    if (direct != null) return direct
+                    if ((parsed.errno ?: 0) != 0) downloadByPathBlocked = true
+                }
             }
         }
-
-        // 2) 兜底：path 被开放平台拒绝时，用 fs_id 走 filemetas&dlink=1 取直链
-        if (dlink == null) {
-            val fsId = cachedFsId(path) ?: findFsId(path, token)
-            if (fsId != null) dlink = dlinkByFsId(fsId, token)
+        // 重试时强刷父目录重新拿 fs_id：百度列表有短暂延迟，filemetas 也会偶发漏项。
+        var fsId = if (refresh) findFsId(path, token) else (cachedFsId(path) ?: findFsId(path, token))
+        if (fsId != null) {
+            val d = dlinkByFsId(fsId, token)
+            if (d != null) return d
         }
-        // 3) 刚上传的文件云端列表可能有延迟，强刷一次父目录再试
-        if (dlink == null) {
-            val fsId = findFsId(path, token)
-            if (fsId != null) dlink = dlinkByFsId(fsId, token)
-        }
-
-        val link = dlink ?: throw BaiduPanException("文件不存在或无权下载：$path $directError")
-        val realUrl = Uri.parse(link).buildUpon()
-            .appendQueryParameter("access_token", token).build().toString()
-        val realReq = Request.Builder().url(realUrl).get().header("User-Agent", UA).build()
-        client.newCall(realReq).execute().use { r ->
-            if (r.code >= 400) throw BaiduPanException("下载失败 HTTP ${r.code}：$path")
-            r.body?.bytes() ?: throw BaiduPanException("下载内容为空：$path")
-        }
+        delay(250)
+        fsId = findFsId(path, token)
+        return if (fsId != null) dlinkByFsId(fsId, token) else null
     }
 
     /** 云端文件名大小写可能与本地 id 不一致，查缓存时忽略大小写。 */
@@ -412,7 +437,18 @@ object BaiduPanClient {
         client.newCall(
             Request.Builder().url(url).post(body).header("User-Agent", UA).build()
         ).execute().use { resp ->
-            if (!resp.isSuccessful) throw BaiduPanException("分片上传失败 HTTP ${resp.code}")
+            val text = resp.body?.string() ?: ""
+            if (!resp.isSuccessful) throw BaiduPanException("分片上传失败 HTTP ${resp.code}：${text.take(160)}")
+            // 该接口会 HTTP 200 但返回体带错误；不校验会让 create 拼出不完整文件，
+            // 另一端下载后 JSON 解析失败，表现为「同步成功但笔记空」。
+            if (text.contains("error_code") || text.contains("error_msg")) {
+                throw BaiduPanException("分片上传被拒 seq=$seq：${text.take(160)}")
+            }
+            val obj = runCatching { AppStorage.json.decodeFromString<JsonObject>(text) }.getOrNull()
+            val errno = (obj?.get("errno") as? JsonPrimitive)?.content?.toIntOrNull()
+            if (errno != null && errno != 0) {
+                throw BaiduPanException("分片上传 errno=$errno seq=$seq")
+            }
         }
     }
 

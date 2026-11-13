@@ -74,17 +74,22 @@ object SyncEngine {
             val token = BaiduPanClient.validToken()
             DeviceRegistry.ensureNotKicked(token)
             migrateNotesIfNeeded(token)
-            val noteCount = syncNotes(token)
+            val (noteCount, noteFailed) = syncNotes(token)
             val localNotes = NoteStore.notes.value.size
             runCatching { syncNotebooks(token) }
                 .onFailure { debugLog("笔记本同步失败：${it.message}") }
-            val todoCount = syncTodos(token)
+            val (todoCount, todoFailed) = syncTodos(token)
+            val failed = noteFailed + todoFailed
             _status.value = Status(
-                state = "success",
-                lastMessage = "笔记 $noteCount 篇 · 任务 $todoCount 条",
+                state = if (failed > 0) "failed" else "success",
+                lastMessage = if (failed > 0) "$failed 篇未同步，下一轮自动重试"
+                else "笔记 $noteCount 篇 · 任务 $todoCount 条",
                 lastSyncDate = Iso8601.now()
             )
-            debugLog("同步成功 处理笔记 $noteCount 篇 / 本地 $localNotes 篇")
+            debugLog(
+                if (failed > 0) "同步部分失败 笔记成功 $noteCount / 失败 $noteFailed · 任务失败 $todoFailed / 本地 $localNotes 篇"
+                else "同步成功 处理笔记 $noteCount 篇 / 本地 $localNotes 篇"
+            )
         } catch (e: DeviceKickedException) {
             kicked = true
             _status.value = Status(state = "failed", lastMessage = e.message ?: "本机已被下线", lastSyncDate = _status.value.lastSyncDate)
@@ -100,7 +105,10 @@ object SyncEngine {
     }
 
     suspend fun syncSingleNote(noteId: String) {
-        if (_status.value.isSyncing) return
+        if (_status.value.isSyncing) {
+            needsAnotherRound = true
+            return
+        }
         _status.value = Status(state = "syncing", lastMessage = "", lastSyncDate = _status.value.lastSyncDate)
         try {
             val token = BaiduPanClient.validToken()
@@ -115,30 +123,41 @@ object SyncEngine {
 
     // ---------- 笔记同步 ----------
 
-    private suspend fun syncNotes(token: String): Int {
+    /** 返回 Pair(成功篇数, 失败篇数)。失败篇会留到下一轮重试，绝不静默算成功。 */
+    private suspend fun syncNotes(token: String): Pair<Int, Int> {
         val remoteMtimes = BaiduPanClient.listJsonFiles(notesDir, token)
         val ids = (NoteStore.notes.value.map { it.id } + remoteMtimes.keys).distinct()
         var done = 0
+        var failed = 0
         for (id in ids) {
             // 单篇失败（上传冲突、附件缺失等）绝不能中断整轮，否则云端其余笔记全拉不下来
             runCatching { syncOneNote(id, remoteMtimes[id.uppercase()], token) }
                 .onSuccess { done++ }
-                .onFailure { debugLog("笔记同步失败 $id：${it.message}") }
+                .onFailure {
+                    failed++
+                    debugLog("笔记同步失败 $id：${it.javaClass.simpleName} ${it.message}")
+                }
         }
-        return done
+        return done to failed
     }
 
     private suspend fun syncOneNote(id: String, serverMtime: Long?, token: String) {
         val cursor = SyncCursorStore.cursor(id, false)
         if (SyncRules.shouldSkipFetch(serverMtime, cursor)) return
 
-        val remoteNote = try {
+        val remoteNote: Note? = if (serverMtime == null) {
+            // 目录里没有这个文件。若本篇曾经同步过，说明是列表抖动或刚被别端删除，
+            // 此时绝不能当成「云端无此文件」拿本地旧版覆盖，跳过等下一轮列表恢复。
+            if (cursor != null && cursor.baseRev != 0L) {
+                debugLog("云端列表暂缺 $id（本篇曾同步），跳过本轮避免误覆盖")
+                return
+            }
+            null
+        } else {
+            // 目录里既然有这个 id，任何下载/解析失败都只是临时错误：一律上抛，
+            // 交给 syncNotes 记失败、下一轮重试，绝不退化成用本地内容覆盖云端笔记。
             val bytes = BaiduPanClient.downloadData("$notesDir/$id.json", token)
             AppStorage.json.decodeFromString(Note.serializer(), String(bytes))
-        } catch (e: Exception) {
-            // serverMtime 为空说明云端本来就没有这篇（本地新建），不是错误
-            if (serverMtime != null) debugLog("下载笔记失败 $id：${e.message}")
-            null
         }
 
         val local = NoteStore.note(id)
@@ -181,20 +200,33 @@ object SyncEngine {
         var attempt = 0
         while (attempt < 3) {
             val toPublish = note.copy(rev = rev)
+            // create 返回 errno=0 即代表文件已写入。回读只用于确认，不能因为直链抖动
+            // 就 rev+1 反复重传（旧实现最后会误报「连续三次没能写上云端」）。
             uploadNote(toPublish, token)
-            val back = try {
-                val bytes = BaiduPanClient.downloadData("$notesDir/${note.id}.json", token)
-                AppStorage.json.decodeFromString(Note.serializer(), String(bytes))
-            } catch (e: Exception) {
-                null
+
+            var back: Note? = null
+            for (retry in 0 until 3) {
+                if (retry > 0) delay(400L * retry)
+                back = try {
+                    val bytes = BaiduPanClient.downloadData("$notesDir/${note.id}.json", token)
+                    AppStorage.json.decodeFromString(Note.serializer(), String(bytes))
+                } catch (e: Exception) {
+                    null
+                }
+                if (back != null) break
             }
-            if (back != null && back.rev == rev && SyncRules.sameTime(back.updatedAt, toPublish.updatedAt)) {
+            val confirmed = back
+            if (confirmed == null) {
+                debugLog("上传已成功但回读未确认 ${note.id}，留待下轮校验")
+                return toPublish
+            }
+            if (confirmed.rev == rev && SyncRules.sameTime(confirmed.updatedAt, toPublish.updatedAt)) {
                 return toPublish
             }
             val step = SyncRules.afterFetch(
                 dirty = true,
-                remoteRev = back?.rev,
-                remoteUpdatedAt = back?.updatedAt,
+                remoteRev = confirmed.rev,
+                remoteUpdatedAt = confirmed.updatedAt,
                 localUpdatedAt = toPublish.updatedAt,
                 cursor = SyncCursor(baseRev = rev, baseUpdatedAt = toPublish.updatedAt)
             )
@@ -269,26 +301,34 @@ object SyncEngine {
 
     // ---------- 任务同步 ----------
 
-    private suspend fun syncTodos(token: String): Int {
+    private suspend fun syncTodos(token: String): Pair<Int, Int> {
         val remoteMtimes = BaiduPanClient.listJsonFiles(todosDir, token)
         val ids = (TodoStore.todos.value.map { it.id } + remoteMtimes.keys).distinct()
         var done = 0
+        var failed = 0
         for (id in ids) {
             runCatching { syncOneTodo(id, remoteMtimes[id.uppercase()], token) }
                 .onSuccess { done++ }
-                .onFailure { debugLog("任务同步失败 $id：${it.message}") }
+                .onFailure {
+                    failed++
+                    debugLog("任务同步失败 $id：${it.javaClass.simpleName} ${it.message}")
+                }
         }
-        return done
+        return done to failed
     }
 
     private suspend fun syncOneTodo(id: String, serverMtime: Long?, token: String) {
         val cursor = SyncCursorStore.cursor(id, true)
         if (SyncRules.shouldSkipFetch(serverMtime, cursor)) return
-        val remoteTodo = try {
+        val remoteTodo: Todo? = if (serverMtime == null) {
+            if (cursor != null && cursor.baseRev != 0L) {
+                debugLog("云端列表暂缺任务 $id（曾同步），跳过本轮避免误覆盖")
+                return
+            }
+            null
+        } else {
             val bytes = BaiduPanClient.downloadData("$todosDir/$id.json", token)
             AppStorage.json.decodeFromString(Todo.serializer(), String(bytes))
-        } catch (e: Exception) {
-            null
         }
         val local = TodoStore.todo(id)
         val dirty = cursor?.dirty == true
@@ -310,7 +350,8 @@ object SyncEngine {
                 val l = local ?: return
                 val published = publishTodo(l, step.rev, token)
                 if (published != null) {
-                    TodoStore.update(published)
+                    // 写回必须走 upsert（不标脏），否则会再触发一轮同步形成风暴
+                    TodoStore.upsert(published)
                     SyncCursorStore.set(
                         SyncCursor(published.rev, published.updatedAt, serverMtime, false), id, true
                     )
@@ -342,16 +383,26 @@ object SyncEngine {
             val toPublish = todo.copy(rev = rev)
             val json = AppStorage.json.encodeToString(Todo.serializer(), toPublish).toByteArray()
             BaiduPanClient.uploadData(json, "$todosDir/${todo.id}.json", token)
-            val back = try {
-                val bytes = BaiduPanClient.downloadData("$todosDir/${todo.id}.json", token)
-                AppStorage.json.decodeFromString(Todo.serializer(), String(bytes))
-            } catch (e: Exception) {
-                null
+            var back: Todo? = null
+            for (retry in 0 until 3) {
+                if (retry > 0) delay(400L * retry)
+                back = try {
+                    val bytes = BaiduPanClient.downloadData("$todosDir/${todo.id}.json", token)
+                    AppStorage.json.decodeFromString(Todo.serializer(), String(bytes))
+                } catch (e: Exception) {
+                    null
+                }
+                if (back != null) break
             }
-            if (back != null && back.rev == rev && SyncRules.sameTime(back.updatedAt, toPublish.updatedAt)) {
+            val confirmed = back
+            if (confirmed == null) {
+                debugLog("任务上传已成功但回读未确认 ${todo.id}，留待下轮校验")
                 return toPublish
             }
-            val step = SyncRules.afterFetch(true, back?.rev, back?.updatedAt, toPublish.updatedAt,
+            if (confirmed.rev == rev && SyncRules.sameTime(confirmed.updatedAt, toPublish.updatedAt)) {
+                return toPublish
+            }
+            val step = SyncRules.afterFetch(true, confirmed.rev, confirmed.updatedAt, toPublish.updatedAt,
                 SyncCursor(baseRev = rev, baseUpdatedAt = toPublish.updatedAt))
             if (step is SyncRules.SyncStep.Upload) rev = step.rev else return null
             attempt++

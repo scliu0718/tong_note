@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -42,6 +42,7 @@ private val BASE_URL get() = "file://${AppStorage.rootDir.absolutePath}/"
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun EditorScreen(noteId: String, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val note = NoteStore.note(noteId)
     if (note == null) {
         LaunchedEffect(Unit) { onBack() }
@@ -57,27 +58,41 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val scope = rememberCoroutineScope()
 
-    fun saveBody() {
+    /**
+     * 取回 WebView 正文。命令与取 HTML 放进同一次 evaluateJavascript，
+     * 避免 execCommand 还没落地就先存了旧 DOM（工具栏操作偶发不生效）。
+     *
+     * 旧 Markdown 笔记在 Android 只做有损 HTML 渲染，若把 innerHTML 写回，会把 Mac 的
+     * Markdown 原稿永久改写并强制改成 richText —— 标脏同步接通后会真的写坏云端数据。
+     * 因此这类笔记在手机端只阅读、不回写正文。
+     */
+    fun captureBody(command: String? = null) {
+        if (note.contentFormat != NoteContentFormat.RICH_TEXT) return
         val wv = webView ?: return
-        wv.evaluateJavascript("document.body.innerHTML") { v ->
+        val script = if (command == null) "document.body.innerHTML"
+        else "(function(){ $command return document.body.innerHTML; })()"
+        wv.evaluateJavascript(script) { v ->
             val html = jsString(v).replace(BASE_URL, "")
+            if (html.isBlank()) return@evaluateJavascript
             NoteStore.updateContent(noteId, html, NoteContentFormat.RICH_TEXT)
         }
     }
 
+    fun saveBody() = captureBody()
+
     fun exec(cmd: String, value: String? = null) {
         val js = if (value == null) "document.execCommand('$cmd');"
         else "document.execCommand('$cmd', false, '$value');"
-        webView?.evaluateJavascript(js, null)
-        saveBody()
+        captureBody(js)
     }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             val rel = AttachmentStore.importImage(it, noteId)
-            rel?.let { r ->
-                webView?.evaluateJavascript("document.execCommand('insertImage', false, '$r');", null)
-                saveBody()
+            if (rel == null) {
+                android.widget.Toast.makeText(context, "图片导入失败，请换一张重试", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                captureBody("document.execCommand('insertImage', false, '$rel');")
             }
         }
     }
@@ -90,7 +105,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { saveBody(); onBack() }) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = TextPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = TextPrimary)
             }
             Text("编辑笔记", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
@@ -120,6 +135,10 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             note.tags.take(2).forEach {
                 Spacer(Modifier.width(6.dp))
                 Text(it, Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFF2F2F4)).padding(horizontal = 8.dp, vertical = 2.dp), color = TextTertiary, fontSize = 11.sp)
+            }
+            if (note.contentFormat != NoteContentFormat.RICH_TEXT) {
+                Spacer(Modifier.width(8.dp))
+                Text("Markdown 笔记 · 手机端只读", color = TextTertiary, fontSize = 10.sp)
             }
         }
         HorizontalDivider(color = LineSoft, modifier = Modifier.padding(vertical = 6.dp))
