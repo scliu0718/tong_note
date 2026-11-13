@@ -124,7 +124,6 @@ client.newCall(req).execute().use { resp -> resp.code to (resp.body?.string() ?:
 - **文案直接写中文字面量**。项目未做 i18n（`stringResource` 使用数为 0），不要为此引入 `strings.xml` 重构
 - Screen 都是 `@Composable` + 回调参数（`onBack` / `onOpenNote` / `onSync`），**Screen 内部不持有 `navController`**
 - 路由是字符串常量：`"main"` / `"editor/{noteId}"` / `"sync"` / `"trash"` / `"devices"`。新增页面必须在 `MainActivity` 的 `NavHost` 里注册
-- 没有 ViewModel 层。状态来自各 `store` / `SyncEngine` 的 `StateFlow`，UI 用 `collectAsState()`
 
 ---
 
@@ -141,8 +140,6 @@ client.newCall(req).execute().use { resp -> resp.code to (resp.body?.string() ?:
 | 现象 | 为什么别动 |
 |---|---|
 | 全是 `object` 单例 + 全局可变状态 | 刻意选择的轻量架构。**不要引入 Hilt / Koin** |
-| 没有 ViewModel 层 | 同上。补一层等于重写所有 Screen |
-| 中文硬编码、无 `strings.xml` | 单语言项目，改造要动 10+ 文件，收益为零 |
 | 没有 lint | 现状如此。不要"顺手补 ktlint / detekt" |
 | 测试只覆盖 `SyncRules`，其余无测试 | 只有纯 JVM 的合并规则值得测。**不要给 Screen / Store / 网络层补测试**，那需要 Robolectric 或真机 |
 | `MainActivity` 里 `when (tab)` 硬编码索引 | 与底部导航顺序强耦合，要改就连导航栏一起改 |
@@ -163,7 +160,6 @@ client.newCall(req).execute().use { resp -> resp.code to (resp.body?.string() ?:
 ## 11. 不要做的事
 
 - 不升级 AGP / Kotlin / Compose BOM / OkHttp
-- 不加新依赖（除明确要求）
 - 不删 `settings.gradle.kts` 的阿里云镜像
 - 不重排包结构、不拆模块
 - 不改远端路径与文件名（`notes/`、`todos/`、`attachments/` 的命名规则）
