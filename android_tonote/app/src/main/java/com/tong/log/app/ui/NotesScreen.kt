@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -16,10 +17,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tong.log.app.data.model.Note
@@ -65,6 +71,7 @@ fun NotesScreen(
     var selectedNotebook by remember { mutableStateOf(Notebooks.ALL) }
     var query by remember { mutableStateOf("") }
     var sort by remember { mutableStateOf("updated") }
+    val searchFocus = remember { FocusRequester() }
 
     val filtered = remember(notes, selectedNotebook, query, sort) {
         notes.asSequence()
@@ -102,7 +109,8 @@ fun NotesScreen(
                 Text("当前百度账号：$accountName", fontSize = 10.sp, color = TextTertiary)
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { /* 搜索焦点 */ }) {
+            // 顶栏放大镜：聚焦下方搜索框
+            IconButton(onClick = { searchFocus.requestFocus() }) {
                 Icon(Icons.Default.Search, contentDescription = "搜索", tint = TextPrimary)
             }
         }
@@ -128,15 +136,40 @@ fun NotesScreen(
             }
         }
 
-        // 搜索框
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder = { Text("搜索笔记、标签…", fontSize = 13.sp) },
-            shape = RoundedCornerShape(10.dp),
-            singleLine = true
-        )
+        // 搜索框：紧凑胶囊（M3 OutlinedTextField 固定 56dp 高，太占地方，改用 BasicTextField 自绘，
+        // 整体高度约 34dp；占位文字叠在输入框下层实现 placeholder 效果）
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(Color(0xFFF0F0F2))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null, tint = TextQuaternary, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.weight(1f)) {
+                if (query.isBlank()) {
+                    Text("搜索笔记、标签…", fontSize = 13.sp, color = TextQuaternary)
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 13.sp, color = TextPrimary),
+                    cursorBrush = SolidColor(Green),
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocus)
+                )
+            }
+            if (query.isNotEmpty()) {
+                Icon(
+                    Icons.Default.Close, contentDescription = "清空搜索",
+                    tint = TextQuaternary,
+                    modifier = Modifier.size(15.dp).clickable { query = "" }
+                )
+            }
+        }
 
         // 排序
         Row(Modifier.padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -155,31 +188,34 @@ fun NotesScreen(
         }
         HorizontalDivider(color = LineSoft)
 
-        LazyColumn(Modifier.weight(1f)) {
-            item {
-                // 固定卡片：快同步 / 快任务
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    QuickCard(
-                        modifier = Modifier.weight(1f),
-                        icon = "⇄", tint = Green, bg = GreenTint,
-                        title = "快同步", sub = "多设备共享",
-                        onClick = onOpenQuickSync
-                    )
-                    QuickCard(
-                        modifier = Modifier.weight(1f),
-                        icon = "✓", tint = Amber, bg = AmberTint,
-                        title = "快任务", sub = "待完成 · 进行中",
-                        badge = null,
-                        onClick = onOpenTodo
-                    )
+        // 列表与 FAB 放在同一个 weight(1f) 的 Box 内：
+        // 若 Box(fillMaxSize) 作为非 weight 子项排在加权 LazyColumn 之后，
+        // 它会先于 weight 子项测量并吃掉全部剩余高度，导致列表高度为 0（永不显示）
+        Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize()) {
+                item {
+                    // 固定卡片：快同步 / 快任务
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        QuickCard(
+                            modifier = Modifier.weight(1f),
+                            icon = "⇄", tint = Green, bg = GreenTint,
+                            title = "快同步", sub = "多设备共享",
+                            onClick = onOpenQuickSync
+                        )
+                        QuickCard(
+                            modifier = Modifier.weight(1f),
+                            icon = "✓", tint = Amber, bg = AmberTint,
+                            title = "快任务", sub = "待完成 · 进行中",
+                            badge = null,
+                            onClick = onOpenTodo
+                        )
+                    }
+                }
+                items(filtered, key = { it.id }) { note ->
+                    NoteCard(note, onClick = { onOpenNote(note.id) })
                 }
             }
-            items(filtered, key = { it.id }) { note ->
-                NoteCard(note, onClick = { onOpenNote(note.id) })
-            }
-        }
 
-        Box(Modifier.fillMaxSize()) {
             FloatingActionButton(
                 onClick = { onNewNote(selectedNotebook) },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),

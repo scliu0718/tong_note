@@ -6,9 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,6 +38,7 @@ import org.json.JSONObject
 private val BASE_URL get() = "file://${AppStorage.rootDir.absolutePath}/"
 
 /** 富文本编辑器：WebView + contenteditable，正文即受控 HTML，与 Mac 端格式互通。 */
+@OptIn(ExperimentalLayoutApi::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun EditorScreen(noteId: String, onBack: () -> Unit) {
@@ -55,6 +55,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     var showLinkDialog by remember { mutableStateOf(false) }
     var showTableDialog by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var showTitleDialog by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -97,75 +98,71 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         }
     }
 
-    // 编辑器是二级页面，标题栏必须避开状态栏
-    Column(Modifier.fillMaxSize().background(Color.White).statusBarsPadding()) {
-        // 顶部导航
+    // 编辑器是二级页面，标题栏必须避开状态栏。
+    // 底部取「导航栏 / 输入法」中较大者：Android 15（targetSdk 35）边到边后，
+    // adjustResize 不再替应用缩小窗口，必须显式消费 IME inset，否则弹键盘会盖住正在编辑的正文。
+    // 注意：IME inset 只有在 decorFitsSystemWindows=false 时才会下发到 Compose，
+    // 所以 MainActivity 里必须调用 enableEdgeToEdge()（见 MainActivity.onCreate）。
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.systemBars.only(WindowInsetsSides.Bottom)))
+    ) {
+        // 顶部导航：返回 + 笔记标题（单行省略，改标题走右上角菜单）
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { saveBody(); onBack() }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = TextPrimary)
             }
-            Text("编辑笔记", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
+            Text(
+                text = title.ifBlank { "无标题" },
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                color = if (title.isBlank()) TextQuaternary else TextPrimary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             IconButton(onClick = { showMore = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = TextPrimary)
             }
         }
 
-        // 标题
-        androidx.compose.material3.TextField(
-            value = title,
-            onValueChange = { title = it; NoteStore.updateTitle(noteId, it) },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            placeholder = { Text("笔记标题", fontSize = 21.sp) },
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 21.sp, fontWeight = FontWeight.Bold),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
+        // 第一行：笔记本 + 标签（数量多时自动换行）
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                note.notebook,
+                Modifier.clip(RoundedCornerShape(6.dp)).background(GreenTint).padding(horizontal = 8.dp, vertical = 2.dp),
+                color = GreenHover, fontSize = 11.sp
             )
-        )
-
-        // 元信息
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(note.notebook, Modifier.clip(RoundedCornerShape(6.dp)).background(GreenTint).padding(horizontal = 8.dp, vertical = 2.dp), color = GreenHover, fontSize = 11.sp)
-            note.tags.take(2).forEach {
-                Spacer(Modifier.width(6.dp))
-                Text(it, Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFF2F2F4)).padding(horizontal = 8.dp, vertical = 2.dp), color = TextTertiary, fontSize = 11.sp)
+            note.tags.forEach { tag ->
+                Text(
+                    tag,
+                    Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFF2F2F4)).padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = TextTertiary, fontSize = 11.sp
+                )
             }
             if (note.contentFormat != NoteContentFormat.RICH_TEXT) {
                 Spacer(Modifier.width(8.dp))
                 Text("Markdown 笔记 · 手机端只读", color = TextTertiary, fontSize = 10.sp)
             }
         }
-        HorizontalDivider(color = LineSoft, modifier = Modifier.padding(vertical = 6.dp))
 
-        // WebView 编辑器
-        AndroidView(
-            modifier = Modifier.weight(1f),
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    webView = this
-                    val initialHtml = if (note.contentFormat == NoteContentFormat.RICH_TEXT) note.body
-                    else MarkdownConverter.toHtml(note.body)
-                    loadDataWithBaseURL(BASE_URL, buildEditorHtml(initialHtml), "text/html", "utf-8", null)
-                }
-            }
-        )
-
-        // 底部格式工具条
-        Row(
+        // 第二行：格式操作条（自底部上移，自动换行，全部按钮一屏可见）
+        FlowRow(
             Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFFAFAFB))
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             FmtButton("T") { showStyleMenu = true }
             FmtButton("B", bold = true) { exec("bold") }
@@ -185,6 +182,27 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             FmtButton("图片") { pickImage.launch("image/*") }
             FmtButton("表格") { showTableDialog = true }
         }
+        HorizontalDivider(color = LineSoft)
+
+        // WebView 编辑器
+        AndroidView(
+            modifier = Modifier.weight(1f),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    // 正文图片是相对路径 attachments/<noteId>/<uuid>.<ext>，靠 BASE_URL 解析成 file:// 子资源。
+                    // Android 11+ allowFileAccess 默认 false；loadDataWithBaseURL 的 data: 页面
+                    // 访问 file:// 子资源还需要 allowFileAccessFromFileURLs，缺一则图片全部加载失败
+                    settings.allowFileAccess = true
+                    settings.allowFileAccessFromFileURLs = true
+                    webView = this
+                    val initialHtml = if (note.contentFormat == NoteContentFormat.RICH_TEXT) note.body
+                    else MarkdownConverter.toHtml(note.body)
+                    loadDataWithBaseURL(BASE_URL, buildEditorHtml(initialHtml), "text/html", "utf-8", null)
+                }
+            }
+        )
     }
 
     // 样式菜单
@@ -270,9 +288,41 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         )
     }
 
+    // 编辑标题
+    if (showTitleDialog) {
+        var draft by remember(title) { mutableStateOf(title) }
+        AlertDialog(
+            onDismissRequest = { showTitleDialog = false },
+            title = { Text("编辑标题", fontSize = 15.sp) },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    placeholder = { Text("笔记标题", fontSize = 14.sp) }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val t = draft.trim()
+                    title = t
+                    NoteStore.updateTitle(noteId, t)
+                    showTitleDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTitleDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
     // 更多菜单
     if (showMore) {
         OptionDialog("更多操作", onDismiss = { showMore = false }) {
+            OptionItem("编辑标题") {
+                showMore = false
+                showTitleDialog = true
+            }
             OptionItem("同步本篇") {
                 scope.launch { SyncEngine.syncSingleNote(noteId) }
                 showMore = false
@@ -309,7 +359,7 @@ private fun FmtButton(label: String, bold: Boolean = false, italic: Boolean = fa
         Modifier
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 7.dp),
         color = if (color) Green else TextSecondary,
         fontSize = 14.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,

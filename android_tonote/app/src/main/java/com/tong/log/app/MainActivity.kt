@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,6 +48,10 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 显式开启边到边（decorFitsSystemWindows=false）。
+        // 只有这样才能拿到 WindowInsets.ime：编辑器弹键盘时靠它把整页上推，
+        // 否则 IME inset 会被 decor view 吃掉、Compose 侧恒为 0，键盘直接盖住正文。
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             TongNoteTheme { AppRoot() }
@@ -148,14 +153,20 @@ private fun MainScaffold(navController: NavController) {
 
     Scaffold(
         bottomBar = {
-            // 选中态给整个选项（图标 + 文字）加浅绿底色，而不是只包住图标。
-            // 图标统一为白底线框：未选中黑色线框，选中绿色线框。
+            // 自绘底栏：M3 NavigationBar 自带 80dp 最小高度 + 内部留白，会在选中行上下多出白边。
+            // 这里直接画 64dp 内容行 + 系统导航栏 inset（边到边后必须消费，否则内容顶到手势条下），背景同色不留白
             val tabs = listOf(
                 NavTab("笔记", Icons.Outlined.Description),
                 NavTab("任务", Icons.Outlined.CheckCircle),
                 NavTab("我的", Icons.Outlined.Person)
             )
-            NavigationBar(containerColor = Color(0xFFFAFAFB), tonalElevation = 0.dp) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFFAFAFB))
+                    .navigationBarsPadding()
+            ) {
+                HorizontalDivider(color = LineSoft)
                 Row(
                     Modifier
                         .fillMaxWidth()
