@@ -30,7 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tong.log.app.data.model.Note
 import com.tong.log.app.data.model.Notebooks
+import com.tong.log.app.data.model.AvatarPresets
 import com.tong.log.app.data.model.QUICK_SYNC_NOTE_ID
+import com.tong.log.app.data.store.AvatarStore
 import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.store.NotebookStore
 import com.tong.log.app.ui.theme.*
@@ -66,6 +68,9 @@ fun NotesScreen(
 ) {
     val notes by NoteStore.notes.collectAsState()
     val account by AuthState.account.collectAsState()
+    // 左上角头像跟随「我的」里选中的头像（AvatarStore 是本地 prefs，与 Mac 端 preset id 同源）
+    val avatarId by AvatarStore.currentId.collectAsState()
+    val avatar = AvatarPresets.byId(avatarId)
     val accountName = account?.displayName?.takeIf { it.isNotBlank() } ?: "获取中…"
     val notebooks = remember { NotebookStore.all }
     var selectedNotebook by remember { mutableStateOf(Notebooks.ALL) }
@@ -98,10 +103,14 @@ fun NotesScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(30.dp).background(Brush.linearGradient(listOf(Color(0xFF19B46A), Color(0xFF0E8A48))), CircleShape),
+                Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Color(avatar.color1), Color(avatar.color2))))
+                    .clickable(onClick = onOpenMe),
                 contentAlignment = Alignment.Center
             ) {
-                Text("同", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                AvatarGlyph(avatar, 30.dp)
             }
             Spacer(Modifier.width(10.dp))
             Column {
