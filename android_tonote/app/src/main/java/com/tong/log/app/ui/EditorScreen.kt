@@ -4,11 +4,6 @@ import android.annotation.SuppressLint
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,15 +24,12 @@ import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,7 +56,7 @@ private val BASE_URL get() = "file://${AppStorage.rootDir.absolutePath}/"
 
 /** 富文本编辑器：WebView + contenteditable，正文即受控 HTML，与 Mac 端格式互通。 */
 @OptIn(ExperimentalLayoutApi::class)
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 fun EditorScreen(noteId: String, onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -83,11 +75,14 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val scope = rememberCoroutineScope()
 
-    // 右上角动作图标：进入时（本篇无未同步变更）显示「刷新」，编辑产生变更后显示「保存」。
-    // dirtyCount 只作重组信号，本篇是否脏要按 noteId 精确判断，避免别的笔记改动影响这里。
+    // 右上角文字动作按钮的切换信号：
+    // ① edited —— WebView 正文被用户输入改动（JS bridge 通知，原生侧不落盘，点「保存」时才写）；
+    // ② noteDirty —— 本篇已有未同步变更（上次编辑遗留 / 工具栏操作触发 captureBody 标脏）。
+    // dirtyCount 只作重组触发，本篇是否脏按 noteId 精确判断，避免别的笔记改动影响这里。
     val dirtyCount by SyncCursorStore.dirtyCount.collectAsState()
-    val syncStatus by SyncEngine.status.collectAsState()
-    val noteDirty = dirtyCount > 0 && SyncCursorStore.cursor(noteId, false)?.dirty == true
+    var edited by remember { mutableStateOf(false) }
+    val noteDirty = dirtyCount >= 0 && SyncCursorStore.cursor(noteId, false)?.dirty == true
+    val needSave = edited || noteDirty
 
     // 键盘开合会把 WebView 压小，Chromium 不会主动把光标滚进新的可视区，
     // 正文脚本里的 resize 兜底偶发不触发，所以再从原生侧按 IME 高度变化补两次校正。
@@ -153,7 +148,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     ) {
         // 顶部导航：返回 + 笔记标题（单行省略，改标题走右上角菜单）
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 0.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { saveBody(); onBack() }) {
@@ -168,34 +163,57 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            // 同步 / 保存：常驻可见，本篇有未同步变更时为绿色「保存」，否则为「刷新」。
-            // 同步进行中让图标自转，不再用小转圈（太隐蔽，会被误认为图标没显示）。
-            val spin = rememberInfiniteTransition(label = "editorSyncSpin")
-            val angle by spin.animateFloat(
-                initialValue = 0f, targetValue = 360f,
-                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
-                label = "editorSyncAngle"
-            )
-            IconButton(onClick = {
-                scope.launch {
-                    // saveBody 走 WebView.evaluateJavascript，正文是异步回写的；
-                    // 先等落盘再发起本篇同步，否则可能把旧内容推上云端。
-                    if (noteDirty) {
-                        saveBody()
-                        delay(300)
+            // 右上角文字按钮：语义明确，避免图标被误读。
+            // 「同步」= 用云端本篇覆盖本地（远程 → 本地）；
+            // 「保存」= 本地有变更后，先落盘再推云端（本地 → 本地 + 远程）。
+            // 两者互斥显示，不会出现「有改动却提供同步覆盖」的危险入口。
+            val syncing = SyncEngine.status.collectAsState().value.isSyncing
+            Text(
+                text = when {
+                    syncing -> "同步中"
+                    needSave -> "保存"
+                    else -> "同步"
+                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = !syncing) {
+                        if (needSave) {
+                            // 保存：正文写回本地，再推到云端。captureBody 是异步回写，
+                            // 等落盘完成后再 syncSingleNote，否则会把旧内容推上去。
+                            saveBody()
+                            scope.launch {
+                                delay(350)
+                                SyncEngine.syncSingleNote(noteId)
+                                edited = false
+                            }
+                        } else {
+                            // 同步：强制拉云端本篇覆盖本地，并刷新编辑器内容
+                            scope.launch {
+                                val remote = SyncEngine.pullSingleNote(noteId)
+                                if (remote != null) {
+                                    title = remote.title
+                                    val html = if (remote.contentFormat == NoteContentFormat.RICH_TEXT) remote.body
+                                    else MarkdownConverter.toHtml(remote.body)
+                                    webView?.loadDataWithBaseURL(BASE_URL, buildEditorHtml(html), "text/html", "utf-8", null)
+                                    edited = false
+                                }
+                            }
+                        }
                     }
-                    SyncEngine.syncSingleNote(noteId)
-                }
-            }) {
-                Icon(
-                    if (noteDirty) Icons.Default.Save else Icons.Default.Refresh,
-                    contentDescription = if (noteDirty) "保存并同步本篇" else "同步本篇",
-                    tint = if (noteDirty) Green else TextPrimary,
-                    modifier = if (syncStatus.isSyncing) Modifier.rotate(angle) else Modifier
-                )
-            }
-            IconButton(onClick = { showMore = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = TextPrimary)
+                    .padding(start = 10.dp, end = 0.dp, top = 9.dp, bottom = 9.dp),
+                color = if (needSave) Green else TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            // 与文字按钮间距 0，整体更贴右边缘
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(19.dp))
+                    .clickable { showMore = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = TextPrimary, modifier = Modifier.size(20.dp))
             }
         }
         // 标题栏分割线
@@ -272,6 +290,18 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                     // 访问 file:// 子资源还需要 allowFileAccessFromFileURLs，缺一则图片全部加载失败
                     settings.allowFileAccess = true
                     settings.allowFileAccessFromFileURLs = true
+                    // 正文输入 → 切「保存」。loadDataWithBaseURL 加载的是 data: 页面，
+                    // addJavascriptInterface 注入的对象在部分机型上不可见，改用 console 通道最稳；
+                    // 回调在 WebView 线程，post 回主线程再改 Compose state。
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onConsoleMessage(msg: android.webkit.ConsoleMessage): Boolean {
+                            if (msg.message() == "__TONOTE_EDITED__") {
+                                this@apply.post { edited = true }
+                                return true
+                            }
+                            return super.onConsoleMessage(msg)
+                        }
+                    }
                     webView = this
                     val initialHtml = if (note.contentFormat == NoteContentFormat.RICH_TEXT) note.body
                     else MarkdownConverter.toHtml(note.body)
@@ -329,14 +359,9 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 showTableDialog = false
             }
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("行", fontSize = 13.sp)
-                Spacer(Modifier.width(8.dp))
-                TablePicker(rows) { rows = it }
-                Spacer(Modifier.width(16.dp))
-                Text("列", fontSize = 13.sp)
-                Spacer(Modifier.width(8.dp))
-                TablePicker(cols) { cols = it }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberStepper("行", rows) { rows = it }
+                NumberStepper("列", cols) { cols = it }
             }
         }
     }
@@ -385,20 +410,42 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     }
 }
 
+/**
+ * 行 / 列步进器：[-] 数字 [+]，默认 3，范围 1..10。
+ * 两行独立摆放（行一行、列一行），比原来 1..6 的数字胶囊更省横向空间。
+ */
 @Composable
-private fun TablePicker(value: Int, onChange: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        (1..6).forEach { n ->
-            Box(
-                Modifier
-                    .size(26.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (n == value) Green else Color(0xFFF0F0F2))
-                    .clickable { onChange(n) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("$n", color = if (n == value) Color.White else TextSecondary, fontSize = 12.sp)
-            }
+private fun NumberStepper(label: String, value: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 13.sp, color = TextSecondary, modifier = Modifier.width(28.dp))
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color(0xFFF0F0F2))
+                .clickable(enabled = value > 1) { onChange((value - 1).coerceAtLeast(1)) },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("−", fontSize = 16.sp, color = if (value > 1) TextPrimary else TextQuaternary)
+        }
+        Text(
+            "$value",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = TextPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(52.dp)
+        )
+        Box(
+            Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color(0xFFF0F0F2))
+                .clickable(enabled = value < 10) { onChange((value + 1).coerceAtMost(10)) },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("+", fontSize = 16.sp, color = if (value < 10) TextPrimary else TextQuaternary)
         }
     }
 }
@@ -614,7 +661,15 @@ private fun buildEditorHtml(body: String): String {
             setTimeout(ensureCaretVisible, 40);
           }
           document.addEventListener('selectionchange', schedule);
-          document.addEventListener('input', schedule);
+          var editTimer = null;
+          document.addEventListener('input', function(){
+            schedule();
+            // 只有真正的正文输入才通知原生切「保存」按钮；200ms 合并，避免每个字符都刷
+            if (editTimer) clearTimeout(editTimer);
+            editTimer = setTimeout(function(){
+              try { console.log('__TONOTE_EDITED__'); } catch(e) {}
+            }, 200);
+          });
           document.addEventListener('keyup', schedule);
           document.addEventListener('focusin', schedule);
           document.addEventListener('click', schedule);

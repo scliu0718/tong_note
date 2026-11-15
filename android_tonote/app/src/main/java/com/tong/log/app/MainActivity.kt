@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -151,8 +152,12 @@ private fun MainScaffold(navController: NavController) {
     var showAvatar by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    // 键盘弹起时隐藏底栏：否则 Scaffold 仍会给 content 留出底栏高度，
+    // 与页面自身的 imePadding 叠加，输入框被顶得过高且底栏挡在键盘上方。
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     Scaffold(
         bottomBar = {
+            if (imeBottom == 0) {
             // 自绘底栏：M3 NavigationBar 自带 80dp 最小高度 + 内部留白，会在选中行上下多出白边。
             // 这里直接画 64dp 内容行 + 系统导航栏 inset（边到边后必须消费，否则内容顶到手势条下），背景同色不留白
             val tabs = listOf(
@@ -206,6 +211,7 @@ private fun MainScaffold(navController: NavController) {
                         }
                     }
                 }
+            }
             }
         }
     ) { padding ->

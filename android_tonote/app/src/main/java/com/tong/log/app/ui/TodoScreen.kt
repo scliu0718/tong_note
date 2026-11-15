@@ -1,5 +1,6 @@
 package com.tong.log.app.ui
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,8 +10,13 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,16 +24,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.tong.log.app.data.model.Todo
 import com.tong.log.app.data.model.TodoStatus
 import com.tong.log.app.data.store.TodoStore
 import com.tong.log.app.data.store.isOverdue
 import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private val DateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+/** ISO 字符串 ↔ 本地日期（TodoStore.setPlannedAt 收的是 LocalDate）。 */
+private fun isoToDate(iso: String?): LocalDate? = iso?.let {
+    runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+}
 
 @Composable
 fun TodoScreen(onSync: () -> Unit) {
@@ -36,6 +56,10 @@ fun TodoScreen(onSync: () -> Unit) {
     var filter by remember { mutableStateOf("all") }
     var newTitle by remember { mutableStateOf("") }
 
+    // 编辑 / 详细新建共用的对话框状态：null = 关闭
+    var editingTodo by remember { mutableStateOf<Todo?>(null) }
+    var showCreateDetail by remember { mutableStateOf(false) }
+
     val active = todos.filter { !it.purged }
     val todo = active.filter { it.status == TodoStatus.TODO }
     val doing = active.filter { it.status == TodoStatus.DOING }
@@ -43,7 +67,16 @@ fun TodoScreen(onSync: () -> Unit) {
     val terminated = active.filter { it.status == TodoStatus.TERMINATED }
     val overdueCount = active.count { it.isOverdue }
 
-    Column(Modifier.fillMaxSize().background(Bg)) {
+    fun submitQuick() {
+        val t = newTitle.trim()
+        if (t.isEmpty()) return
+        scope.launch { TodoStore.add(t) }
+        newTitle = ""
+    }
+
+    // 键盘弹起时由 imePadding 把整页抬到键盘上方，底部输入行不再被遮住。
+    // Android 15 边到边后 adjustResize 不缩窗口，必须显式消费 IME inset。
+    Column(Modifier.fillMaxSize().background(Bg).imePadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -83,46 +116,120 @@ fun TodoScreen(onSync: () -> Unit) {
         }
 
         LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-            todoGroup("待完成", todo, Color(0xFFE5484D), show = true, isDoneGroup = false)
-            todoGroup("进行中", doing, Amber, show = true, isDoneGroup = false)
+            todoGroup(
+                "待完成", todo, Color(0xFFE5484D), show = true, isDoneGroup = false,
+                onEdit = { editingTodo = it }
+            )
+            todoGroup(
+                "进行中", doing, Amber, show = true, isDoneGroup = false,
+                onEdit = { editingTodo = it }
+            )
             if (filter == "all") {
-                todoGroup("已完成", done, Green, show = filter == "all", isDoneGroup = true)
-                todoGroup("已终止", terminated, TextQuaternary, show = filter == "all", isDoneGroup = true)
+                todoGroup("已完成", done, Green, show = true, isDoneGroup = true, onEdit = { editingTodo = it })
+                todoGroup("已终止", terminated, TextQuaternary, show = true, isDoneGroup = true, onEdit = { editingTodo = it })
             }
             item { Spacer(Modifier.height(8.dp)) }
         }
 
-        // 快捷添加
+        // 快捷添加：38dp 胶囊输入行，比原来的 OutlinedTextField（56dp+）矮一截
         Row(
-            Modifier.fillMaxWidth().background(Bg).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier
+                .fillMaxWidth()
+                .background(Bg)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Add, contentDescription = null, tint = Green, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            OutlinedTextField(
-                value = newTitle,
-                onValueChange = { newTitle = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("添加任务，回车确认", fontSize = 13.sp) },
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
+            Row(
+                Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White)
+                    .border(1.dp, Line, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = Green, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                BasicTextField(
+                    value = newTitle,
+                    onValueChange = { newTitle = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = TextPrimary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submitQuick() }),
+                    decorationBox = { inner ->
+                        if (newTitle.isEmpty()) {
+                            Text("添加任务，回车确认", fontSize = 12.sp, color = TextQuaternary)
+                        }
+                        inner()
+                    }
+                )
+                // 详细新建：可一并设置日期与备注
+                Icon(
+                    Icons.Default.EditNote,
+                    contentDescription = "详细添加",
+                    tint = TextTertiary,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { showCreateDetail = true }
+                )
+            }
             Spacer(Modifier.width(8.dp))
             Button(
-                onClick = {
-                    if (newTitle.isNotBlank()) {
-                        scope.launch { TodoStore.add(newTitle); newTitle = "" }
-                    }
-                },
+                onClick = { submitQuick() },
                 colors = ButtonDefaults.buttonColors(containerColor = Green),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier.height(38.dp)
             ) { Text("添加", fontSize = 12.sp) }
         }
+    }
+
+    // 编辑已有任务：标题 / 备注 / 计划日期
+    editingTodo?.let { t ->
+        TodoEditDialog(
+            title = "编辑任务",
+            initialTitle = t.title,
+            initialNotes = t.notes,
+            initialDate = isoToDate(t.plannedAt),
+            confirmLabel = "保存",
+            onDismiss = { editingTodo = null },
+            onConfirm = { title, notes, date ->
+                TodoStore.updateTitle(t.id, title)
+                TodoStore.setNotes(t.id, notes)
+                TodoStore.setPlannedAt(t.id, date)
+                editingTodo = null
+            }
+        )
+    }
+
+    // 详细新建：一次把标题、备注、日期都填好
+    if (showCreateDetail) {
+        TodoEditDialog(
+            title = "新建任务",
+            initialTitle = newTitle,
+            initialNotes = "",
+            initialDate = null,
+            confirmLabel = "创建",
+            onDismiss = { showCreateDetail = false },
+            onConfirm = { title, notes, date ->
+                if (title.isNotBlank()) {
+                    val t = TodoStore.add(title)
+                    if (notes.isNotBlank()) TodoStore.setNotes(t.id, notes)
+                    if (date != null) TodoStore.setPlannedAt(t.id, date)
+                    newTitle = ""
+                }
+                showCreateDetail = false
+            }
+        )
     }
 }
 
 private fun LazyListScope.todoGroup(
-    title: String, list: List<Todo>, color: Color, show: Boolean, isDoneGroup: Boolean
+    title: String, list: List<Todo>, color: Color, show: Boolean, isDoneGroup: Boolean,
+    onEdit: (Todo) -> Unit
 ) {
     if (!show || list.isEmpty()) return
     item {
@@ -142,6 +249,7 @@ private fun LazyListScope.todoGroup(
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(11.dp))
                 .background(Color.White)
+                .clickable { onEdit(t) }
                 .padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.Top
         ) {
@@ -168,6 +276,10 @@ private fun LazyListScope.todoGroup(
                     color = if (isDoneGroup) TextQuaternary else TextPrimary,
                     textDecoration = if (isDoneGroup) TextDecoration.LineThrough else TextDecoration.None
                 )
+                if (!t.notes.isBlank()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(t.notes, fontSize = 11.sp, color = TextTertiary, maxLines = 2)
+                }
                 if (t.plannedAt != null) {
                     Spacer(Modifier.height(3.dp))
                     Text(
@@ -189,26 +301,131 @@ private fun LazyListScope.todoGroup(
             }
             if (t.status == TodoStatus.TODO || t.status == TodoStatus.DOING) {
                 Spacer(Modifier.width(6.dp))
-                ActionChip("终止", Color.Transparent, TextQuaternary) { TodoStore.setStatus(t.id, TodoStatus.TERMINATED) }
+                // 终止：灰色底 + 细边框，明确标识为可点按钮
+                ActionChip(
+                    "终止", Color(0xFFF5F5F7), TextTertiary, bordered = true
+                ) { TodoStore.setStatus(t.id, TodoStatus.TERMINATED) }
             }
             Spacer(Modifier.width(6.dp))
-            Text(
-                "删", Modifier.clickable { TodoStore.remove(t.id) }.padding(4.dp),
-                color = TextQuaternary, fontSize = 12.sp
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = "删除任务",
+                tint = TextQuaternary,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .clickable { TodoStore.remove(t.id) }
             )
         }
     }
 }
 
 @Composable
-private fun ActionChip(label: String, bg: Color, fg: Color, onClick: () -> Unit) {
+private fun ActionChip(label: String, bg: Color, fg: Color, bordered: Boolean = false, onClick: () -> Unit) {
     Text(
         label,
         Modifier
             .clip(RoundedCornerShape(7.dp))
             .background(bg)
+            .then(if (bordered) Modifier.border(1.dp, Line, RoundedCornerShape(7.dp)) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
         color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold
     )
+}
+
+/** 自绘紧凑对话框：标题 / 备注 / 计划日期，避免 M3 AlertDialog 的固定大 padding。 */
+@Composable
+private fun TodoEditDialog(
+    title: String,
+    initialTitle: String,
+    initialNotes: String,
+    initialDate: LocalDate?,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, LocalDate?) -> Unit
+) {
+    val context = LocalContext.current
+    var taskTitle by remember { mutableStateOf(initialTitle) }
+    var notes by remember { mutableStateOf(initialNotes) }
+    var date by remember { mutableStateOf(initialDate) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(
+                    title,
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                HorizontalDivider(thickness = 0.75.dp, color = LineHair)
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    OutlinedTextField(
+                        value = taskTitle,
+                        onValueChange = { taskTitle = it },
+                        label = { Text("标题", fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("备注", fontSize = 12.sp) },
+                        minLines = 2,
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("计划日期", fontSize = 12.sp, color = TextSecondary)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            date?.format(DateFmt) ?: "未设置",
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(GreenTint)
+                                .clickable {
+                                    val base = date ?: LocalDate.now()
+                                    DatePickerDialog(
+                                        context,
+                                        { _, y, m, d -> date = LocalDate.of(y, m + 1, d) },
+                                        base.year, base.monthValue - 1, base.dayOfMonth
+                                    ).show()
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            color = GreenHover,
+                            fontSize = 12.sp
+                        )
+                        if (date != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "清除",
+                                Modifier.clickable { date = null }.padding(horizontal = 6.dp, vertical = 6.dp),
+                                color = TextTertiary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+                    TextButton(onClick = { onConfirm(taskTitle.trim(), notes.trim(), date) }) {
+                        Text(confirmLabel, color = GreenHover, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
 }

@@ -104,6 +104,38 @@ object SyncEngine {
         }
     }
 
+    /**
+     * 「同步」按钮语义：强制用云端本篇覆盖本地（远程 → 本地）。
+     * 与 syncSingleNote 的三方合并不同：不做胜负判断、不受 shouldSkipFetch 短路影响，
+     * 走 applyRemoteNote 统一处理附件下载与基线游标更新。
+     * UI 只在本地无未同步变更时展示该入口，因此覆盖是安全的。
+     * 返回远端笔记供调用方刷新编辑器；云端无此篇或失败返回 null。
+     */
+    suspend fun pullSingleNote(noteId: String): Note? {
+        if (_status.value.isSyncing) return null
+        _status.value = Status(state = "syncing", lastMessage = "", lastSyncDate = _status.value.lastSyncDate)
+        return try {
+            val token = BaiduPanClient.validToken()
+            val remoteMtimes = BaiduPanClient.listJsonFiles(notesDir, token)
+            val cloudKey = remoteMtimes.keys.firstOrNull { it.equals(noteId, ignoreCase = true) }
+            if (cloudKey == null) {
+                _status.value = Status(state = "failed", lastMessage = "云端暂无本篇", lastSyncDate = _status.value.lastSyncDate)
+                debugLog("同步本篇：云端列表里没有 $noteId")
+                return null
+            }
+            val bytes = BaiduPanClient.downloadData("$notesDir/$cloudKey.json", token)
+            val remote = AppStorage.json.decodeFromString(Note.serializer(), String(bytes))
+            applyRemoteNote(remote, remote.rev, remoteMtimes[cloudKey], token)
+            _status.value = Status(state = "success", lastMessage = "已从云端更新本篇", lastSyncDate = Iso8601.now())
+            debugLog("同步本篇成功：${remote.title} rev=${remote.rev}")
+            remote
+        } catch (e: Exception) {
+            _status.value = Status(state = "failed", lastMessage = e.message ?: "同步失败", lastSyncDate = _status.value.lastSyncDate)
+            debugLog("同步本篇失败 ${e.javaClass.simpleName} ${e.message}")
+            null
+        }
+    }
+
     suspend fun syncSingleNote(noteId: String) {
         if (_status.value.isSyncing) {
             needsAnotherRound = true
