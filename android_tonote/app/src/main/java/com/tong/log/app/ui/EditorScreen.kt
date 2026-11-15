@@ -4,6 +4,11 @@ import android.annotation.SuppressLint
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -24,12 +29,15 @@ import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,6 +53,7 @@ import com.tong.log.app.data.model.NoteContentFormat
 import com.tong.log.app.data.store.AppStorage
 import com.tong.log.app.data.store.AttachmentStore
 import com.tong.log.app.data.store.NoteStore
+import com.tong.log.app.data.sync.SyncCursorStore
 import com.tong.log.app.data.sync.SyncEngine
 import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.delay
@@ -73,6 +82,12 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     var showTitleDialog by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val scope = rememberCoroutineScope()
+
+    // 右上角动作图标：进入时（本篇无未同步变更）显示「刷新」，编辑产生变更后显示「保存」。
+    // dirtyCount 只作重组信号，本篇是否脏要按 noteId 精确判断，避免别的笔记改动影响这里。
+    val dirtyCount by SyncCursorStore.dirtyCount.collectAsState()
+    val syncStatus by SyncEngine.status.collectAsState()
+    val noteDirty = dirtyCount > 0 && SyncCursorStore.cursor(noteId, false)?.dirty == true
 
     // 键盘开合会把 WebView 压小，Chromium 不会主动把光标滚进新的可视区，
     // 正文脚本里的 resize 兜底偶发不触发，所以再从原生侧按 IME 高度变化补两次校正。
@@ -153,6 +168,32 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            // 同步 / 保存：常驻可见，本篇有未同步变更时为绿色「保存」，否则为「刷新」。
+            // 同步进行中让图标自转，不再用小转圈（太隐蔽，会被误认为图标没显示）。
+            val spin = rememberInfiniteTransition(label = "editorSyncSpin")
+            val angle by spin.animateFloat(
+                initialValue = 0f, targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+                label = "editorSyncAngle"
+            )
+            IconButton(onClick = {
+                scope.launch {
+                    // saveBody 走 WebView.evaluateJavascript，正文是异步回写的；
+                    // 先等落盘再发起本篇同步，否则可能把旧内容推上云端。
+                    if (noteDirty) {
+                        saveBody()
+                        delay(300)
+                    }
+                    SyncEngine.syncSingleNote(noteId)
+                }
+            }) {
+                Icon(
+                    if (noteDirty) Icons.Default.Save else Icons.Default.Refresh,
+                    contentDescription = if (noteDirty) "保存并同步本篇" else "同步本篇",
+                    tint = if (noteDirty) Green else TextPrimary,
+                    modifier = if (syncStatus.isSyncing) Modifier.rotate(angle) else Modifier
+                )
+            }
             IconButton(onClick = { showMore = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = TextPrimary)
             }
@@ -417,14 +458,14 @@ private fun OptionDialog(title: String, onDismiss: () -> Unit, content: @Composa
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
-            HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+            HorizontalDivider(thickness = 0.75.dp, color = LineHair)
             Column(content = content)
             Spacer(Modifier.height(10.dp))
-            // 底部取消按钮：浅灰胶囊，独立于选项列表
+            // 底部取消按钮：浅灰胶囊，左右边距与选项分割线一致（48dp），两者同宽
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 48.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(Color(0xFFF2F2F5))
                     .clickable(onClick = onDismiss)
@@ -466,7 +507,7 @@ private fun EditorDialog(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
-                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                HorizontalDivider(thickness = 0.75.dp, color = LineHair)
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), content = content)
                 if (confirmLabel != null && onConfirm != null) {
                     HorizontalDivider(thickness = 0.5.dp, color = LineHair)
