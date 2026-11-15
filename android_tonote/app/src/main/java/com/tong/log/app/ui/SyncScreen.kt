@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tong.log.app.data.sync.SyncCursorStore
 import com.tong.log.app.data.sync.SyncEngine
 import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.launch
@@ -24,6 +26,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
     val status by SyncEngine.status.collectAsState()
+    val dirtyCount by SyncCursorStore.dirtyCount.collectAsState()
     val account by AuthState.account.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -37,6 +40,21 @@ fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = TextPrimary)
             }
             Text("同步与存储", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            // 右上角动作：同步中转圈；有未同步变更显示「保存」；否则显示「刷新」。
+            // 两者点击都触发一轮同步（保存 = 把变更推上云端并拉回远端更新）。
+            if (status.isSyncing) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Green)
+                Spacer(Modifier.width(11.dp))
+            } else {
+                IconButton(onClick = { scope.launch { SyncEngine.syncRound() } }) {
+                    if (dirtyCount > 0) {
+                        Icon(Icons.Default.Save, contentDescription = "保存并同步", tint = Green)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "同步", tint = TextPrimary)
+                    }
+                }
+            }
         }
         // 标题栏分割线
         TopBarDivider()

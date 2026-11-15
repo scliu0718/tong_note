@@ -2,6 +2,9 @@ package com.tong.log.app.data.sync
 
 import com.tong.log.app.data.model.SyncCursor
 import com.tong.log.app.data.store.AppStorage
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 同步基线对照表（只落本机，不上传）。换设备 / 重装后 baseRev=0，靠 afterFetch 的
@@ -11,11 +14,20 @@ object SyncCursorStore {
     private val noteCursors = mutableMapOf<String, SyncCursor>()
     private val todoCursors = mutableMapOf<String, SyncCursor>()
 
+    /** 本地有未同步变更（dirty）的条数，供 UI 切「刷新 / 保存」图标。 */
+    private val _dirtyCount = MutableStateFlow(0)
+    val dirtyCount: StateFlow<Int> = _dirtyCount.asStateFlow()
+
+    private fun recount() {
+        _dirtyCount.value = noteCursors.values.count { it.dirty } + todoCursors.values.count { it.dirty }
+    }
+
     fun load() {
         noteCursors.clear()
         noteCursors.putAll(AppStorage.readJson(AppStorage.noteSyncFile, emptyMap<String, SyncCursor>()))
         todoCursors.clear()
         todoCursors.putAll(AppStorage.readJson(AppStorage.todoSyncFile, emptyMap<String, SyncCursor>()))
+        recount()
     }
 
     fun save() {
@@ -38,17 +50,20 @@ object SyncCursorStore {
         val cur = map[key] ?: SyncCursor()
         map[key] = cur.copy(dirty = true)
         save()
+        recount()
     }
 
     fun set(cursor: SyncCursor, id: String, isTodo: Boolean) {
         val map = if (isTodo) todoCursors else noteCursors
         map[map.keyFor(id)] = cursor
         save()
+        recount()
     }
 
     fun clear(id: String, isTodo: Boolean) {
         val map = if (isTodo) todoCursors else noteCursors
         map.remove(map.keyFor(id))
         save()
+        recount()
     }
 }

@@ -397,9 +397,29 @@ private fun FmtSep() {
     Box(Modifier.width(1.dp).height(18.dp).padding(horizontal = 4.dp).background(Line))
 }
 
+/** 底部抽屉：从屏幕底部上滑、贴底全宽（下边留 6dp），用于「更多操作」等选项列表。 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OptionDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    EditorDialog(title = title, onDismiss = onDismiss, content = content)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+        modifier = Modifier.padding(bottom = 6.dp)
+    ) {
+        Column {
+            Text(
+                title,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+            Column(content = content)
+        }
+    }
 }
 
 /**
@@ -450,10 +470,10 @@ private fun EditorDialog(
     }
 }
 
-/** 选项之间的分割线（左右留 16dp 边距）。 */
+/** 选项之间的分割线（0.5dp 发丝线，从文字起始位置留 16dp 边距）。 */
 @Composable
 private fun OptionDivider() {
-    HorizontalDivider(color = LineSoft, modifier = Modifier.padding(horizontal = 16.dp))
+    HorizontalDivider(thickness = 0.5.dp, color = LineHair, modifier = Modifier.padding(horizontal = 16.dp))
 }
 
 @Composable
