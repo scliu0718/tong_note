@@ -15,7 +15,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -59,6 +59,8 @@ fun TodoScreen(onSync: () -> Unit) {
     // 编辑 / 详细新建共用的对话框状态：null = 关闭
     var editingTodo by remember { mutableStateOf<Todo?>(null) }
     var showCreateDetail by remember { mutableStateOf(false) }
+    // 待删除的任务：非 null 时弹出二次确认框
+    var pendingDelete by remember { mutableStateOf<Todo?>(null) }
 
     val active = todos.filter { !it.purged }
     val todo = active.filter { it.status == TodoStatus.TODO }
@@ -118,15 +120,15 @@ fun TodoScreen(onSync: () -> Unit) {
         LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp)) {
             todoGroup(
                 "待完成", todo, Color(0xFFE5484D), show = true, isDoneGroup = false,
-                onEdit = { editingTodo = it }
+                onEdit = { editingTodo = it }, onDelete = { pendingDelete = it }
             )
             todoGroup(
                 "进行中", doing, Amber, show = true, isDoneGroup = false,
-                onEdit = { editingTodo = it }
+                onEdit = { editingTodo = it }, onDelete = { pendingDelete = it }
             )
             if (filter == "all") {
-                todoGroup("已完成", done, Green, show = true, isDoneGroup = true, onEdit = { editingTodo = it })
-                todoGroup("已终止", terminated, TextQuaternary, show = true, isDoneGroup = true, onEdit = { editingTodo = it })
+                todoGroup("已完成", done, Green, show = true, isDoneGroup = true, onEdit = { editingTodo = it }, onDelete = { pendingDelete = it })
+                todoGroup("已终止", terminated, TextQuaternary, show = true, isDoneGroup = true, onEdit = { editingTodo = it }, onDelete = { pendingDelete = it })
             }
             item { Spacer(Modifier.height(8.dp)) }
         }
@@ -205,6 +207,18 @@ fun TodoScreen(onSync: () -> Unit) {
         )
     }
 
+    // 删除二次确认：非 null 时弹出
+    pendingDelete?.let { t ->
+        TodoDeleteDialog(
+            title = t.title,
+            onDismiss = { pendingDelete = null },
+            onConfirm = {
+                TodoStore.remove(t.id)
+                pendingDelete = null
+            }
+        )
+    }
+
     // 详细新建：一次把标题、备注、日期都填好
     if (showCreateDetail) {
         TodoEditDialog(
@@ -229,7 +243,7 @@ fun TodoScreen(onSync: () -> Unit) {
 
 private fun LazyListScope.todoGroup(
     title: String, list: List<Todo>, color: Color, show: Boolean, isDoneGroup: Boolean,
-    onEdit: (Todo) -> Unit
+    onEdit: (Todo) -> Unit, onDelete: (Todo) -> Unit
 ) {
     if (!show || list.isEmpty()) return
     item {
@@ -308,13 +322,13 @@ private fun LazyListScope.todoGroup(
             }
             Spacer(Modifier.width(6.dp))
             Icon(
-                Icons.Default.Delete,
+                Icons.Outlined.DeleteOutline,
                 contentDescription = "删除任务",
                 tint = TextQuaternary,
                 modifier = Modifier
                     .size(20.dp)
                     .clip(RoundedCornerShape(5.dp))
-                    .clickable { TodoStore.remove(t.id) }
+                    .clickable { onDelete(t) }
             )
         }
     }
@@ -332,6 +346,47 @@ private fun ActionChip(label: String, bg: Color, fg: Color, bordered: Boolean = 
             .padding(horizontal = 10.dp, vertical = 4.dp),
         color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold
     )
+}
+
+/** 删除二次确认框：与编辑弹窗同款紧凑样式，删除按钮用红色强调危险操作。 */
+@Composable
+private fun TodoDeleteDialog(title: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(
+                    "删除任务",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                HorizontalDivider(thickness = 0.75.dp, color = LineHair)
+                Text(
+                    "确定删除「$title」吗？\n删除后不可恢复。",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 20.sp
+                )
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+                    TextButton(onClick = onConfirm) {
+                        Text("删除", color = Red, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** 自绘紧凑对话框：标题 / 备注 / 计划日期，避免 M3 AlertDialog 的固定大 padding。 */
