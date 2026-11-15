@@ -10,8 +10,21 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,7 +63,6 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         return
     }
     var title by remember { mutableStateOf(note.title) }
-    var showStyleMenu by remember { mutableStateOf(false) }
     var showColorMenu by remember { mutableStateOf(false) }
     var showHighlightMenu by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
@@ -168,31 +180,38 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             }
         }
 
-        // 第二行：格式操作条（自底部上移，自动换行，全部按钮一屏可见）
+        // 第二行：格式操作条（自底部上移，自动换行）。
+        // 图标 chip 样式与 Mac 端 SelectionFormatBar 一致：浅灰圆角底、分隔线分组、
+        // 顺序 = 段落样式 → 引用/代码/列表 → B/I/U/S → 颜色 → 链接/图片/表格
         FlowRow(
             Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFFAFAFB))
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            FmtButton("T") { showStyleMenu = true }
-            FmtButton("B", bold = true) { exec("bold") }
-            FmtButton("I", italic = true) { exec("italic") }
-            FmtButton("U", underline = true) { exec("underline") }
-            FmtButton("S", strike = true) { exec("strikeThrough") }
+            FmtTextChip("正文") { exec("formatBlock", "p") }
+            FmtTextChip("H1") { exec("formatBlock", "h1") }
+            FmtTextChip("H2") { exec("formatBlock", "h2") }
+            FmtTextChip("H3") { exec("formatBlock", "h3") }
             FmtSep()
-            FmtButton("A", color = true) { showColorMenu = true }
-            FmtButton("背景") { showHighlightMenu = true }
+            FmtIconButton(Icons.Default.FormatQuote, "引用") { exec("formatBlock", "blockquote") }
+            FmtIconButton(Icons.Default.Code, "代码块") { exec("formatBlock", "pre") }
+            FmtIconButton(Icons.Default.FormatListBulleted, "无序列表") { exec("insertUnorderedList") }
+            FmtIconButton(Icons.Default.FormatListNumbered, "有序列表") { exec("insertOrderedList") }
             FmtSep()
-            FmtButton("•列表") { exec("insertUnorderedList") }
-            FmtButton("1.列表") { exec("insertOrderedList") }
-            FmtButton("引用") { exec("formatBlock", "blockquote") }
-            FmtButton("代码") { exec("formatBlock", "pre") }
+            FmtIconButton(Icons.Default.FormatBold, "加粗") { exec("bold") }
+            FmtIconButton(Icons.Default.FormatItalic, "斜体") { exec("italic") }
+            FmtIconButton(Icons.Default.FormatUnderlined, "下划线") { exec("underline") }
+            FmtIconButton(Icons.Default.FormatStrikethrough, "删除线") { exec("strikeThrough") }
             FmtSep()
-            FmtButton("链接") { showLinkDialog = true }
-            FmtButton("图片") { pickImage.launch("image/*") }
-            FmtButton("表格") { showTableDialog = true }
+            FmtIconButton(Icons.Default.FormatColorText, "文字颜色") { showColorMenu = true }
+            FmtIconButton(Icons.Default.FormatColorFill, "背景颜色") { showHighlightMenu = true }
+            FmtSep()
+            FmtIconButton(Icons.Default.Link, "插入链接") { showLinkDialog = true }
+            FmtIconButton(Icons.Default.Image, "插入图片") { pickImage.launch("image/*") }
+            FmtIconButton(Icons.Default.TableChart, "插入表格") { showTableDialog = true }
         }
         HorizontalDivider(color = LineSoft)
 
@@ -215,22 +234,6 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 }
             }
         )
-    }
-
-    // 样式菜单
-    if (showStyleMenu) {
-        OptionDialog("文本样式", onDismiss = { showStyleMenu = false }) {
-            listOf(
-                "正文" to "p",
-                "一级标题" to "h1",
-                "二级标题" to "h2",
-                "三级标题" to "h3",
-                "引用" to "blockquote",
-                "代码块" to "pre"
-            ).forEach { (label, tag) ->
-                OptionItem(label) { exec("formatBlock", tag); showStyleMenu = false }
-            }
-        }
     }
 
     // 文字颜色
@@ -364,22 +367,35 @@ private fun TablePicker(value: Int, onChange: (Int) -> Unit) {
     }
 }
 
+/** 图标 chip：样式对齐 Mac 端 SelectionFormatBar 的 actionIcon（浅灰圆角底 + 图标）。 */
 @Composable
-private fun FmtButton(label: String, bold: Boolean = false, italic: Boolean = false, underline: Boolean = false, strike: Boolean = false, color: Boolean = false, onClick: () -> Unit) {
-    Text(
-        label,
+private fun FmtIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
+    Box(
         Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .size(width = 30.dp, height = 26.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(Color(0xFFF4F4F6))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = desc, tint = TextSecondary, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** 文字 chip：对齐 Mac 端的 actionText（正文 / H1 / H2 / H3）。 */
+@Composable
+private fun FmtTextChip(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .height(26.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(Color(0xFFF4F4F6))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        color = if (color) Green else TextSecondary,
-        fontSize = 14.sp,
-        fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-        fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-        textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline
-        else if (strike) androidx.compose.ui.text.style.TextDecoration.LineThrough
-        else androidx.compose.ui.text.style.TextDecoration.None
-    )
+            .padding(horizontal = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+    }
 }
 
 @Composable
@@ -440,7 +456,7 @@ private fun buildEditorHtml(body: String): String {
         pre{background:#f5f5f7;padding:10px;border-radius:6px;font-family:monospace;white-space:pre-wrap;}
         img{max-width:100%;border-radius:6px;}
         table{border-collapse:collapse;margin:8px 0;width:100%;}
-        td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;vertical-align:top;}
+        td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;height:2.5em;vertical-align:top;}
         td[data-align="center"]{text-align:center}
         td[data-align="right"]{text-align:right}
         td[data-align="justify"]{text-align:justify}
