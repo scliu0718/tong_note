@@ -39,7 +39,7 @@ fun TrashScreen(onBack: () -> Unit) {
             Text("回收站", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
         // 标题栏分割线
-        HorizontalDivider(color = LineSoft)
+        TopBarDivider()
         if (trash.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("回收站是空的", color = TextQuaternary, fontSize = 13.sp)

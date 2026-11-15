@@ -63,7 +63,7 @@ fun DevicesScreen(onBack: () -> Unit) {
             }
         }
         // 标题栏分割线
-        HorizontalDivider(color = LineSoft)
+        TopBarDivider()
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

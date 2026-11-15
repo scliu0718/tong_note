@@ -157,7 +157,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             }
         }
         // 标题栏分割线
-        HorizontalDivider(color = LineSoft)
+        TopBarDivider()
 
         // 第一行：笔记本 + 标签（数量多时自动换行）
         FlowRow(
@@ -430,10 +430,10 @@ private fun EditorDialog(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
-                HorizontalDivider(color = LineSoft)
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), content = content)
                 if (confirmLabel != null && onConfirm != null) {
-                    HorizontalDivider(color = LineSoft)
+                    HorizontalDivider(thickness = 0.5.dp, color = LineHair)
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.End,

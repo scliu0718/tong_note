@@ -1,6 +1,7 @@
 package com.tong.log.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
@@ -8,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // 与 Mac 端 / 移动端设计稿一致的设计令牌（浅色）
@@ -27,6 +29,7 @@ val TextTertiary = Color(0xFF86868B)
 val TextQuaternary = Color(0xFFA1A1A6)
 val Line = Color(0xFFE0E0E4)
 val LineSoft = Color(0xFFECECEF)
+val LineHair = Color(0xFFF3F3F6)
 val Red = Color(0xFFE5484D)
 val RedTint = Color(0xFFFCEBEB)
 val Amber = Color(0xFFF5A623)
@@ -68,4 +71,10 @@ fun TongNoteTheme(content: @Composable () -> Unit) {
         typography = AppTypography,
         content = content
     )
+}
+
+/** 标题栏底部发丝线：比常规分割线更细（0.5dp）、更浅，仅用于各页面顶栏。 */
+@Composable
+fun TopBarDivider() {
+    HorizontalDivider(thickness = 0.5.dp, color = LineHair)
 }

@@ -124,7 +124,7 @@ fun NotesScreen(
             }
         }
         // 标题栏分割线
-        HorizontalDivider(color = LineSoft)
+        TopBarDivider()
 
         // 笔记本 chips
         Row(

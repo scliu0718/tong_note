@@ -39,7 +39,7 @@ fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
             Text("同步与存储", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
         // 标题栏分割线
-        HorizontalDivider(color = LineSoft)
+        TopBarDivider()
 
         Column(
             Modifier
