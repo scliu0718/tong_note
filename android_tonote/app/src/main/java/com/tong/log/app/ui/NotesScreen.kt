@@ -35,6 +35,8 @@ import com.tong.log.app.data.model.QUICK_SYNC_NOTE_ID
 import com.tong.log.app.data.store.AvatarStore
 import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.store.NotebookStore
+import com.tong.log.app.data.store.TodoStore
+import com.tong.log.app.data.store.isOverdue
 import com.tong.log.app.ui.theme.*
 import java.time.Instant
 import java.time.LocalDate
@@ -68,6 +70,9 @@ fun NotesScreen(
 ) {
     val notes by NoteStore.notes.collectAsState()
     val account by AuthState.account.collectAsState()
+    // 「快任务」卡片右上角逾期数量角标
+    val todos by TodoStore.todos.collectAsState()
+    val overdueCount = todos.count { !it.purged && it.isOverdue }
     // 左上角头像跟随「我的」里选中的头像（AvatarStore 是本地 prefs，与 Mac 端 preset id 同源）
     val avatarId by AvatarStore.currentId.collectAsState()
     val avatar = AvatarPresets.byId(avatarId)
@@ -217,7 +222,7 @@ fun NotesScreen(
                             modifier = Modifier.weight(1f),
                             icon = "✓", tint = Amber, bg = AmberTint,
                             title = "快任务", sub = "待完成 · 进行中",
-                            badge = null,
+                            badge = overdueCount,
                             onClick = onOpenTodo
                         )
                     }
@@ -242,26 +247,30 @@ fun NotesScreen(
 @Composable
 private fun QuickCard(
     modifier: Modifier = Modifier,
-    icon: String, tint: Color, bg: Color, title: String, sub: String, badge: String? = null,
+    icon: String, tint: Color, bg: Color, title: String, sub: String, badge: Int? = null,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White)
-            .clickable(onClick = onClick)
-            .padding(11.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier.size(34.dp).background(bg, RoundedCornerShape(9.dp)),
-            contentAlignment = Alignment.Center
-        ) { Text(icon, color = tint, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.width(9.dp))
-        Column {
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-            Text(sub, fontSize = 10.sp, color = TextQuaternary)
+    Box(modifier) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White)
+                .clickable(onClick = onClick)
+                .padding(11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(34.dp).background(bg, RoundedCornerShape(9.dp)),
+                contentAlignment = Alignment.Center
+            ) { Text(icon, color = tint, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.width(9.dp))
+            Column {
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(sub, fontSize = 10.sp, color = TextQuaternary)
+            }
         }
+        // 右上角逾期数量角标（badge 为 null 或 0 时不渲染）
+        OverdueCountBadge(badge ?: 0, Modifier.align(Alignment.TopEnd).padding(6.dp))
     }
 }
 

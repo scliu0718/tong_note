@@ -403,9 +403,20 @@ public sealed class ShellView : UserControl
         head.Children.Add(actions);
         Grid.SetColumn(actions, 1);
 
+        // 逾期任务：红框 + 淡红底，标识超过设置的完成时间
+        var headFrame = new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Padding = todo.IsOverdue ? new Thickness(8, 6) : new Thickness(0),
+            Background = todo.IsOverdue ? Palette.Brush(0xFCEBEB) : Brushes.Transparent,
+            BorderBrush = todo.IsOverdue ? Palette.Red : Brushes.Transparent,
+            BorderThickness = new Thickness(todo.IsOverdue ? 1 : 0),
+            Child = head,
+        };
+
         return new StackPanel
         {
-            Children = { head, detail },
+            Children = { headFrame, detail },
         };
     }
 
@@ -687,7 +698,7 @@ public sealed class ShellView : UserControl
             _tagFilter = null;
             Refresh();
         }, _session.Notes.TrashNotes.Count));
-        _sidebar.Children.Add(SideButton("快任务", _pane == Pane.Todos, ShowTodos, _session.Todos.PendingCount + _session.Todos.DoingCount));
+        _sidebar.Children.Add(SideButton("快任务", _pane == Pane.Todos, ShowTodos, _session.Todos.PendingCount + _session.Todos.DoingCount, _session.Todos.OverdueCount));
     }
 
     private Control NewNotebookBox()
@@ -732,7 +743,8 @@ public sealed class ShellView : UserControl
             "快任务",
             $"待完成 {_session.Todos.PendingCount} · 进行中 {_session.Todos.DoingCount}",
             _pane == Pane.Todos,
-            ShowTodos));
+            ShowTodos,
+            _session.Todos.OverdueCount));
     }
 
     private void RebuildSort()
@@ -1048,14 +1060,13 @@ public sealed class ShellView : UserControl
         return button;
     }
 
-    private Button SideButton(string text, bool selected, Action click, int? count = null)
+    private Button SideButton(string text, bool selected, Action click, int? count = null, int? badge = null)
     {
         var label = _sidebarWidth <= 52
             ? text[..1]
             : count == null ? text : $"{text}  {count}";
         var button = new Button
         {
-            Content = label,
             Background = selected ? Palette.AccentTint : Brushes.Transparent,
             Foreground = selected ? Palette.Accent : Palette.TextSecondary,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -1064,6 +1075,29 @@ public sealed class ShellView : UserControl
             Padding = new Thickness(8, 6),
             FontSize = 13,
         };
+        // 逾期角标：极窄档（仅图标）不显示，与计数一致
+        if (badge is > 0 && _sidebarWidth > 52)
+        {
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            var textBlock = new TextBlock
+            {
+                Text = label,
+                Foreground = selected ? Palette.Accent : Palette.TextSecondary,
+                FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            grid.Children.Add(textBlock);
+            var chip = Badge(badge.Value);
+            chip.Margin = new Thickness(6, 0, 0, 0);
+            chip.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(chip, 1);
+            grid.Children.Add(chip);
+            button.Content = grid;
+        }
+        else
+        {
+            button.Content = label;
+        }
         button.Click += (_, _) => click();
         return button;
     }
@@ -1099,23 +1133,37 @@ public sealed class ShellView : UserControl
         FontSize = 14,
     };
 
-    private static Control QuickCard(string title, string subtitle, bool selected, Action click)
+    private static Control QuickCard(string title, string subtitle, bool selected, Action click, int? badge = null)
     {
+        var text = new StackPanel
+        {
+            Spacing = 2,
+            Children =
+            {
+                new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, Foreground = Palette.TextPrimary },
+                new TextBlock { Text = subtitle, FontSize = 11, Foreground = Palette.TextTertiary },
+            },
+        };
+
+        Control content = text;
+        if (badge is > 0)
+        {
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            grid.Children.Add(text);
+            var chip = Badge(badge.Value);
+            chip.VerticalAlignment = VerticalAlignment.Top;
+            Grid.SetColumn(chip, 1);
+            grid.Children.Add(chip);
+            content = grid;
+        }
+
         var card = new Border
         {
             Background = selected ? Palette.CardSelected : Palette.WindowBg,
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(10, 8),
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = new StackPanel
-            {
-                Spacing = 2,
-                Children =
-                {
-                    new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, Foreground = Palette.TextPrimary },
-                    new TextBlock { Text = subtitle, FontSize = 11, Foreground = Palette.TextTertiary },
-                },
-            },
+            Child = content,
         };
         card.PointerPressed += (_, e) =>
         {
@@ -1123,5 +1171,29 @@ public sealed class ShellView : UserControl
             e.Handled = true;
         };
         return card;
+    }
+
+    /// <summary>红底白字的数量角标（逾期任务数）。</summary>
+    private static Border Badge(int count)
+    {
+        return new Border
+        {
+            Background = Palette.Red,
+            CornerRadius = new CornerRadius(9),
+            MinWidth = 18,
+            MinHeight = 18,
+            Padding = new Thickness(5, 1),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = count > 99 ? "99+" : count.ToString(),
+                Foreground = Palette.White,
+                FontSize = 10,
+                FontWeight = FontWeight.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
     }
 }

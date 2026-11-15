@@ -10,13 +10,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.time.LocalDate
+import java.time.ZoneId
 
 val Todo.isOverdue: Boolean
     get() {
         if (status == TodoStatus.DONE || status == TodoStatus.TERMINATED) return false
         val p = plannedAt ?: return false
         return try {
-            Iso8601.parse(p).let { it.isBefore(java.time.Instant.now()) }
+            // 与 Mac/Windows 统一：plannedAt 存的是当天零点，过了当天才算逾期。
+            // 原来比 Instant.now() 会把「今天到期」的任务零点后即判逾期，三端角标数字对不上。
+            Iso8601.parse(p).atZone(ZoneId.systemDefault()).toLocalDate().isBefore(LocalDate.now())
         } catch (e: Exception) {
             false
         }
@@ -25,6 +28,10 @@ val Todo.isOverdue: Boolean
 object TodoStore {
     private val _todos = MutableStateFlow<List<Todo>>(emptyList())
     val todos: StateFlow<List<Todo>> = _todos.asStateFlow()
+
+    /** 逾期数量：底栏「任务」角标与首页「快任务」角标共用；读之前需 collect todos 触发重组。 */
+    val overdueCount: Int
+        get() = _todos.value.count { !it.purged && it.isOverdue }
 
     val active: List<Todo>
         get() = _todos.value.asSequence()

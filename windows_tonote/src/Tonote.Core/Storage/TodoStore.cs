@@ -22,6 +22,7 @@ public sealed class TodoStore
 
     public int PendingCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.todo);
     public int DoingCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.doing);
+    public int OverdueCount => Todos.Count(todo => !todo.Purged && todo.IsOverdue);
 
     public IReadOnlyList<Todo> InStatus(TodoStatus status) => Todos
         .Where(todo => !todo.Purged && todo.Status == status)

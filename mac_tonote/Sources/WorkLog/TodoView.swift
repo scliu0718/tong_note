@@ -307,7 +307,11 @@ struct TodoView: View {
             }
             // 左内边距 26 + checkbox 内圆圈偏移 2.5 ≈ 29，正好对齐分类标题「待完成」的「待」字
             .padding(.leading, 26).padding(.trailing, 8).padding(.vertical, 9)
-            .background(hoveredID == todo.id ? Color(hex: 0xF7FAF8) : Color.clear)
+            .background(rowBackground(todo))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(todo.isOverdue ? Theme.red : Color.clear, lineWidth: 1)
+            )
             .contentShape(Rectangle())
             .onHover { inside in
                 if inside { hoveredID = todo.id }
@@ -329,6 +333,12 @@ struct TodoView: View {
         case .done, .terminated: return Theme.textQuaternary
         default: return Theme.textPrimary
         }
+    }
+
+    /// 任务行底色：逾期用淡红底（配合红框），悬停用淡绿，其余透明。
+    private func rowBackground(_ todo: Todo) -> Color {
+        if todo.isOverdue { return Color(hex: 0xFCEBEB) }
+        return hoveredID == todo.id ? Color(hex: 0xF7FAF8) : Color.clear
     }
 
     private func toggleExpand(_ id: UUID) {

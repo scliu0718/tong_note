@@ -369,6 +369,14 @@ struct TodoEntryCard: View {
                     .background(Theme.accent)
                     .clipShape(Circle())
             }
+            if todos.overdueCount > 0 {
+                Text("\(todos.overdueCount)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .background(Theme.red)
+                    .clipShape(Circle())
+            }
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Theme.textQuaternary)

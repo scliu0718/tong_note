@@ -41,6 +41,8 @@ import com.tong.log.app.data.model.QUICK_SYNC_NOTE_ID
 import com.tong.log.app.data.net.BaiduPanConfig
 import com.tong.log.app.data.store.AvatarStore
 import com.tong.log.app.data.store.NoteStore
+import com.tong.log.app.data.store.TodoStore
+import com.tong.log.app.data.store.isOverdue
 import com.tong.log.app.data.sync.SyncEngine
 import com.tong.log.app.ui.*
 import com.tong.log.app.ui.theme.*
@@ -151,6 +153,9 @@ private fun MainScaffold(navController: NavController) {
     var tab by remember { mutableStateOf(0) }
     var showAvatar by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // 底栏「任务」角标：逾期任务数；collect todos 触发重组，否则 overdueCount 不刷新
+    val todos by TodoStore.todos.collectAsState()
+    val overdueCount = todos.count { !it.purged && it.isOverdue }
 
     // 键盘弹起时隐藏底栏：否则 Scaffold 仍会给 content 留出底栏高度，
     // 与页面自身的 imePadding 叠加，输入框被顶得过高且底栏挡在键盘上方。
@@ -193,13 +198,22 @@ private fun MainScaffold(navController: NavController) {
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                // 不要图标外的方框，线框图标直接放大显示
-                                Icon(
-                                    item.icon,
-                                    contentDescription = item.label,
-                                    tint = line,
-                                    modifier = Modifier.size(28.dp)
-                                )
+                                Box {
+                                    // 不要图标外的方框，线框图标直接放大显示
+                                    Icon(
+                                        item.icon,
+                                        contentDescription = item.label,
+                                        tint = line,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    // 「任务」tab 右上角逾期数量角标
+                                    if (index == 1) {
+                                        OverdueCountBadge(
+                                            overdueCount,
+                                            Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-5).dp)
+                                        )
+                                    }
+                                }
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     item.label,

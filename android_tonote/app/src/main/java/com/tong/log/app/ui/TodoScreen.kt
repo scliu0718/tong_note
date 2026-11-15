@@ -263,9 +263,10 @@ private fun LazyListScope.todoGroup(
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(11.dp))
-                .background(Color.White)
+                .background(if (t.isOverdue) RedTint else Color.White)
+                .then(if (t.isOverdue) Modifier.border(1.5.dp, Red, RoundedCornerShape(11.dp)) else Modifier)
                 .clickable { onEdit(t) }
-                .padding(horizontal = 12.dp, vertical = 11.dp),
+                .padding(start = 12.dp, top = 11.dp, end = 9.dp, bottom = 11.dp),
             verticalAlignment = Alignment.Top
         ) {
             // 状态圈用各组颜色区分：待完成=红空心、进行中=琥珀空心、已完成=绿实心带勾、已终止=灰实心
