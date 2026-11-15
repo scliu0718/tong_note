@@ -32,6 +32,7 @@ import com.tong.log.app.data.store.AttachmentStore
 import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.sync.SyncEngine
 import com.tong.log.app.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -58,6 +59,17 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     var showTitleDialog by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val scope = rememberCoroutineScope()
+
+    // 键盘开合会把 WebView 压小，Chromium 不会主动把光标滚进新的可视区，
+    // 正文脚本里的 resize 兜底偶发不触发，所以再从原生侧按 IME 高度变化补两次校正。
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    LaunchedEffect(imeBottom) {
+        val wv = webView ?: return@LaunchedEffect
+        delay(180)
+        wv.evaluateJavascript("window.__caretIntoView && window.__caretIntoView();", null)
+        delay(220)
+        wv.evaluateJavascript("window.__caretIntoView && window.__caretIntoView();", null)
+    }
 
     /**
      * 取回 WebView 正文。命令与取 HTML 放进同一次 evaluateJavascript，
@@ -432,6 +444,57 @@ private fun buildEditorHtml(body: String): String {
         td[data-align="center"]{text-align:center}
         td[data-align="right"]{text-align:right}
         td[data-align="justify"]{text-align:justify}
+        /* 键盘弹起时（.kb）给正文尾部留出空间，否则最后几行滚不到键盘上方 */
+        body.kb{padding-bottom:45vh}
     """.trimIndent()
-    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1\"><style>$css</style></head><body contenteditable=\"true\">${body}</body></html>"
+    // 光标跟随脚本。必须放 <head>：保存正文取的是 document.body.innerHTML，
+    // 脚本若混在 body 里会被当成正文持久化，还会同步到 Mac / Windows 端。
+    val caretJs = """
+        (function(){
+          var MARGIN = 72;      // 光标与可视区底部保持的距离
+          var pending = false;
+          function caretRect(){
+            var sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return null;
+            var range = sel.getRangeAt(0);
+            var rects = range.getClientRects();
+            if (rects && rects.length) return rects[rects.length - 1];
+            var r = range.getBoundingClientRect();
+            return (r && (r.height || r.width || r.top)) ? r : null;
+          }
+          function ensureCaretVisible(){
+            pending = false;
+            var r = caretRect();
+            if (!r) return;
+            var vh = window.innerHeight || document.documentElement.clientHeight;
+            if (r.bottom > vh - MARGIN) window.scrollBy(0, r.bottom - (vh - MARGIN));
+            else if (r.top < 12) window.scrollBy(0, r.top - 12);
+          }
+          window.__caretIntoView = ensureCaretVisible;
+          function schedule(){
+            if (pending) return;
+            pending = true;
+            setTimeout(ensureCaretVisible, 40);
+          }
+          document.addEventListener('selectionchange', schedule);
+          document.addEventListener('input', schedule);
+          document.addEventListener('keyup', schedule);
+          document.addEventListener('focusin', schedule);
+          document.addEventListener('click', schedule);
+          // WebView 被键盘压小后 Chromium 不会自己把光标滚进来，靠 resize 兜一次；
+          // 同时按高度突变判断键盘开合，切换尾部留白
+          var lastH = window.innerHeight;
+          window.addEventListener('resize', function(){
+            var h = window.innerHeight;
+            if (document.body){
+              if (h < lastH - 60) document.body.classList.add('kb');
+              else if (h > lastH + 60) document.body.classList.remove('kb');
+            }
+            lastH = h;
+            setTimeout(ensureCaretVisible, 120);
+            setTimeout(ensureCaretVisible, 320);
+          });
+        })();
+    """.trimIndent()
+    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1\"><style>$css</style><script>$caretJs</script></head><body contenteditable=\"true\">${body}</body></html>"
 }
