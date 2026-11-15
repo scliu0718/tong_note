@@ -19,6 +19,22 @@ public static class GroupG
         File.Copy(Paths.SourceToken,
             Path.Combine(guiRoot, "baidupan-token.json"), overwrite: true);
 
+        // 空数据目录现在不再自带 NoteSamples 演示笔记（正式版应从真实网盘拉数据）。
+        // 这里显式放一篇测试笔记：否则全新沙箱里没有选中笔记，WebView2 编辑器
+        // 不会初始化（G04），首轮同步也没有笔记可推（G05）。
+        var seedNote = new Note
+        {
+            Id = Guid.NewGuid(),
+            Title = "G 组真实网盘同步验证",
+            Body = "由 G 组在启动 GUI 前写入，用于验证首轮同步把笔记推到真实网盘。",
+            Notebook = "工作日志",
+            ContentFormat = NoteContentFormat.markdown,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        File.WriteAllText(Path.Combine(guiRoot, "notes.json"),
+            TonoteJson.Serialize(new List<Note> { seedNote }));
+
         // 只清理本输出目录留下的旧实例，避免单实例回调把新进程吞掉
         foreach (var process in Process.GetProcessesByName("Tonote"))
         {

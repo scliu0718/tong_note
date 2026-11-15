@@ -2,6 +2,11 @@ using System.Text;
 using Tonote.Core;
 using Tonote.LiveTests;
 
+// 生产只读验收必须早于任何环境变量覆盖：本模式刻意不设 TONOTE_REMOTE_ROOT，
+// 直接读 /apps/tong_log，且不写云端任何文件。
+if (args.Contains("--prod", StringComparer.OrdinalIgnoreCase))
+    return await ProdCheck.RunAsync();
+
 // ── 安全护栏 ──────────────────────────────────────────────────────────────
 // 全部真实网盘写操作只允许落在 /apps/tong_log/__selftest__/ 下。
 // 环境变量必须在 BaiduPanConfig 静态构造之前设置。

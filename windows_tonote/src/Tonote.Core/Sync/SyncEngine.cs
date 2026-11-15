@@ -213,7 +213,9 @@ public sealed class SyncEngine : IDisposable
                     SaveLastSync(now);
                     SetStatus(SyncStatus.Succeeded(
                         onlyNoteId == null
-                            ? $"笔记 {noteCount} 篇 · 任务 {todoCount} 条"
+                            ? noteCount == 0 && todoCount == 0
+                                ? "笔记 0 篇 · 任务 0 条（无变更，已与网盘一致）"
+                                : $"笔记 {noteCount} 篇 · 任务 {todoCount} 条变更"
                             : "已同步本篇", now));
                 }
                 catch (DeviceKickedException error)

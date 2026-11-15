@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同笔记 Windows 端 · 生产网盘数据打通验证</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --line:#e8eaee; --line-soft:#f1f2f5;
+    --text:#1d1d1f; --text2:#48484a; --text3:#86868b;
+    --green:#1a9e5c; --green-bg:#e6f4ec; --blue:#06a7ff; --blue-bg:#e8f5ff;
+    --amber:#b26a00; --amber-bg:#fff4e0; --red:#c0392b; --red-bg:#fdecea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:36px 28px 72px}
+  header{margin-bottom:26px}
+  .eyebrow{color:var(--text3);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:26px;line-height:1.35;margin:8px 0 10px;font-weight:700}
+  .sub{color:var(--text2);font-size:13px}
+  .hero{display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;margin:22px 0 30px}
+  .hero .main{flex:1 1 260px;background:var(--green-bg);border:1px solid #cbe9d8;
+    border-radius:14px;padding:20px 22px}
+  .hero .main .big{font-size:34px;font-weight:750;color:var(--green);line-height:1.2}
+  .hero .main .cap{color:var(--text2);font-size:13px;margin-top:4px}
+  .hero .side{flex:1 1 200px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:18px 20px}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
+    border-bottom:1px dashed var(--line-soft);font-size:13px}
+  .kv:last-child{border-bottom:0}
+  .kv span:first-child{color:var(--text3)}
+  .kv span:last-child{font-weight:600;text-align:right}
+  h2{font-size:18px;margin:34px 0 14px;padding-left:11px;border-left:3px solid var(--green)}
+  h3{font-size:15px;margin:22px 0 10px}
+  p{margin:8px 0 12px;color:var(--text2)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin-bottom:14px}
+  ul{margin:8px 0 0;padding-left:20px;color:var(--text2)}
+  li{margin:5px 0}
+  table{width:100%;border-collapse:collapse;background:var(--card);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+  th,td{padding:11px 13px;text-align:left;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{background:#fafbfc;color:var(--text3);font-weight:600;white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .ok{color:var(--green);font-weight:700;white-space:nowrap}
+  .bad{color:var(--red);font-weight:700;white-space:nowrap}
+  .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .tag.fix{background:var(--red-bg);color:var(--red)}
+  .tag.test{background:var(--amber-bg);color:var(--amber)}
+  .tag.info{background:var(--blue-bg);color:var(--blue)}
+  code{background:#f3f4f6;border:1px solid var(--line);border-radius:5px;
+    padding:1px 6px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+    font-size:12.5px;color:#2c2c30}
+  pre{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow-x:auto;margin:10px 0;font-size:12.5px;
+    font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;color:#2c2c30;line-height:1.65}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .metric .n{font-size:26px;font-weight:750;color:var(--text);line-height:1.25}
+  .metric .n.g{color:var(--green)}
+  .metric .l{font-size:12px;color:var(--text3);margin-top:4px}
+  .note{background:var(--amber-bg);border:1px solid #f0dcb4;border-radius:10px;
+    padding:13px 16px;color:#7a4a00;font-size:13px;margin:12px 0}
+  .foot{margin-top:36px;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--text3);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">TONOTE · WINDOWS · PRODUCTION DATA</div>
+  <h1>生产网盘数据打通验证</h1>
+  <div class="sub">2026-11-16 · 真实百度网盘 <code>/apps/tong_log</code> · 正式数据根 <code>%LOCALAPPDATA%\tonote</code></div>
+</header>
+
+<div class="hero">
+  <div class="main">
+    <div class="big">已打通</div>
+    <div class="cap">正式版连的就是生产网盘；重启最新构建后同步轮次真实完成，本地数据已补齐到与云端一致。</div>
+  </div>
+  <div class="side">
+    <div class="kv"><span>远端根</span><span>/apps/tong_log</span></div>
+    <div class="kv"><span>沙箱变量</span><span>未设置</span></div>
+    <div class="kv"><span>登录令牌</span><span>有效</span></div>
+    <div class="kv"><span>生产目录写入</span><span>仅正常同步</span></div>
+  </div>
+</div>
+
+<div class="cols">
+  <div class="metric"><div class="n g">32 / 32</div><div class="l">云端笔记 / 本地笔记，ID 一一对应</div></div>
+  <div class="metric"><div class="n g">8 / 8</div><div class="l">云端待办 / 同步后本地待办（原 5 条）</div></div>
+  <div class="metric"><div class="n g">9 / 9 × 3</div><div class="l">生产目录只读验收 H 组，连跑三轮</div></div>
+  <div class="metric"><div class="n">0 / 0</div><div class="l">编译警告 / 错误</div></div>
+</div>
+
+<h2>一、先说诊断结论</h2>
+<p>用户反馈「Windows 版本中数据没通，需要使用真实百度网盘的数据」。逐项核对后，<strong>正式版本来就指向生产目录</strong>，之前的 89 项功能测试才是隔离在 <code>__selftest__</code> 沙箱里。数据层面的实际状况如下：</p>
+<table>
+  <tr><th>检查项</th><th>结果</th><th>说明</th></tr>
+  <tr><td>正式进程远端根</td><td class="ok">/apps/tong_log</td><td>用户级 / 系统级环境变量里均无 <code>TONOTE_REMOTE_ROOT</code>、<code>TONOTE_DATA_ROOT</code></td></tr>
+  <tr><td>生产 <code>notes/</code></td><td class="num">32 篇</td><td>本地 <code>notes.json</code> 也是 32 篇，ID 集合完全一致，逐篇标题比对一致</td></tr>
+  <tr><td>生产 <code>todos/</code></td><td class="num">8 篇</td><td>重启同步前本地只有 5 条 —— 这是「没通」的直接证据</td></tr>
+  <tr><td>Mac 旧 <code>manifest.json</code></td><td class="ok">全覆盖</td><td>edydeMacBook-Pro 于 11-10 写入的 23 篇笔记 + 5 条待办，本地缺失 0</td></tr>
+  <tr><td>登录令牌</td><td class="ok">有效</td><td><code>%LOCALAPPDATA%\tonote\baidupan-token.json</code>，未过期</td></tr>
+  <tr><td>当时运行的 GUI</td><td class="bad">旧构建</td><td>11-15 14:30 启动（UI 线程死锁修复之前），最后一次同步停在 14:33，之后约 10 小时无变化</td></tr>
+</table>
+
+<div class="note">
+<strong>为什么看起来「没通」：</strong>旧进程内存里跑的是修复前的代码，首轮同步会卡住；它不会自动加载新编译的 DLL。所以云端新增的 3 条待办一直没下来，而状态栏又显示「笔记 0 篇 · 任务 0 条」——这个 0 其实是<strong>本轮变更数</strong>，不是数据总量。
+</div>
+
+<h2>二、发现并修掉的三个问题</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>处理</th><th>文件</th></tr>
+  <tr><td class="num">1</td><td>空数据目录首次启动会灌入 7 篇 <code>NoteSamples</code> 演示笔记，登录后被当成「本地新增」推上云端，和真实笔记混在一起</td><td>改为保持空列表，由同步引擎从真实网盘拉取；示例数据仅在显式调用时写入</td><td><code>Storage/NoteStore.cs</code></td></tr>
+  <tr><td class="num">2</td><td>同步成功文案「笔记 0 篇 · 任务 0 条」容易被读成「没有数据」；非 0 时也没说明是变更数</td><td>0 时补「无变更，已与网盘一致」，非 0 时标「条变更」</td><td><code>Sync/SyncEngine.cs</code></td></tr>
+  <tr><td class="num">3</td><td><span class="tag fix">实连新缺陷</span> 直链下载偶发 <code>HttpRequestException</code>（每轮命中的文件还不一样），单篇失败会让整轮同步漏数据</td><td>下载失败时重取一次直链再试，与既有 404/31066 分支共用重试上限；用户取消不重试</td><td><code>Baidu/BaiduPanClient.cs</code></td></tr>
+</table>
+<p>第 3 项是新增的生产只读验收跑出来的：首轮 H04 挂了一篇笔记、次轮 H07 挂了一条待办，两次失败文件不同，据此判定为直链网络瞬态而非坏数据。修复后连跑三轮均全绿。</p>
+
+<h2>三、真实同步验证（正式 GUI）</h2>
+<p>备份正式数据根 → 结束旧进程 → 用<strong>最新构建</strong>且不设任何沙箱变量重启 <code>Tonote.exe</code>，观察 <code>sync-status.json</code>：</p>
+<pre>重启前 : {"kind":"Success","message":"笔记 0 篇 · 任务 0 条","date":"2026-11-15T06:33:40Z"}
+启动后 : {"kind":"Syncing", ...}
+完成后 : {"kind":"Success","message":"笔记 1 篇 · 任务 7 条变更","date":"2026-11-15T16:46:32Z"}
+
+本地待办 : 5 条 → 8 条（与云端 todos/ 的 8 个文件一致）
+本地笔记 : 32 篇（不变），同步游标 note-sync 32 / todo-sync 8</pre>
+<p>同步轮次真实跑完，云端较新的待办被补齐，没有出现旧版那种卡在 <code>Syncing</code> 的情况。</p>
+
+<h2>四、生产目录只读验收（H 组）</h2>
+<p>新增 <code>tests/Tonote.LiveTests/ProdCheck.cs</code> 与 <code>--prod</code> 入口。该分支<strong>刻意不设</strong> <code>TONOTE_REMOTE_ROOT</code>，直接读 <code>/apps/tong_log</code>；只调用列目录与下载接口，不启动同步引擎、不写任何云端文件。</p>
+<table>
+  <tr><th>用例</th><th>校验内容</th><th>结果</th></tr>
+  <tr><td>H01</td><td>正式进程远端根是生产目录而不是测试沙箱</td><td class="ok">PASS</td></tr>
+  <tr><td>H02</td><td>正式数据根存在有效登录令牌</td><td class="ok">PASS</td></tr>
+  <tr><td>H03 / H04</td><td>生产 32 篇笔记全部可被 Windows 端解析</td><td class="ok">PASS 32/32</td></tr>
+  <tr><td>H05</td><td>本地与云端笔记 ID 一一对应</td><td class="ok">PASS 32=32</td></tr>
+  <tr><td>H06</td><td>真实笔记 encode→decode 幂等，跨端契约不丢字段</td><td class="ok">PASS</td></tr>
+  <tr><td>H07</td><td>生产 8 条待办全部可解析且本地一致</td><td class="ok">PASS 8/8</td></tr>
+  <tr><td>H08</td><td>Mac 旧清单 23 篇笔记 + 5 条待办全部已落到 Windows</td><td class="ok">PASS 缺失 0</td></tr>
+  <tr><td>H09</td><td>新构建空数据目录不再灌演示笔记（仅保留「快同步」）</td><td class="ok">PASS</td></tr>
+  <tr><td colspan="2"><strong>修复后连跑三轮</strong></td><td class="ok">9/9 × 3，exit 0</td></tr>
+</table>
+
+<h2>附：A→G 全量回归（改动后复验）</h2>
+<p>三处源码改动加新增 H 组之后，用<strong>仓库里的同一份测试套件</strong>重跑 A→G 全部 89 项，确认没有回归：</p>
+<table>
+  <tr><th>分组</th><th>结果</th></tr>
+  <tr><td>A 认证与账号</td><td class="ok">8/8</td></tr>
+  <tr><td>B 网盘原语</td><td class="ok">14/14</td></tr>
+  <tr><td>C 同步引擎</td><td class="ok">24/24</td></tr>
+  <tr><td>D 设备会话与头像</td><td class="ok">14/14</td></tr>
+  <tr><td>E 跨端协议（Mac 生产数据）</td><td class="ok">13/13</td></tr>
+  <tr><td>F UI 层</td><td class="ok">9/9</td></tr>
+  <tr><td>G 真实 GUI 端到端</td><td class="ok">7/7</td></tr>
+  <tr><td><strong>合计</strong></td><td class="ok">89/89 · 失败 0 · EXIT_CODE=0</td></tr>
+</table>
+<p>中途出现过一次 <strong>87/89</strong>：去掉演示笔记种子后，全新空沙箱里一篇笔记都没有，UI 不会初始化 WebView2 编辑器（G04），首轮同步也没有笔记可推（G05）。这是 G 组原先靠内置演示笔记撑场景造成的<strong>测试假设问题</strong>，不是产品缺陷；已在 <code>GroupG.cs</code> 里于启动 GUI 前显式写入一篇测试笔记，单跑 G 组 7/7（G05 从 244s 卡住变为 13.9s 完成），全量复验 89/89。</p>
+
+<h2>五、安全边界与未动的数据</h2>
+<ul>
+  <li>生产目录在 H 组全程<strong>只读</strong>；A–G 的云端写操作仍强制限制在 <code>/apps/tong_log/__selftest__/&lt;runId&gt;/</code> 并在结束时自动清理。</li>
+  <li><strong>没有删除任何云端或本地笔记/待办</strong>。云端里历史遗留的演示笔记（如「长江材料 复盘 · 10月22日」「第四季度工作 OKR 草稿」等标题）仍在，未擅自清理 —— 如需清掉，请先确认具体条目。</li>
+  <li>重启前已完整备份正式数据根到 <code>D:\dev\_dl\tonote_local_backup_20261116_0035</code>（336 个文件，含全部 json 与令牌）。</li>
+  <li>令牌只做只读使用，未进入 git 待提交清单；<code>.test-data/</code> 已被 gitignore。</li>
+  <li>踩坑记录：<strong>编译前必须先关掉 Tonote.exe</strong>，否则 <code>Tonote.Core.dll</code> 被占用导致 MSBuild 复制失败。</li>
+</ul>
+
+<h2>六、复跑命令</h2>
+<pre>cd D:/work/tong_note/windows_tonote
+# 生产目录只读验收（零云端写入）
+"D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- --prod
+# A→G 真实网盘功能回归（隔离沙箱）
+"D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- A B C D E F G</pre>
+<p>运行前需按 README 导出 <code>APPDATA / ProgramData / DOTNET_ROOT / NUGET_PACKAGES</code> 等环境变量，并确保 <code>baidupan.secret.json</code> 在 <code>windows_tonote/</code>、本机已完成一次网盘授权。</p>
+
+<h2>七、仍未迁的边界</h2>
+<p>表格列宽拖拽、任务备注图片选择器、Markdown 批量导入导出、全局快捷键、使用说明内嵌页 —— 与上一版报告一致，本轮未涉及。</p>
+
+<div class="foot">同笔记 Windows 端 · 生产网盘数据打通验证 · 2026-11-16 · 本报告为自包含静态 HTML，所有数据来自本机真实百度网盘接口与本地文件核对。</div>
+</div>
+</body>
+</html>

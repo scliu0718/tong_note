@@ -13,11 +13,10 @@ public sealed class NoteStore
         _cursors = new SyncCursorStore(Path.Combine(directory, "note-sync.json"));
         Attachments = new AttachmentStore(directory);
         Load();
-        if (Notes.Count == 0)
-        {
-            Notes = NoteSamples.Create();
-            Save();
-        }
+        // 本地还没有笔记时保持空列表，由同步引擎从真实百度网盘拉取。
+        // 早期版本会在这里灌入 NoteSamples 的示例笔记，结果首次启动看到的是
+        // 演示数据、登录后又被当成「本地新增」推上云端，和真实网盘数据混在一起。
+        // 示例数据仍保留在 NoteSamples 中，仅在明确需要时由调用方显式写入。
 
         EnsureQuickSync();
     }

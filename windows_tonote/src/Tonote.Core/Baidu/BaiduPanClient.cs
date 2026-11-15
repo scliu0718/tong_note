@@ -336,7 +336,25 @@ public sealed class BaiduPanClient
             }
             throw new BaiduPanNotFoundException(remotePath);
         }
+        catch (Exception ex) when (attempt == 0
+                                   && !cancellationToken.IsCancellationRequested
+                                   && IsTransientDownload(ex))
+        {
+            // 真实网盘直链偶发连接重置 / 超时（每次命中的文件还不一样）。
+            // 单篇下载失败会让整轮同步记失败或漏数据，所以重取一次直链再试；
+            // 与上面 404 分支共用 attempt 上限，不会形成无限重试。
+            await Task.Delay(400, cancellationToken).ConfigureAwait(false);
+            return await DownloadDataAsync(remotePath, accessToken, 1, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
+
+    private static bool IsTransientDownload(Exception ex)
+        => ex is HttpRequestException or TaskCanceledException or TimeoutException
+           || (ex is BaiduPanException and not BaiduPanNotFoundException
+               && (ex.Message.Contains("502", StringComparison.Ordinal)
+                   || ex.Message.Contains("503", StringComparison.Ordinal)
+                   || ex.Message.Contains("504", StringComparison.Ordinal)));
 
     private static bool IsRemoteFileGone(BaiduPanException ex)
         => ex is not BaiduPanNotFoundException

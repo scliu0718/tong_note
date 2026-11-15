@@ -29,7 +29,8 @@
 
 本地数据在 `%LOCALAPPDATA%\tonote`（可用环境变量 `TONOTE_DATA_ROOT` 覆盖，便于测试）。
 `notes.json` / `todos.json` / `notebooks.json` 与 Mac 端字段一致；同步游标在 `note-sync.json` / `todo-sync.json`。
-同步状态额外写一份 `sync-status.json`（kind / message / date），便于重启后诊断上一轮同步。
+同步状态额外写一份 `sync-status.json`（kind / message / date），便于重启后诊断上一轮同步；状态里的「笔记 N 篇 · 任务 M 条」是**本轮变更数**，0 表示已与网盘一致，不是没有数据。
+本地数据为空时不再灌入演示笔记，登录后由同步引擎直接从真实网盘拉取；`NoteSamples` 只在显式调用时使用，避免首次启动把示例数据当成「本地新增」推上云端。
 `TONOTE_REMOTE_ROOT` 只允许把远端根改成 `/apps/tong_log/__selftest__/…` 隔离子目录，供功能测试使用。
 
 ## 还没迁 / 已知边界
@@ -41,7 +42,7 @@
 
 ## 真实网盘功能测试
 
-`tests/Tonote.LiveTests/` 是连**真实百度网盘**的分组功能测试，覆盖认证与配额、上传/下载/列举/删除原语、按篇同步引擎、设备与头像、Mac 生产数据跨端解码、UI 层、真实 GUI 进程端到端，共 A–G 七组。
+`tests/Tonote.LiveTests/` 是连**真实百度网盘**的分组功能测试，覆盖认证与配额、上传/下载/列举/删除原语、按篇同步引擎、设备与头像、Mac 生产数据跨端解码、UI 层、真实 GUI 进程端到端（A–G 七组），另有一组**生产目录只读验收**（`--prod`，H 组）。
 
 前置条件：`baidupan.secret.json` 放在 `windows_tonote/`（不入库），且本机已完成一次账号授权（`%LOCALAPPDATA%\tonote\baidupan-token.json`）。测试只读真实令牌，不会改它。
 
@@ -51,9 +52,12 @@
 # 加 --keep 可保留本次远端沙箱目录，便于排查
 # 清理由异常中断残留的历史沙箱（仅在无其它测试实例运行时单独执行）：
 "D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- --clean-orphans
+# 生产目录只读验收：不设 TONOTE_REMOTE_ROOT，直接读 /apps/tong_log，零云端写入：
+"D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- --prod
 ```
 
-安全护栏：所有云端写操作被强制限制在 `/apps/tong_log/__selftest__/<runId>/`，本地数据写到 `windows_tonote/.test-data/`（已 gitignore）；程序启动时会校验远端根确实落在沙箱内，否则拒绝执行；正常结束会自动删除本次云端沙箱。生产目录只读，不会被写入。可用 `TONOTE_TEST_ROOT` 改本地测试目录。
+安全护栏：普通分组的所有云端写操作被强制限制在 `/apps/tong_log/__selftest__/<runId>/`，本地数据写到 `windows_tonote/.test-data/`（已 gitignore）；程序启动时会校验远端根确实落在沙箱内，否则拒绝执行；正常结束会自动删除本次云端沙箱。可用 `TONOTE_TEST_ROOT` 改本地测试目录。
+`--prod` 是独立分支，刻意不设沙箱变量，只调用列目录/下载接口核对正式数据根与生产网盘是否一致，**不启动同步引擎、不写任何云端文件**，因此不会污染生产笔记。
 
 ## 编译
 
