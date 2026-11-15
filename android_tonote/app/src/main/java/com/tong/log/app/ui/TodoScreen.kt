@@ -54,6 +54,8 @@ fun TodoScreen(onSync: () -> Unit) {
                 Icon(Icons.Default.Refresh, contentDescription = "同步", tint = TextPrimary)
             }
         }
+        // 标题栏分割线
+        HorizontalDivider(color = LineSoft)
         Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "待完成 ${todo.size} · 进行中 ${doing.size} · 已完成 ${done.size}" +

@@ -62,6 +62,8 @@ fun DevicesScreen(onBack: () -> Unit) {
                 Icon(Icons.Default.Refresh, contentDescription = "刷新", tint = TextPrimary)
             }
         }
+        // 标题栏分割线
+        HorizontalDivider(color = LineSoft)
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -105,7 +107,7 @@ fun DevicesScreen(onBack: () -> Unit) {
     confirmKick?.let { d ->
         AlertDialog(
             onDismissRequest = { confirmKick = null },
-            title = { Text("让这台设备下线？") },
+            title = { Text("让这台设备下线？", fontWeight = FontWeight.Bold) },
             text = { Text("「${d.deviceName}」下次打开或同步时会退出登录。已经写在那台设备上、还没同步的笔记会留在本地。") },
             confirmButton = {
                 TextButton(onClick = {

@@ -38,6 +38,8 @@ fun TrashScreen(onBack: () -> Unit) {
             }
             Text("回收站", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
+        // 标题栏分割线
+        HorizontalDivider(color = LineSoft)
         if (trash.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("回收站是空的", color = TextQuaternary, fontSize = 13.sp)
@@ -74,7 +76,7 @@ fun TrashScreen(onBack: () -> Unit) {
     confirmDelete?.let { note ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text("彻底删除笔记？") },
+            title = { Text("彻底删除笔记？", fontWeight = FontWeight.Bold) },
             text = { Text("此操作不可恢复，笔记将被永久移除。") },
             confirmButton = {
                 TextButton(onClick = {

@@ -123,6 +123,8 @@ fun NotesScreen(
                 Icon(Icons.Default.Search, contentDescription = "搜索", tint = TextPrimary)
             }
         }
+        // 标题栏分割线
+        HorizontalDivider(color = LineSoft)
 
         // 笔记本 chips
         Row(

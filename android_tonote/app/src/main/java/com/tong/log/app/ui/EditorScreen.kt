@@ -19,7 +19,7 @@ import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.StrikethroughS
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import com.tong.log.app.data.codec.MarkdownConverter
 import com.tong.log.app.data.codec.RichTextTableCodec
 import com.tong.log.app.data.model.Note
@@ -155,6 +156,8 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 Icon(Icons.Default.MoreVert, contentDescription = "更多", tint = TextPrimary)
             }
         }
+        // 标题栏分割线
+        HorizontalDivider(color = LineSoft)
 
         // 第一行：笔记本 + 标签（数量多时自动换行）
         FlowRow(
@@ -204,7 +207,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             FmtIconButton(Icons.Default.FormatBold, "加粗") { exec("bold") }
             FmtIconButton(Icons.Default.FormatItalic, "斜体") { exec("italic") }
             FmtIconButton(Icons.Default.FormatUnderlined, "下划线") { exec("underline") }
-            FmtIconButton(Icons.Default.FormatStrikethrough, "删除线") { exec("strikeThrough") }
+            FmtIconButton(Icons.Default.StrikethroughS, "删除线") { exec("strikeThrough") }
             FmtSep()
             FmtIconButton(Icons.Default.FormatColorText, "文字颜色") { showColorMenu = true }
             FmtIconButton(Icons.Default.FormatColorFill, "背景颜色") { showHighlightMenu = true }
@@ -257,78 +260,67 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     // 链接
     if (showLinkDialog) {
         var url by remember { mutableStateOf("https://") }
-        AlertDialog(
-            onDismissRequest = { showLinkDialog = false },
-            title = { Text("插入链接") },
-            text = {
-                OutlinedTextField(value = url, onValueChange = { url = it }, singleLine = true)
-            },
-            confirmButton = {
-                TextButton(onClick = { exec("createLink", url); showLinkDialog = false }) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLinkDialog = false }) { Text("取消") }
+        EditorDialog(
+            title = "插入链接",
+            onDismiss = { showLinkDialog = false },
+            confirmLabel = "确定",
+            onConfirm = {
+                exec("createLink", url)
+                showLinkDialog = false
             }
-        )
+        ) {
+            OutlinedTextField(value = url, onValueChange = { url = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
     }
 
     // 表格
     if (showTableDialog) {
         var rows by remember { mutableStateOf(3) }
         var cols by remember { mutableStateOf(3) }
-        AlertDialog(
-            onDismissRequest = { showTableDialog = false },
-            title = { Text("插入表格") },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("行", fontSize = 13.sp)
-                    Spacer(Modifier.width(8.dp))
-                    TablePicker(rows) { rows = it }
-                    Spacer(Modifier.width(16.dp))
-                    Text("列", fontSize = 13.sp)
-                    Spacer(Modifier.width(8.dp))
-                    TablePicker(cols) { cols = it }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val html = RichTextTableCodec.makeTableHtml(rows, cols)
-                    exec("insertHTML", html)
-                    showTableDialog = false
-                }) { Text("插入") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTableDialog = false }) { Text("取消") }
+        EditorDialog(
+            title = "插入表格",
+            onDismiss = { showTableDialog = false },
+            confirmLabel = "插入",
+            onConfirm = {
+                val html = RichTextTableCodec.makeTableHtml(rows, cols)
+                exec("insertHTML", html)
+                showTableDialog = false
             }
-        )
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("行", fontSize = 13.sp)
+                Spacer(Modifier.width(8.dp))
+                TablePicker(rows) { rows = it }
+                Spacer(Modifier.width(16.dp))
+                Text("列", fontSize = 13.sp)
+                Spacer(Modifier.width(8.dp))
+                TablePicker(cols) { cols = it }
+            }
+        }
     }
 
     // 编辑标题
     if (showTitleDialog) {
         var draft by remember(title) { mutableStateOf(title) }
-        AlertDialog(
-            onDismissRequest = { showTitleDialog = false },
-            title = { Text("编辑标题", fontSize = 15.sp) },
-            text = {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    singleLine = true,
-                    placeholder = { Text("笔记标题", fontSize = 14.sp) }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val t = draft.trim()
-                    title = t
-                    NoteStore.updateTitle(noteId, t)
-                    showTitleDialog = false
-                }) { Text("保存") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTitleDialog = false }) { Text("取消") }
+        EditorDialog(
+            title = "编辑标题",
+            onDismiss = { showTitleDialog = false },
+            confirmLabel = "保存",
+            onConfirm = {
+                val t = draft.trim()
+                title = t
+                NoteStore.updateTitle(noteId, t)
+                showTitleDialog = false
             }
-        )
+        ) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                singleLine = true,
+                placeholder = { Text("笔记标题", fontSize = 14.sp) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
     // 更多菜单
@@ -338,10 +330,12 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 showMore = false
                 showTitleDialog = true
             }
+            OptionDivider()
             OptionItem("同步本篇") {
                 scope.launch { SyncEngine.syncSingleNote(noteId) }
                 showMore = false
             }
+            OptionDivider()
             OptionItem("删除笔记（移入回收站）", danger = true) {
                 NoteStore.moveToTrash(noteId); showMore = false; onBack()
             }
@@ -405,12 +399,61 @@ private fun FmtSep() {
 
 @Composable
 private fun OptionDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontSize = 15.sp) },
-        text = { Column(content = content) },
-        confirmButton = {}
-    )
+    EditorDialog(title = title, onDismiss = onDismiss, content = content)
+}
+
+/**
+ * 统一样式的弹窗：标题加粗 + 标题下分割线 + 紧凑下边距；
+ * 传 confirmLabel/onConfirm 时底部带「取消 / 确认」按钮行。
+ * 不用 M3 AlertDialog，因为它的固定 padding 会把标题和底部撑得很空。
+ */
+@Composable
+private fun EditorDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    confirmLabel: String? = null,
+    onConfirm: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(
+                    title,
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                HorizontalDivider(color = LineSoft)
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), content = content)
+                if (confirmLabel != null && onConfirm != null) {
+                    HorizontalDivider(color = LineSoft)
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+                        TextButton(onClick = { onConfirm() }) {
+                            Text(confirmLabel, color = GreenHover, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 选项之间的分割线（左右留 16dp 边距）。 */
+@Composable
+private fun OptionDivider() {
+    HorizontalDivider(color = LineSoft, modifier = Modifier.padding(horizontal = 16.dp))
 }
 
 @Composable
@@ -456,7 +499,7 @@ private fun buildEditorHtml(body: String): String {
         pre{background:#f5f5f7;padding:10px;border-radius:6px;font-family:monospace;white-space:pre-wrap;}
         img{max-width:100%;border-radius:6px;}
         table{border-collapse:collapse;margin:8px 0;width:100%;}
-        td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;height:2.5em;vertical-align:top;}
+        td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;height:calc(2.5em - 2px);vertical-align:top;}
         td[data-align="center"]{text-align:center}
         td[data-align="right"]{text-align:right}
         td[data-align="justify"]{text-align:justify}
