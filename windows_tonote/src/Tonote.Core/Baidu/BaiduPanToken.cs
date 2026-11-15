@@ -22,6 +22,7 @@ public sealed class BaiduPanToken
     [JsonPropertyName("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    [JsonIgnore]
     public bool IsExpired =>
         DateTime.UtcNow >= CreatedAt.ToUniversalTime().AddSeconds(ExpiresIn).AddMinutes(-5);
 }

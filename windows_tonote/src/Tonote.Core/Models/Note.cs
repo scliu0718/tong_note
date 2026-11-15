@@ -42,14 +42,35 @@ public sealed class Note
     [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    [JsonIgnore]
     public bool IsTrashed => DeletedAt != null;
 
+    [JsonIgnore]
     public bool IsQuickSync => Id == QuickSyncNoteId;
 
+    /// <summary>深拷贝一份，供同步回写/冲突副本使用，避免直接改到界面持有的引用。</summary>
+    public static Note CopyOf(Note source) => new()
+    {
+        Body = source.Body,
+        ContentFormat = source.ContentFormat,
+        CreatedAt = source.CreatedAt,
+        DeletedAt = source.DeletedAt,
+        Id = source.Id,
+        Notebook = source.Notebook,
+        Pinned = source.Pinned,
+        Purged = source.Purged,
+        Rev = source.Rev,
+        Tags = [.. source.Tags],
+        Title = source.Title,
+        UpdatedAt = source.UpdatedAt,
+    };
+
+    [JsonIgnore]
     public string VisibleBody => ContentFormat == NoteContentFormat.richText
         ? VisibleText.From(Body)
         : Body;
 
+    [JsonIgnore]
     public string Snippet
     {
         get
@@ -61,6 +82,7 @@ public sealed class Note
         }
     }
 
+    [JsonIgnore]
     public string TimeText
     {
         get
@@ -75,5 +97,6 @@ public sealed class Note
         }
     }
 
+    [JsonIgnore]
     public int WordCount => VisibleBody.Count(ch => !char.IsWhiteSpace(ch));
 }

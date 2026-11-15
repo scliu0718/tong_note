@@ -60,6 +60,24 @@ public sealed class Todo
     [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>深拷贝一份，供同步回写/冲突副本使用。</summary>
+    public static Todo CopyOf(Todo source) => new()
+    {
+        CompletedAt = source.CompletedAt,
+        CreatedAt = source.CreatedAt,
+        Id = source.Id,
+        Notes = source.Notes,
+        Order = source.Order,
+        PlannedAt = source.PlannedAt,
+        Purged = source.Purged,
+        Rev = source.Rev,
+        StartedAt = source.StartedAt,
+        Status = source.Status,
+        Title = source.Title,
+        UpdatedAt = source.UpdatedAt,
+    };
+
+    [JsonIgnore]
     public bool IsOverdue
     {
         get

@@ -3,12 +3,15 @@ namespace Tonote.Core;
 public sealed class NoteStore
 {
     private readonly string _path;
+    private readonly SyncCursorStore _cursors;
 
     public NoteStore(string directory)
     {
         Directory.CreateDirectory(directory);
         RootDirectory = directory;
         _path = Path.Combine(directory, "notes.json");
+        _cursors = new SyncCursorStore(Path.Combine(directory, "note-sync.json"));
+        Attachments = new AttachmentStore(directory);
         Load();
         if (Notes.Count == 0)
         {
@@ -20,6 +23,8 @@ public sealed class NoteStore
     }
 
     public string RootDirectory { get; }
+
+    public AttachmentStore Attachments { get; }
 
     public List<Note> Notes { get; private set; } = [];
 
@@ -65,6 +70,37 @@ public sealed class NoteStore
 
     public Note? Find(Guid id) => Notes.FirstOrDefault(note => note.Id == id);
 
+    /// <summary>本机同步基线。本地无记录时返回「未同步」游标。</summary>
+    public SyncCursor Cursor(Guid id) => _cursors.Cursor(id);
+
+    /// <summary>
+    /// 同步结果回写。不标脏、不触发新一轮同步，只刷新界面。
+    /// 与 Mac 版 NoteStore.applySyncedNote 一致。
+    /// </summary>
+    public void ApplySyncedNote(Note note, SyncCursor cursor)
+    {
+        var index = Notes.FindIndex(item => item.Id == note.Id);
+        if (index >= 0) Notes[index] = Note.CopyOf(note);
+        else Notes.Add(Note.CopyOf(note));
+
+        var prefix = "attachments/" + note.Id.ToString("D").ToUpperInvariant() + "/";
+        if (note.Purged && !Notes.Any(other => other.Id != note.Id && !other.Purged
+                                              && other.Body.Contains(prefix, StringComparison.Ordinal)))
+            Attachments.RemoveAttachments(note.Id);
+
+        _cursors.Set(cursor, note.Id);
+        Save();
+        Changed?.Invoke();
+    }
+
+    /// <summary>整体替换笔记集合（旧清单迁移等场景）。</summary>
+    public void SetNotes(IEnumerable<Note> notes)
+    {
+        Notes = notes.Select(Note.CopyOf).ToList();
+        Save();
+        Changed?.Invoke();
+    }
+
     public Note AddNote(string notebook = "工作日志")
     {
         var note = new Note
@@ -75,7 +111,7 @@ public sealed class NoteStore
         };
         Notes.Insert(0, note);
         Save();
-        Changed?.Invoke();
+        Touch(note.Id);
         return note;
     }
 
@@ -87,7 +123,7 @@ public sealed class NoteStore
         note.Title = title;
         note.UpdatedAt = DateTime.UtcNow;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void UpdateContent(Guid id, string body, NoteContentFormat format)
@@ -99,7 +135,7 @@ public sealed class NoteStore
         note.ContentFormat = format;
         note.UpdatedAt = DateTime.UtcNow;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void UpdateTags(Guid id, IEnumerable<string> tags)
@@ -114,7 +150,7 @@ public sealed class NoteStore
             .ToList();
         note.UpdatedAt = DateTime.UtcNow;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void SetNotebook(Guid id, string notebook)
@@ -125,7 +161,7 @@ public sealed class NoteStore
         note.Notebook = notebook;
         note.UpdatedAt = DateTime.UtcNow;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void MoveToTrash(Guid id)
@@ -138,7 +174,7 @@ public sealed class NoteStore
         note.UpdatedAt = now;
         note.Pinned = false;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void Restore(Guid id)
@@ -149,7 +185,7 @@ public sealed class NoteStore
         note.DeletedAt = null;
         note.UpdatedAt = DateTime.UtcNow;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void PermanentlyDelete(Guid id)
@@ -160,8 +196,9 @@ public sealed class NoteStore
         note.Purged = true;
         note.UpdatedAt = DateTime.UtcNow;
         note.Pinned = false;
+        Attachments.RemoveAttachments(id);
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void TogglePin(Guid id)
@@ -172,38 +209,51 @@ public sealed class NoteStore
         note.Pinned = !note.Pinned;
         note.UpdatedAt = DateTime.UtcNow;
         Save();
-        Changed?.Invoke();
+        Touch(id);
     }
 
     public void MoveNotes(string from, string to)
     {
-        var changed = false;
+        var touched = new List<Guid>();
         foreach (var note in Notes.Where(note => note.Notebook == from))
         {
             note.Notebook = to;
             note.UpdatedAt = DateTime.UtcNow;
-            changed = true;
+            touched.Add(note.Id);
         }
 
-        if (!changed)
+        if (touched.Count == 0)
             return;
         Save();
-        Changed?.Invoke();
+        TouchMany(touched);
     }
 
     public void RemoveTag(string tag)
     {
-        var changed = false;
+        var touched = new List<Guid>();
         foreach (var note in Notes.Where(note => note.Tags.Contains(tag)))
         {
             note.Tags.RemoveAll(item => item == tag);
             note.UpdatedAt = DateTime.UtcNow;
-            changed = true;
+            touched.Add(note.Id);
         }
 
-        if (!changed)
+        if (touched.Count == 0)
             return;
         Save();
+        TouchMany(touched);
+    }
+
+    /// <summary>本机修改：标脏并通知界面（同步引擎只监听标脏事件，避免回写触发死循环）。</summary>
+    private void Touch(Guid id)
+    {
+        _cursors.MarkDirty(id);
+        Changed?.Invoke();
+    }
+
+    private void TouchMany(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids) _cursors.MarkDirty(id);
         Changed?.Invoke();
     }
 

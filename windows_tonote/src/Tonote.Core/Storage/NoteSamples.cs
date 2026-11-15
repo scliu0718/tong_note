@@ -51,9 +51,9 @@ public static class NoteSamples
             ContentFormat = NoteContentFormat.markdown,
             Pinned = false,
             Body = """
-                这是「快同步」专属笔记。Windows 端的单篇云同步还在迁移。
+                这是「快同步」专属笔记，用来在一台设备上快速留下一段内容。
 
-                打开这篇笔记不会发起同步。同步按钮会在百度网盘登录接入后出现。
+                点顶栏的「立即同步本篇」只推这一篇到百度网盘，其它笔记按 1.5 秒防抖自动同步。
                 """,
         };
     }

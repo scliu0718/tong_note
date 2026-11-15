@@ -9,7 +9,15 @@ public static class BaiduPanConfig
     public const string RedirectUri = "tongnote://oauth/callback";
     public const string CallbackScheme = "tongnote";
     public const string Scope = "basic,netdisk";
-    public const string RemoteRoot = "/apps/tong_log";
+    /// <summary>生产数据根。三端共用这一套路径，不能随意改。</summary>
+    public const string DefaultRemoteRoot = "/apps/tong_log";
+
+    /// <summary>
+    /// 当前使用的远端根。默认与 Mac / Android 完全一致；
+    /// 仅当设置 TONOTE_REMOTE_ROOT 且位于应用沙箱内时才切到隔离子目录，
+    /// 供真实网盘功能测试使用，避免污染生产笔记。
+    /// </summary>
+    public static string RemoteRoot { get; private set; } = DefaultRemoteRoot;
 
     public static readonly Uri AuthorizeUrl = new("https://openapi.baidu.com/oauth/2.0/authorize");
     public static readonly Uri TokenUrl = new("https://openapi.baidu.com/oauth/2.0/token");
@@ -21,7 +29,19 @@ public static class BaiduPanConfig
     public static bool IsConfigured =>
         !string.IsNullOrWhiteSpace(AppKey) && !string.IsNullOrWhiteSpace(AppSecret);
 
-    static BaiduPanConfig() => Load();
+    static BaiduPanConfig()
+    {
+        Load();
+        var overrideRoot = Environment.GetEnvironmentVariable("TONOTE_REMOTE_ROOT");
+        if (string.IsNullOrWhiteSpace(overrideRoot))
+            return;
+        var candidate = overrideRoot.Trim().TrimEnd('/');
+        // 百度开放平台只允许应用访问自己的沙箱；测试根必须仍在生产根之下。
+        if (candidate.StartsWith(DefaultRemoteRoot, StringComparison.Ordinal)
+            && candidate.Length > DefaultRemoteRoot.Length
+            && candidate[DefaultRemoteRoot.Length] == '/')
+            RemoteRoot = candidate;
+    }
 
     public static void Load(IEnumerable<string>? paths = null)
     {

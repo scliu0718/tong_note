@@ -5,33 +5,71 @@
 - `docs/设计文档.md`：分层、JSON、受控 HTML、按篇同步
 - `docs/功能点文档.md`：登录、笔记本、列表、编辑器、任务、回收站
 - `docs/用户使用文档.md`：三栏界面、自动保存、数据归用户自己
+- `同笔记-Mac端UI设计.html`：配色与三栏布局令牌
 
-## 这一轮已经能用
+## 已经能用
 
-- 登录页沿用绿色品牌区。`baidupan.secret.json` 会在启动时读入，文件不进 git。已有令牌时直接进入笔记。「使用百度网盘账号登录」和「浏览器扫码登录」都会打开系统浏览器，授权完成后通过 `tongnote://oauth/callback` 回到本程序。Windows 上启动时会给当前用户登记这个协议。
-- 主窗口默认 1120×700，打开在屏幕中间，最小 960×620。
-- 三栏：侧栏三档（52 / 112 / 200，点分隔条切换，拖动吸附）、笔记列表、编辑区。
-- 本地笔记：新建、改标题、写 Markdown 正文、标签、笔记本、置顶、搜索、三种排序、回收站、彻底删除。
-- 快任务：四状态，本地 `todos.json`。
-- 笔记文件是 `notes.json`，时间用到秒的 ISO 8601，能读 Mac 写出的文件。富文本笔记只显示可见文字，不会把 HTML 覆盖掉。
+**界面**
+- 登录页沿用绿色品牌区；「账号登录 / 扫码登录」打开浏览器，通过 `tongnote://oauth/callback` 回调。
+- 三栏：侧栏三档（52 / 112 / 200，点分隔条或拖动吸附）、笔记列表、编辑区。侧栏显示头像和同步状态。
+- 设置面板：8 个预设头像、百度账号昵称与网盘配额、同步状态与「立即同步」、已登录设备列表与「下线」、本机数据目录、退出登录。
+- 笔记列表：新建、改标题、搜索、三种排序、标签、笔记本、置顶、回收站、彻底删除。
+- 快任务：四状态 + 点标题展开详情（标题、备注、计划日期）。
 
-Windows 上的数据目录是 `%LOCALAPPDATA%\tonote`。在 Mac 上调试时用 `tonote-windows`，不会写进 Mac 版的 `Application Support/tonote`。
+**富文本编辑器（WebView2）**
+- `contenteditable` + Avalonia 工具条：正文/标题 1-3、引用、代码、加粗、斜体、下划线、删除线、字号、字色、底色、项目符号、编号、链接、插图、表格 3×3、增删行列、单元格对齐与底色。
+- 浏览器产出的 `div` / `font` / `tbody` / 绝对路径图片，先在 JS 侧规整成三端约定的受控标签集，再用 `RichTextHtmlCodec.Encode(Decode(...))` 校验后才写盘。
+- 插图走 `AttachmentStore.ImportImage`，只存 `attachments/<noteId>/<uuid>.<ext>` 相对路径；没有 WebView2 运行时时自动退回纯文本框，不会破坏已有 HTML。
 
-## 还没迁
+**数据与同步（对照 Mac 版逐条移植）**
+- 受控 HTML 编解码、表格模型与编解码、Markdown 导入、图片路径扫描、附件仓库。
+- 百度网盘：令牌交换/续期、用户信息（`xpan/nas?method=uinfo`）/配额（`api/quota`）、目录列举与删除、`xpan download` 取直链（errno 20020 时降级 `filemetas?dlink=1`）、precreate → superfile2（4MB 分片 + MD5）→ create 覆盖上传；响应按字节 UTF-8 解码，单请求 90 秒超时。
+- `SyncEngine`：1.5 秒防抖 + 重入标记、按篇三方合并（rev / updatedAt / cursor 五分支）、发布三次重试并回读校验、冲突时生成「（冲突副本）」、笔记本名单并集、任务按条同步、附件上传下载、旧 `manifest.json` 迁移、`purged` 墓碑。
+- 设备会话：每台设备一份 `devices/<id>.json`，被别的设备下线会清令牌回到登录页；头像单独同步到 `avatar.json`。
 
-按篇同步、设备下线、受控 HTML 编辑器、表格、图片附件、使用说明页面。登录和扫码登录已经接上。
+本地数据在 `%LOCALAPPDATA%\tonote`（可用环境变量 `TONOTE_DATA_ROOT` 覆盖，便于测试）。
+`notes.json` / `todos.json` / `notebooks.json` 与 Mac 端字段一致；同步游标在 `note-sync.json` / `todo-sync.json`。
+同步状态额外写一份 `sync-status.json`（kind / message / date），便于重启后诊断上一轮同步。
+`TONOTE_REMOTE_ROOT` 只允许把远端根改成 `/apps/tong_log/__selftest__/…` 隔离子目录，供功能测试使用。
+
+## 还没迁 / 已知边界
+
+- 表格列宽拖拽（模型已支持 `data-widths`，UI 还没有拖拽手柄）；段落对齐不在三端数据契约里，故意没做。
+- 任务备注里的图片目前只能粘贴路径文本，UI 没接图片选择器。
+- 富文本编辑器依赖 Windows 的 WebView2 Runtime；其它平台只会有纯文本回退。
+- Markdown 批量导入导出、全局快捷键、使用说明内嵌页未迁。
+
+## 真实网盘功能测试
+
+`tests/Tonote.LiveTests/` 是连**真实百度网盘**的分组功能测试，覆盖认证与配额、上传/下载/列举/删除原语、按篇同步引擎、设备与头像、Mac 生产数据跨端解码、UI 层、真实 GUI 进程端到端，共 A–G 七组。
+
+前置条件：`baidupan.secret.json` 放在 `windows_tonote/`（不入库），且本机已完成一次账号授权（`%LOCALAPPDATA%\tonote\baidupan-token.json`）。测试只读真实令牌，不会改它。
+
+```bash
+"D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- A B C D E F G
+# 只跑某几组：末尾写组名即可，例如 -- C G
+# 加 --keep 可保留本次远端沙箱目录，便于排查
+# 清理由异常中断残留的历史沙箱（仅在无其它测试实例运行时单独执行）：
+"D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- --clean-orphans
+```
+
+安全护栏：所有云端写操作被强制限制在 `/apps/tong_log/__selftest__/<runId>/`，本地数据写到 `windows_tonote/.test-data/`（已 gitignore）；程序启动时会校验远端根确实落在沙箱内，否则拒绝执行；正常结束会自动删除本次云端沙箱。生产目录只读，不会被写入。可用 `TONOTE_TEST_ROOT` 改本地测试目录。
 
 ## 编译
 
-需要 .NET 8 SDK。
+需要 .NET 8 SDK 与 WebView2 Runtime。本机 SDK 在 `D:\dev\dotnet`，NuGet 包在 `D:\dev\_nuget_app`：
 
 ```bash
-export DOTNET_ROOT="$HOME/.dotnet"
-export PATH="$DOTNET_ROOT:$PATH"
-cd windows_tonote
-dotnet test
-dotnet run --project src/Tonote.App
+export APPDATA="C:/Users/Administrator/AppData/Roaming" \
+       ProgramData="C:/ProgramData" PROGRAMDATA="C:/ProgramData" \
+       ALLUSERSPROFILE="C:/ProgramData" ProgramFiles="C:/Program Files" \
+       CommonProgramFiles="C:/Program Files/Common Files" \
+       DOTNET_ROOT="D:/dev/dotnet" NUGET_PACKAGES="D:/dev/_nuget_app"
+"D:/dev/dotnet/dotnet.exe" build src/Tonote.App/Tonote.App.csproj -c Debug
+"D:/dev/dotnet/dotnet.exe" run --project src/Tonote.App
 ```
+
+> 编译前先关掉正在运行的 `Tonote.exe`，否则 `Tonote.Core.dll` 被占用会复制失败。
 
 打 Windows 程序：
 

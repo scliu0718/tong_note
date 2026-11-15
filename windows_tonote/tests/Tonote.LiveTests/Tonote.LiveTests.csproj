@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Tonote.LiveTests</AssemblyName>
+    <RootNamespace>Tonote.LiveTests</RootNamespace>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tonote.Core\Tonote.Core.csproj" />
+    <!-- F 组要直接构造 AppSession / 读取 EditorHtml，需要引用 App 程序集（纯 C# 类型，不初始化 Avalonia） -->
+    <ProjectReference Include="..\..\src\Tonote.App\Tonote.App.csproj" />
+  </ItemGroup>
+</Project>

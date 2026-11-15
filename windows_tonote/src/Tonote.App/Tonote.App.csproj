@@ -9,12 +9,19 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationTitle>同笔记</ApplicationTitle>
     <ApplicationIcon>Assets\tonote.ico</ApplicationIcon>
+    <!--
+      WebView2 的 buildTransitive targets 会自动引用 Core / Wpf / WinForms 三份托管程序集。
+      Avalonia 只用 CoreWebView2Controller + HWND，WPF / WinForms 程序集用不上；
+      它们会带来 WindowsBase 版本冲突告警，这里只把该构型告警压掉（不影响运行）。
+    -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.0" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.0" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3124.44" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tonote.Core\Tonote.Core.csproj" />

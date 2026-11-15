@@ -11,6 +11,11 @@ public static class AppPaths
 
     public static string DefaultRoot()
     {
+        // 冒烟测试 / 多数据目录场景可用环境变量覆盖，正式使用不受影响
+        var overrideRoot = Environment.GetEnvironmentVariable("TONOTE_DATA_ROOT");
+        if (!string.IsNullOrWhiteSpace(overrideRoot))
+            return Path.GetFullPath(overrideRoot);
+
         var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(baseDir))
         {

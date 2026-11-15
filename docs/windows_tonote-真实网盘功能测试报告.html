@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同笔记 Windows 端 · 真实百度网盘功能测试报告</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --line:#e8eaee; --line-soft:#f1f2f5;
+    --text:#1d1d1f; --text2:#48484a; --text3:#86868b;
+    --green:#1a9e5c; --green-bg:#e6f4ec; --blue:#06a7ff; --blue-bg:#e8f5ff;
+    --amber:#b26a00; --amber-bg:#fff4e0; --red:#c0392b; --red-bg:#fdecea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:36px 28px 72px}
+  header{margin-bottom:26px}
+  .eyebrow{color:var(--text3);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:26px;line-height:1.35;margin:8px 0 10px;font-weight:700}
+  .sub{color:var(--text2);font-size:13px}
+  .hero{display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;margin:22px 0 30px}
+  .hero .main{flex:1 1 260px;background:var(--green-bg);border:1px solid #cbe9d8;
+    border-radius:14px;padding:20px 22px}
+  .hero .main .big{font-size:34px;font-weight:750;color:var(--green);line-height:1.2}
+  .hero .main .cap{color:var(--text2);font-size:13px;margin-top:4px}
+  .hero .side{flex:1 1 200px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:18px 20px}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
+    border-bottom:1px dashed var(--line-soft);font-size:13px}
+  .kv:last-child{border-bottom:0}
+  .kv span:first-child{color:var(--text3)}
+  .kv span:last-child{font-weight:600;text-align:right}
+  h2{font-size:18px;margin:34px 0 14px;padding-left:11px;border-left:3px solid var(--green)}
+  h3{font-size:15px;margin:22px 0 10px}
+  p{margin:8px 0 12px;color:var(--text2)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin-bottom:14px}
+  ul{margin:8px 0 0;padding-left:20px;color:var(--text2)}
+  li{margin:5px 0}
+  table{width:100%;border-collapse:collapse;background:var(--card);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+  th,td{padding:11px 13px;text-align:left;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{background:#fafbfc;color:var(--text3);font-weight:600;white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .ok{color:var(--green);font-weight:700;white-space:nowrap}
+  .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .tag.fix{background:var(--red-bg);color:var(--red)}
+  .tag.test{background:var(--amber-bg);color:var(--amber)}
+  .tag.info{background:var(--blue-bg);color:var(--blue)}
+  code{background:#f3f4f6;border:1px solid var(--line);border-radius:5px;
+    padding:1px 6px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+    font-size:12.5px;color:#2c2c30}
+  pre{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow-x:auto;margin:10px 0;font-size:12.5px;
+    font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;color:#2c2c30;line-height:1.65}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .metric{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .metric .v{font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+  .metric .l{color:var(--text3);font-size:12px;margin-top:3px}
+  .note{background:var(--amber-bg);border:1px solid #f3ddb5;border-radius:10px;
+    padding:12px 16px;color:#7a4b00;font-size:13px;margin:12px 0}
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--text3);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">TONOTE · WINDOWS · LIVE NETDISK VERIFICATION</div>
+  <h1>同笔记 Windows 端 · 真实百度网盘功能测试报告</h1>
+  <div class="sub">2026-11-15 · 与 mac_tonote 对齐后接入真实凭证，A→G 逐组测试，失败即修复并自动重测</div>
+</header>
+
+<div class="hero">
+  <div class="main">
+    <div class="big">89 / 89</div>
+    <div class="cap">全部用例通过 · 失败 0 · 最终退出码 0</div>
+  </div>
+  <div class="side">
+    <div class="kv"><span>真实产品缺陷</span><span>5 个已修复</span></div>
+    <div class="kv"><span>测试假设误判</span><span>4 处已纠正</span></div>
+    <div class="kv"><span>最终验收轮次</span><span>仓库版 A→G 全量</span></div>
+    <div class="kv"><span>生产数据</span><span>只读，未写入</span></div>
+  </div>
+</div>
+
+<h2>一、结论先行</h2>
+<div class="card">
+  <ul>
+    <li><strong>功能已对齐并实连验证通过。</strong>Windows 端在真实百度网盘账号（scope = basic netdisk）下，认证、配额、上传下载、按篇同步、设备与头像、跨端协议、UI 层、真实 GUI 进程端到端共 7 组 89 项全部通过。</li>
+    <li><strong>实连暴露了 5 个内存假接口测不出的真实缺陷</strong>，均已修复并复测通过；其中「GUI 首轮同步卡死」和「直链 404 被误判为失败」会直接影响生产使用。</li>
+    <li><strong>跨端协议字节兼容已用 Mac 生产数据证实</strong>：12 篇真实按篇笔记全部解析成功，其中 7 篇富文本笔记解码→编码→再解码幂等。</li>
+    <li><strong>测试全程安全隔离</strong>：所有云端写操作限定在 <code>/apps/tong_log/__selftest__/&lt;runId&gt;</code> 下，生产目录只读；跑完自动清理，历史残留沙箱 12 个已补清，本地临时数据与令牌副本已删除。</li>
+  </ul>
+</div>
+
+<h2>二、分组结果</h2>
+<table>
+  <thead><tr><th>组</th><th>范围</th><th>用例</th><th>结果</th><th>关键实测</th></tr></thead>
+  <tbody>
+    <tr><td>A</td><td>认证与账号（真实凭证）</td><td class="num">8</td><td class="ok">8/8 PASS</td><td>配额 2.0TB / 已用 1.5TB（74.1%）；授权范围含 netdisk</td></tr>
+    <tr><td>B</td><td>网盘原语：上传 / 下载 / 列举 / 删除</td><td class="num">14</td><td class="ok">14/14 PASS</td><td>9MB 文件切 3 片（4MB 规则）真实上传 2.9s，下载 MD5 一致；中文名、0 字节、65KB 二进制附件往返一致</td></tr>
+    <tr><td>C</td><td>同步引擎（真实网盘按篇同步）</td><td class="num">24</td><td class="ok">24/24 PASS</td><td>首轮同步、五分支合并、冲突副本、单篇快同步、旧 manifest 迁移、last-sync 与状态落盘</td></tr>
+    <tr><td>D</td><td>设备会话与头像</td><td class="num">14</td><td class="ok">14/14 PASS</td><td>设备登记 / 下线踢登 / 重登清标记；8 个预设头像、avatar.json 与 Mac 格式一致（内容 id=star）</td></tr>
+    <tr><td>E</td><td>跨端协议（Mac 生产真实数据）</td><td class="num">13</td><td class="ok">13/13 PASS</td><td>生产 notes 12/12 篇解析成功，7 篇富文本幂等；manifest / avatar / notebooks / 设备文件均兼容</td></tr>
+    <tr><td>F</td><td>UI 层：设计令牌 / 功能点 / 编辑器 / 会话</td><td class="num">9</td><td class="ok">9/9 PASS</td><td>9 组色值对齐、15/15 功能点覆盖、18 条工具条命令、StartSync 首轮同步成功、退出登录清令牌</td></tr>
+    <tr><td>G</td><td>真实 GUI 进程端到端</td><td class="num">7</td><td class="ok">7/7 PASS</td><td>Tonote.exe 启动、WebView2 初始化、自动首轮同步写云端笔记（状态 Success，38.0s）、运行期无未处理异常</td></tr>
+  </tbody>
+</table>
+
+<h2>三、真实缺陷与修复</h2>
+<table>
+  <thead><tr><th>#</th><th>现象</th><th>根因</th><th>修复</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="tag fix">缺陷 1</span></td>
+      <td>A06 配额查询 errno=2</td>
+      <td><code>xpan/nas?method=quota</code> 被百度拒绝</td>
+      <td>改用 <code>api/quota?checkfree=1&amp;checkexpire=1</code>。注：Mac 端有同样潜在问题，只是从未走到该分支</td>
+    </tr>
+    <tr>
+      <td><span class="tag fix">缺陷 2</span></td>
+      <td>B 组整体崩「character set provided in ContentType is invalid」</td>
+      <td>百度响应 Content-Type 带的字符集 .NET 无法解析，<code>ReadAsStringAsync</code> 直接抛异常</td>
+      <td>统一改为按字节读取再 UTF-8 解码（<code>ReadTextAsync</code>），全链路替换</td>
+    </tr>
+    <tr>
+      <td><span class="tag fix">缺陷 3</span></td>
+      <td>下载报 BaiduPanNotFoundException / errno 20020</td>
+      <td>第三方应用沙箱目录不支持 <code>method=download</code> 取直链</td>
+      <td>降级：列举父目录取 fs_id → <code>filemetas?dlink=1</code> → 带 token 与 UA 下载；模型补 FsId</td>
+    </tr>
+    <tr>
+      <td><span class="tag fix">缺陷 4</span></td>
+      <td><strong>GUI 首轮同步永久卡在 Syncing（240s+）</strong></td>
+      <td>ShellView 在后台线程的事件订阅里直接改 UI 控件，造成同步轮死锁</td>
+      <td>加 <code>OnUi(Action)</code>（Dispatcher.UIThread 判定 / Post）包裹全部会话订阅；SyncEngine 落 <code>sync-status.json</code> 快照、隔离订阅者异常、瞬态失败自动重入重试；请求超时 90s。修复后 G05 由卡死变为 14.5s 完成</td>
+    </tr>
+    <tr>
+      <td><span class="tag fix">缺陷 5</span></td>
+      <td>直链偶发 HTTP 404 + errno 31066，抛通用异常导致整轮回归中断</td>
+      <td>下载阶段 404 未映射为 NotFound；而 SyncEngine 有 5 处依赖 NotFound 把「云端文件不存在」当正常路径</td>
+      <td>识别 404/31066 后<strong>先重取一次直链重试</strong>（避免把实际存在的笔记误判成缺失、走新增或覆盖分支），两次仍 404 才抛 BaiduPanNotFoundException</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>测试假设误判（非产品缺陷，已按 Mac 真实行为纠正断言）：</strong>
+  Mac 的 <code>encodeIfPresent</code> 同样省略 null 可选字段（deletedAt）；同步徽标实际为 <code>_sidebarSync / UpdateSyncLabels</code>；编辑器桥接是 <code>setContent</code> 而非 <code>setHTML</code>；工具条命令在 C# 侧而非 HTML 内；头像仅在用户主动选择时上传；F06 应等 <code>Status.Kind</code> 而非 <code>LastSyncDate</code>。
+</div>
+
+<h2>四、隔离与测试框架加固</h2>
+<div class="cols">
+  <div class="metric"><div class="v">/apps/tong_log/__selftest__</div><div class="l">远端根强制前缀，BaiduPanConfig 静态构造校验，测试启动时二次校验，否则拒绝执行</div></div>
+  <div class="metric"><div class="v">只读复制令牌</div><div class="l">从真实登录态复制令牌到隔离目录，刷新与写回只影响测试目录</div></div>
+  <div class="metric"><div class="v">组级异常兜底</div><div class="l">单组未捕获异常记为 FAIL 并继续后续组，保证汇总、退出码与沙箱清理始终执行</div></div>
+  <div class="metric"><div class="v">--clean-orphans</div><div class="l">维护模式，清理由异常中断残留的历史测试沙箱；本次补清 12 个</div></div>
+</div>
+<p style="margin-top:12px">F07 还加了自清场前提：A→G 顺序执行时 D12 会先写出 avatar.json，若不清理会把前组残留误判为「登录即上传头像」。现在 F07 先删除沙箱内的 avatar.json，再验证「选择前云端无头像 → 选择 leaf 后云端内容确为 leaf 且状态 synced」。</p>
+
+<h2>五、交付物与复跑</h2>
+<div class="card">
+  <p style="margin-top:0"><strong>测试套件已入库：</strong><code>windows_tonote/tests/Tonote.LiveTests/</code>（A–G 七个分组 + Runner / LiveContext / SyncHarness / Paths），路径全部从仓库根推导，换机器可直接跑。产品修复落在 <code>BaiduPanClient.cs</code>、<code>BaiduPanModels.cs</code>、<code>BaiduPanConfig.cs</code>、<code>SyncEngine.cs</code>、<code>ShellView.cs</code>；README 已同步真实端点、状态快照、隔离限制与运行方式；<code>.gitignore</code> 补上 <code>.test-data/</code>。</p>
+<pre>"D:/dev/dotnet/dotnet.exe" run --project tests/Tonote.LiveTests/Tonote.LiveTests.csproj -c Debug -- A B C D E F G
+# 只跑某几组：末尾写组名，例如 -- C G
+# 排查时保留本次云端沙箱：--keep
+# 清理历史残留（无其它测试实例运行时单独执行）：-- --clean-orphans</pre>
+  <p>Git Bash 下需先 export <code>APPDATA / ProgramData / ALLUSERSPROFILE / ProgramFiles / CommonProgramFiles / DOTNET_ROOT / NUGET_PACKAGES</code>；编译前关闭正在运行的 Tonote.exe。最终验收编译结果：<strong>0 警告 0 错误</strong>。</p>
+</div>
+
+<h2>六、已知边界（未在本次范围内）</h2>
+<ul>
+  <li>表格列宽拖拽（模型已支持 data-widths，UI 无拖拽手柄）；段落对齐不在三端数据契约内，故意未做。</li>
+  <li>任务备注里的图片目前只能粘贴路径文本，UI 未接图片选择器。</li>
+  <li>富文本编辑器依赖 Windows WebView2 Runtime，其它平台仅纯文本回退。</li>
+  <li>Markdown 批量导入导出、全局快捷键、使用说明内嵌页未迁。</li>
+  <li>配额接口的同类潜在问题在 Mac 端仍存在，按「不动 mac_tonote」的约定未改，仅记录。</li>
+</ul>
+
+<footer>
+  报告由 WorkBuddy 生成 · 数据来源：ALL_full3.log（89/89）、ALL_repo.log（仓库版最终验收 89/89）、E2.log、F5.log · 全部结论来自真实云端请求，非模拟接口。
+</footer>
+
+</div>
+</body>
+</html>

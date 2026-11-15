@@ -4,3 +4,5 @@ dist/
 .vs/
 *.user
 baidupan.secret.json
+# 真实网盘功能测试的隔离数据目录（含 token 副本，绝不入库）
+.test-data/

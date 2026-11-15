@@ -51,6 +51,14 @@ public sealed class NotebookStore
         Persist(dirty: true);
     }
 
+    /// <summary>同步结果回写：清掉脏标记，不触发本地数据变更通知。</summary>
+    public void ApplyCloud(IEnumerable<string> names, IEnumerable<string> removed)
+    {
+        Custom = names.Where(name => !Notebooks.BuiltIn.Contains(name)).Distinct().ToList();
+        Removed = removed.Distinct().ToList();
+        Persist(dirty: false);
+    }
+
     private void Load()
     {
         try
@@ -88,6 +96,7 @@ public sealed class NotebookStore
             Removed = Removed,
         };
         TonoteJson.WriteAtomic(_path, TonoteJson.Serialize(state));
+        if (dirty) SyncCursorStore.NotifyLocalDataChanged();
         Changed?.Invoke();
     }
 
