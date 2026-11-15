@@ -1,5 +1,10 @@
 package com.tong.log.app.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,19 +47,22 @@ fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
             }
             Text("同步与存储", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            // 右上角动作：同步中转圈；有未同步变更显示「保存」；否则显示「刷新」。
-            // 两者点击都触发一轮同步（保存 = 把变更推上云端并拉回远端更新）。
-            if (status.isSyncing) {
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Green)
-                Spacer(Modifier.width(11.dp))
-            } else {
-                IconButton(onClick = { scope.launch { SyncEngine.syncRound() } }) {
-                    if (dirtyCount > 0) {
-                        Icon(Icons.Default.Save, contentDescription = "保存并同步", tint = Green)
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = "同步", tint = TextPrimary)
-                    }
-                }
+            // 右上角动作：图标常驻可见——有未同步变更显示绿色「保存」，否则「刷新」；
+            // 同步进行中让图标自转（小转圈太隐蔽，曾被认为是「图标没显示」）。
+            val spin = rememberInfiniteTransition(label = "syncSpin")
+            val angle by spin.animateFloat(
+                initialValue = 0f, targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+                label = "syncAngle"
+            )
+            IconButton(onClick = { scope.launch { SyncEngine.syncRound() } }) {
+                val dirty = dirtyCount > 0
+                Icon(
+                    if (dirty) Icons.Default.Save else Icons.Default.Refresh,
+                    contentDescription = if (dirty) "保存并同步" else "同步",
+                    tint = if (dirty) Green else TextPrimary,
+                    modifier = if (status.isSyncing) Modifier.rotate(angle) else Modifier
+                )
             }
         }
         // 标题栏分割线

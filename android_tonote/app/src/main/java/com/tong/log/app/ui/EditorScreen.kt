@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -408,7 +409,7 @@ private fun OptionDialog(title: String, onDismiss: () -> Unit, content: @Composa
         dragHandle = null,
         modifier = Modifier.padding(bottom = 6.dp)
     ) {
-        Column {
+        Column(Modifier.navigationBarsPadding()) {
             Text(
                 title,
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
@@ -418,6 +419,21 @@ private fun OptionDialog(title: String, onDismiss: () -> Unit, content: @Composa
             )
             HorizontalDivider(thickness = 0.5.dp, color = LineHair)
             Column(content = content)
+            Spacer(Modifier.height(10.dp))
+            // 底部取消按钮：浅灰胶囊，独立于选项列表
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFFF2F2F5))
+                    .clickable(onClick = onDismiss)
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("取消", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+            }
+            Spacer(Modifier.height(10.dp))
         }
     }
 }
@@ -470,19 +486,20 @@ private fun EditorDialog(
     }
 }
 
-/** 选项之间的分割线（0.5dp 发丝线，从文字起始位置留 16dp 边距）。 */
+/** 选项之间的分割线（0.5dp 发丝线，左右留 48dp 边距）。 */
 @Composable
 private fun OptionDivider() {
-    HorizontalDivider(thickness = 0.5.dp, color = LineHair, modifier = Modifier.padding(horizontal = 16.dp))
+    HorizontalDivider(thickness = 0.5.dp, color = LineHair, modifier = Modifier.padding(horizontal = 48.dp))
 }
 
 @Composable
 private fun OptionItem(label: String, danger: Boolean = false, onClick: () -> Unit) {
     Text(
         label,
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 16.dp),
         color = if (danger) Red else TextPrimary,
-        fontSize = 14.sp
+        fontSize = 14.sp,
+        textAlign = TextAlign.Center
     )
 }
 
