@@ -268,15 +268,15 @@ private fun LazyListScope.todoGroup(
                 .padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.Top
         ) {
+            // 状态圈用各组颜色区分：待完成=红空心、进行中=琥珀空心、已完成=绿实心带勾、已终止=灰实心
+            val ringColor = color
+            val filled = t.status == TodoStatus.DONE || t.status == TodoStatus.TERMINATED
             Box(
                 Modifier
                     .size(21.dp)
                     .clickable { TodoStore.toggleDone(t.id) }
-                    .background(
-                        if (t.status == TodoStatus.DONE) Green else Color.Transparent,
-                        CircleShape
-                    )
-                    .border(2.dp, if (t.status == TodoStatus.DONE) Green else Line, CircleShape)
+                    .background(if (filled) ringColor else Color.Transparent, CircleShape)
+                    .border(2.dp, ringColor, CircleShape)
                     .padding(3.dp)
             ) {
                 if (t.status == TodoStatus.DONE) {
