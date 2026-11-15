@@ -184,7 +184,7 @@ fun TodoScreen(onSync: () -> Unit) {
                 onClick = { submitQuick() },
                 colors = ButtonDefaults.buttonColors(containerColor = Green),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                modifier = Modifier.height(38.dp)
+                modifier = Modifier.height(34.dp)
             ) { Text("添加", fontSize = 12.sp) }
         }
     }
@@ -308,19 +308,21 @@ private fun LazyListScope.todoGroup(
                     )
                 }
             }
+            // 第一个按钮距内容 +2dp
+            Spacer(Modifier.width(2.dp))
             when (t.status) {
                 TodoStatus.TODO -> ActionChip("开始", GreenTint, GreenHover) { TodoStore.setStatus(t.id, TodoStatus.DOING) }
                 TodoStatus.DOING -> ActionChip("完成", AmberTint, Color(0xFFB9770A)) { TodoStore.setStatus(t.id, TodoStatus.DONE) }
                 TodoStatus.TERMINATED -> ActionChip("恢复", Color(0xFFF0F0F2), TextTertiary) { TodoStore.setStatus(t.id, TodoStatus.TODO) }
             }
             if (t.status == TodoStatus.TODO || t.status == TodoStatus.DOING) {
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
                 // 终止：灰色底 + 细边框，明确标识为可点按钮
                 ActionChip(
                     "终止", Color(0xFFF5F5F7), TextTertiary, bordered = true
                 ) { TodoStore.setStatus(t.id, TodoStatus.TERMINATED) }
             }
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
             Icon(
                 Icons.Outlined.DeleteOutline,
                 contentDescription = "删除任务",
@@ -475,10 +477,10 @@ private fun TodoEditDialog(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
                     TextButton(onClick = { onConfirm(taskTitle.trim(), notes.trim(), date) }) {
                         Text(confirmLabel, color = GreenHover, fontWeight = FontWeight.SemiBold)
                     }
+                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
                 }
             }
         }
