@@ -1,6 +1,7 @@
 package com.tong.log.app.ui
 
 import android.app.DatePickerDialog
+import android.content.DialogInterface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -451,13 +452,21 @@ private fun TodoEditDialog(
                                 .background(GreenTint)
                                 .clickable {
                                     val base = date ?: LocalDate.now()
-                                    DatePickerDialog(
+                                    val picker = DatePickerDialog(
                                         context,
                                         { _, y, m, d -> date = LocalDate.of(y, m + 1, d) },
                                         base.year, base.monthValue - 1, base.dayOfMonth
-                                    ).show()
+                                    )
+                                    // 原生默认「取消」(NEGATIVE)在左、「确定」(POSITIVE)在右；
+                                    // 交换文字与回调：左侧显示「确定」执行提交，右侧显示「取消」不改动
+                                    picker.setButton(DialogInterface.BUTTON_NEGATIVE, "确定") { _, _ ->
+                                        val dp = picker.datePicker
+                                        date = LocalDate.of(dp.year, dp.month + 1, dp.dayOfMonth)
+                                    }
+                                    picker.setButton(DialogInterface.BUTTON_POSITIVE, "取消") { _, _ -> }
+                                    picker.show()
                                 }
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
                             color = GreenHover,
                             fontSize = 12.sp
                         )
