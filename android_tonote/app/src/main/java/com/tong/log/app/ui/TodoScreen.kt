@@ -457,7 +457,7 @@ private fun TodoEditDialog(
                                         base.year, base.monthValue - 1, base.dayOfMonth
                                     ).show()
                                 }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
                             color = GreenHover,
                             fontSize = 12.sp
                         )
