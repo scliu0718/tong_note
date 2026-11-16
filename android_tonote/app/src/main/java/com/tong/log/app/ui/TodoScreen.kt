@@ -4,6 +4,9 @@ import android.app.DatePickerDialog
 import android.content.DialogInterface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Refresh
@@ -209,6 +213,7 @@ fun TodoScreen(onSync: () -> Unit) {
             initialNotes = t.notes,
             initialDate = isoToDate(t.plannedAt),
             confirmLabel = "保存",
+            todoId = t.id,
             onDismiss = { editingTodo = null },
             onConfirm = { title, notes, date ->
                 TodoStore.updateTitle(t.id, title)
@@ -239,6 +244,7 @@ fun TodoScreen(onSync: () -> Unit) {
             initialNotes = "",
             initialDate = null,
             confirmLabel = "创建",
+            todoId = null,
             onDismiss = { showCreateDetail = false },
             onConfirm = { title, notes, date ->
                 if (title.isNotBlank()) {
@@ -413,18 +419,33 @@ private fun TodoEditDialog(
     initialNotes: String,
     initialDate: LocalDate?,
     confirmLabel: String,
+    todoId: String?,
     onDismiss: () -> Unit,
     onConfirm: (String, String, LocalDate?) -> Unit
 ) {
     val context = LocalContext.current
     var taskTitle by remember { mutableStateOf(initialTitle) }
     // 备注在 Mac 端是富文本 HTML（<ol><li>1</li></ol>、<img src="attachments/...">），
-    // 这里拆成「纯文本 + 图片」两部分展示；保存时文本未改动则原样保留 HTML，
+    // 这里拆成「纯文本 + 图片」两部分展示；保存时文本与图片均未改动则原样保留 HTML，
     // 避免有损转换写坏 Mac 原稿。
     val initialText = remember(initialNotes) { RichTextHTMLCodec.plainText(initialNotes) }
-    val images = remember(initialNotes) { ImagePathScanner.attachmentPaths(initialNotes) }
+    val initialImages = remember(initialNotes) { ImagePathScanner.attachmentPaths(initialNotes) }
+    var images by remember(initialNotes) { mutableStateOf(initialImages) }
     var notes by remember { mutableStateOf(initialText) }
     var date by remember { mutableStateOf(initialDate) }
+
+    // 添加图片：导入到 attachments/<todoId>/ 下，并把相对路径加进图片列表
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val id = todoId
+        if (id != null && uri != null) {
+            val rel = AttachmentStore.importImage(uri, id)
+            if (rel == null) {
+                Toast.makeText(context, "图片导入失败，请换一张重试", Toast.LENGTH_SHORT).show()
+            } else {
+                images = images + rel
+            }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -459,8 +480,13 @@ private fun TodoEditDialog(
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    // 备注图片单独展示：缩略图，点击预览大图
-                    NotesImageStrip(images)
+                    // 备注图片单独展示：缩略图 + 删除 + 上传，点击预览大图
+                    NotesImageStrip(
+                        images = images,
+                        canEdit = todoId != null,
+                        onRemove = { rel -> images = images - rel },
+                        onAdd = { pickImage.launch("image/*") }
+                    )
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("计划日期", fontSize = 12.sp, color = TextSecondary)
@@ -507,8 +533,8 @@ private fun TodoEditDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = {
-                        // 文本未变则保留原始 HTML（不丢失 Mac 端格式）；变了才用「纯文本 + 图片」重组 HTML
-                        val finalNotes = if (notes == initialText) initialNotes
+                        // 文本、图片均未变则保留原始 HTML（不丢失 Mac 端格式）；有变化才用「纯文本 + 图片」重组
+                        val finalNotes = if (notes == initialText && images == initialImages) initialNotes
                             else notesToHtml(notes, images)
                         onConfirm(taskTitle.trim(), finalNotes, date)
                     }) {
@@ -543,22 +569,34 @@ private fun notesToHtml(text: String, images: List<String>): String {
     return sb.toString()
 }
 
-/** 备注图片缩略图区：默认缩略图，点击预览大图。 */
+/** 备注图片缩略图区：缩略图 + 删除 + 上传入口，点击缩略图预览大图。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun NotesImageStrip(images: List<String>) {
-    if (images.isEmpty()) return
+private fun NotesImageStrip(
+    images: List<String>,
+    canEdit: Boolean,
+    onRemove: (String) -> Unit,
+    onAdd: () -> Unit
+) {
+    if (images.isEmpty() && !canEdit) return
     var preview by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         Text("图片", fontSize = 12.sp, color = TextSecondary)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         FlowRow(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             images.forEach { rel ->
-                NotesThumbnail(rel) { preview = rel }
+                NotesThumbnail(
+                    relPath = rel,
+                    onRemove = { onRemove(rel) },
+                    onClick = { preview = rel }
+                )
+            }
+            if (canEdit) {
+                AddImageTile(onClick = onAdd)
             }
         }
     }
@@ -568,11 +606,11 @@ private fun NotesImageStrip(images: List<String>) {
 }
 
 @Composable
-private fun NotesThumbnail(relPath: String, onClick: () -> Unit) {
+private fun NotesThumbnail(relPath: String, onRemove: () -> Unit, onClick: () -> Unit) {
     val bmp = rememberImageBitmap(relPath, maxDim = 360)
     Box(
         Modifier
-            .size(78.dp)
+            .size(52.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFFF0F0F2))
             .clickable(onClick = onClick),
@@ -581,8 +619,37 @@ private fun NotesThumbnail(relPath: String, onClick: () -> Unit) {
         if (bmp != null) {
             Image(bmp, contentDescription = "备注图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            Text("无法加载", fontSize = 9.sp, color = TextQuaternary)
+            Text("无法加载", fontSize = 8.sp, color = TextQuaternary)
         }
+        // 右上角删除按钮
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 4.dp, y = (-4).dp)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(Color(0xCC000000))
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Close, contentDescription = "删除图片", tint = Color.White, modifier = Modifier.size(11.dp))
+        }
+    }
+}
+
+/** 添加图片的「+」入口，样式与缩略图一致。 */
+@Composable
+private fun AddImageTile(onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(52.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFF0F0F2))
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Default.Add, contentDescription = "添加图片", tint = TextTertiary, modifier = Modifier.size(22.dp))
     }
 }
 
