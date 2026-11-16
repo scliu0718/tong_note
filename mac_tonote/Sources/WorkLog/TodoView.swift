@@ -21,7 +21,14 @@ struct TodoView: View {
     @State private var collapsed: Set<String> = []
     @State private var autoSyncTask: Task<Void, Never>?
     @StateObject private var notesController = RichTextEditorController()
-    @State private var imageError: String?
+    /// 单一弹窗状态：多个 .alert 串在同一 SwiftUI 视图上时只有部分会生效，
+    /// 因此「图片插入失败」与「删除任务二次确认」共用一个 alert。
+    @State private var activeDialog: TodoDialog?
+
+    private enum TodoDialog {
+        case imageFailure(String)
+        case deleteConfirm(id: UUID, title: String)
+    }
 
     private enum Filter: String, CaseIterable, Identifiable {
         case all = "全部"
@@ -55,13 +62,45 @@ struct TodoView: View {
             quickAddBar
         }
         .background(Theme.panelBg)
-        .alert("无法插入图片", isPresented: Binding(
-            get: { imageError != nil },
-            set: { if !$0 { imageError = nil } }
-        )) {
-            Button("好", role: .cancel) { imageError = nil }
+        // 单一 alert：图片插入失败 / 删除任务二次确认共用，避免串联 alert 时其中一个弹不出来
+        .alert(dialogTitle,
+               isPresented: Binding(get: { activeDialog != nil },
+                                    set: { if !$0 { activeDialog = nil } })) {
+            if let dialog = activeDialog {
+                switch dialog {
+                case .imageFailure:
+                    Button("好", role: .cancel) { activeDialog = nil }
+                case .deleteConfirm(let id, _):
+                    Button("取消", role: .cancel) { activeDialog = nil }
+                    Button("永久删除", role: .destructive) {
+                        activeDialog = nil
+                        deleteTodo(id)
+                    }
+                }
+            }
         } message: {
-            Text(imageError ?? "")
+            Text(dialogMessage)
+        }
+    }
+
+    private var dialogTitle: String {
+        guard let dialog = activeDialog else { return "" }
+        switch dialog {
+        case .imageFailure: return "无法插入图片"
+        case .deleteConfirm: return "删除任务？"
+        }
+    }
+
+    private var dialogMessage: String {
+        guard let dialog = activeDialog else { return "" }
+        switch dialog {
+        case .imageFailure(let message):
+            return message
+        case .deleteConfirm(_, let title):
+            let suffix = "将被永久删除，其他已同步设备上也会一并移除，此操作不可恢复。"
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return "该任务" + suffix }
+            return "「\(title)」" + suffix
         }
     }
 
@@ -298,7 +337,7 @@ struct TodoView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: { mutate { store.remove(todo.id) } }) {
+                Button(action: { activeDialog = .deleteConfirm(id: todo.id, title: todo.title) }) {
                     Image(systemName: "trash")
                         .font(.system(size: 12))
                         .foregroundColor(Theme.textQuaternary)
@@ -376,6 +415,17 @@ struct TodoView: View {
         scheduleAutoSync()
     }
 
+    /// 删除后若该任务正展开，清掉展开 / 编辑态，避免详情区还引用已删除的任务。
+    private func deleteTodo(_ id: UUID) {
+        mutate { store.remove(id) }
+        if expandedID == id {
+            expandedID = nil
+            frozenIDs = nil
+            editingNotes = false
+        }
+        if hoveredID == id { hoveredID = nil }
+    }
+
     /// 编辑期间按冻结顺序渲染；未冻结时直接用仓库的排序结果。
     private func displayItems(_ items: [Todo]) -> [Todo] {
         guard let frozen = frozenIDs else { return items }
@@ -435,7 +485,7 @@ struct TodoView: View {
                                content: notesContentBinding(todo),
                                controller: notesController,
                                attachments: noteStore.attachments,
-                               onEditorError: { imageError = $0 },
+                               onEditorError: { activeDialog = .imageFailure($0) },
                                readOnly: !editingNotes,
                                textInset: CGSize(width: 10, height: editingNotes ? 10 : 12),
                                opaqueBackground: false)
@@ -661,7 +711,7 @@ struct TodoView: View {
         do {
             try notesController.insertImage(from: url)
         } catch {
-            imageError = error.localizedDescription
+            activeDialog = .imageFailure(error.localizedDescription)
         }
     }
 
@@ -672,7 +722,7 @@ struct TodoView: View {
         scheduleAutoSync()
     }
 
-    /// 防抖 1.2 秒后自动全量同步，避免连续输入/连续点击时反复请求云端。
+    /// 防抖 1.2 秒后只同步改过的任务（不跑笔记和笔记本），避免连续输入/连续点击时反复请求云端。
     private func scheduleAutoSync() {
         autoSyncTask?.cancel()
         autoSyncTask = Task { @MainActor in
@@ -688,7 +738,7 @@ struct TodoView: View {
                 if Task.isCancelled { return }
             }
             guard !Task.isCancelled, !sync.status.isSyncing else { return }
-            await sync.quickSync(store: noteStore, todos: store)
+            await sync.syncDirtyTodos(store: noteStore, todos: store)
         }
     }
 

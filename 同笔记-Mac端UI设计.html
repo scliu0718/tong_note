@@ -781,7 +781,8 @@
         <div class="pop" style="font-size:11.5px;line-height:1.9;color:var(--text-2)">
           删除笔记？ / 笔记将移入回收站，可随时在回收站中恢复。<br>
           彻底删除笔记？ / 此操作不可恢复，笔记将被永久移除。<br>
-          请输入有效的链接地址 / 操作失败
+          删除任务？ /「任务标题」将被永久删除，其他已同步设备上也会一并移除，此操作不可恢复。/ 取消 / 永久删除<br>
+          请输入有效的链接地址 / 操作失败 / 无法插入图片
         </div>
       </div>
     </div>
@@ -1023,6 +1024,7 @@
         <div class="line">保存并收起 / 编辑备注 / 设置截止时间 / 年 / 月 / 日 / 日历</div>
         <div class="line">添加任务，回车即可创建… / 添加 / 还没有任务 / 在下方输入第一条任务，回车即可创建。</div>
         <div class="line">无法插入图片 / 好 / 选择一张图片插入任务备注</div>
+        <div class="line">删除任务？/「任务标题」将被永久删除，其他已同步设备上也会一并移除 / 取消 / 永久删除</div>
         <div class="line">选择任务截止日期 / 今天 / 已选 yyyy年M月d日 / 完成</div>
       </div>
       <div class="st-box"><h4><i></i>同步与设备</h4>
@@ -1066,6 +1068,7 @@
     <div class="cl-item"><span class="n">21</span><span>侧栏计数：<del>写死 128/46/31/…</del> → 全部由 <code>store.count(...)</code> 动态计算</span></div>
     <div class="cl-item"><span class="n">22</span><span>tab：<del>3 个</del> → <b>8 个视图</b>，并把连续拖动演示改为三档对照</span></div>
     <div class="cl-item"><span class="n">23</span><span>引用 / 代码块补齐<b>块级视觉</b>：Mac 此前只设 <code>headIndent</code>（看起来「只有 tab」）；现按 Android CSS 画 3pt 绿竖线 + 淡绿底 / 灰圆角底，引用正文色 <code>#86868B</code>，且样式色不写进 HTML</span></div>
+    <div class="cl-item"><span class="n">24</span><span>任务删除补齐<b>二次确认</b>：行内 <code>trash</code> 原为直接 <code>purged = true</code>，现弹出「删除任务？」并带任务标题、取消 / 永久删除；与图片插入失败共用单一 <code>activeDialog</code>，删除后清理展开态</span></div>
   </div>
   <div class="tokens"><b>本版补充的设计令牌：</b><br>
     --table-accent:#2E7CF6; <span style="color:var(--text-4)">/* 表格蓝加号、色板选中环、样式菜单勾选 */</span><br>
