@@ -281,7 +281,7 @@ private fun LazyListScope.todoGroup(
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(11.dp))
                 .background(if (t.isOverdue) RedTint else Color.White)
-                .then(if (t.isOverdue) Modifier.border(1.5.dp, Red, RoundedCornerShape(11.dp)) else Modifier)
+                .then(if (t.isOverdue) Modifier.border(0.75.dp, Red, RoundedCornerShape(11.dp)) else Modifier)
                 .clickable { onEdit(t) }
                 .padding(start = 12.dp, top = 11.dp, end = 9.dp, bottom = 11.dp),
             verticalAlignment = Alignment.Top
@@ -320,7 +320,7 @@ private fun LazyListScope.todoGroup(
                         displayTime(t.plannedAt) + if (t.isOverdue) " · 逾期" else "",
                         Modifier
                             .clip(RoundedCornerShape(999.dp))
-                            .background(if (t.isOverdue) RedTint else Color(0xFFF0F0F2))
+                            .background(if (t.isOverdue) Color.White else Color(0xFFF0F0F2))
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                         color = if (t.isOverdue) Red else TextTertiary,
                         fontSize = 10.sp,
@@ -612,7 +612,7 @@ private fun NotesThumbnail(relPath: String, onRemove: () -> Unit, onClick: () ->
         Modifier
             .size(52.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF0F0F2))
+            .background(Color(0xFFF7F7F9))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -621,18 +621,18 @@ private fun NotesThumbnail(relPath: String, onRemove: () -> Unit, onClick: () ->
         } else {
             Text("无法加载", fontSize = 8.sp, color = TextQuaternary)
         }
-        // 右上角删除按钮
+        // 右上角删除按钮：往中间收一点、缩小，避免压住图片过多
         Box(
             Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = 4.dp, y = (-4).dp)
-                .size(18.dp)
+                .offset(x = (-2).dp, y = 2.dp)
+                .size(16.dp)
                 .clip(CircleShape)
                 .background(Color(0xCC000000))
                 .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Close, contentDescription = "删除图片", tint = Color.White, modifier = Modifier.size(11.dp))
+            Icon(Icons.Default.Close, contentDescription = "删除图片", tint = Color.White, modifier = Modifier.size(10.dp))
         }
     }
 }
@@ -644,7 +644,7 @@ private fun AddImageTile(onClick: () -> Unit) {
         Modifier
             .size(52.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF0F0F2))
+            .background(Color(0xFFF7F7F9))
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
