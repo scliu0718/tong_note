@@ -205,20 +205,26 @@ fun TodoScreen(onSync: () -> Unit) {
         }
     }
 
-    // 编辑已有任务：标题 / 备注 / 计划日期
+    // 编辑已有任务：标题 / 备注 / 计划日期。
+    // 已完成 / 已终止是终态：仍可点开查看，但内容只读（与 Mac 端一致）。
     editingTodo?.let { t ->
+        val readOnly = t.status == TodoStatus.DONE || t.status == TodoStatus.TERMINATED
         TodoEditDialog(
-            title = "编辑任务",
+            title = if (readOnly) "查看任务" else "编辑任务",
             initialTitle = t.title,
             initialNotes = t.notes,
             initialDate = isoToDate(t.plannedAt),
             confirmLabel = "保存",
             todoId = t.id,
+            readOnly = readOnly,
             onDismiss = { editingTodo = null },
             onConfirm = { title, notes, date ->
-                TodoStore.updateTitle(t.id, title)
-                TodoStore.setNotes(t.id, notes)
-                TodoStore.setPlannedAt(t.id, date)
+                // 只读态隐藏保存按钮；这里再兜一层，避免状态在弹窗打开期间突变后误写
+                if (!readOnly) {
+                    TodoStore.updateTitle(t.id, title)
+                    TodoStore.setNotes(t.id, notes)
+                    TodoStore.setPlannedAt(t.id, date)
+                }
                 editingTodo = null
             }
         )
@@ -421,7 +427,8 @@ private fun TodoEditDialog(
     confirmLabel: String,
     todoId: String?,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, LocalDate?) -> Unit
+    onConfirm: (String, String, LocalDate?) -> Unit,
+    readOnly: Boolean = false
 ) {
     val context = LocalContext.current
     var taskTitle by remember { mutableStateOf(initialTitle) }
@@ -464,11 +471,25 @@ private fun TodoEditDialog(
                 )
                 HorizontalDivider(thickness = 0.75.dp, color = LineHair)
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    if (readOnly) {
+                        Text(
+                            "只读 · 已完成 / 已终止的任务不可编辑",
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFF2F2F4))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            color = TextQuaternary,
+                            fontSize = 11.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
                     OutlinedTextField(
                         value = taskTitle,
                         onValueChange = { taskTitle = it },
                         label = { Text("标题", fontSize = 12.sp) },
                         singleLine = true,
+                        readOnly = readOnly,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(8.dp))
@@ -478,12 +499,13 @@ private fun TodoEditDialog(
                         label = { Text("备注", fontSize = 12.sp) },
                         minLines = 2,
                         maxLines = 4,
+                        readOnly = readOnly,
                         modifier = Modifier.fillMaxWidth()
                     )
                     // 备注图片单独展示：缩略图 + 删除 + 上传，点击预览大图
                     NotesImageStrip(
                         images = images,
-                        canEdit = todoId != null,
+                        canEdit = !readOnly && todoId != null,
                         onRemove = { rel -> images = images - rel },
                         onAdd = { pickImage.launch("image/*") }
                     )
@@ -495,8 +517,8 @@ private fun TodoEditDialog(
                             date?.format(DateFmt) ?: "未设置",
                             Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(GreenTint)
-                                .clickable {
+                            .background(GreenTint)
+                            .clickable(enabled = !readOnly) {
                                     val base = date ?: LocalDate.now()
                                     val picker = DatePickerDialog(
                                         context,
@@ -516,7 +538,7 @@ private fun TodoEditDialog(
                             color = GreenHover,
                             fontSize = 12.sp
                         )
-                        if (date != null) {
+                        if (date != null && !readOnly) {
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "清除",
@@ -532,15 +554,17 @@ private fun TodoEditDialog(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = {
-                        // 文本、图片均未变则保留原始 HTML（不丢失 Mac 端格式）；有变化才用「纯文本 + 图片」重组
-                        val finalNotes = if (notes == initialText && images == initialImages) initialNotes
-                            else notesToHtml(notes, images)
-                        onConfirm(taskTitle.trim(), finalNotes, date)
-                    }) {
-                        Text(confirmLabel, color = GreenHover, fontWeight = FontWeight.SemiBold)
+                    if (!readOnly) {
+                        TextButton(onClick = {
+                            // 文本、图片均未变则保留原始 HTML（不丢失 Mac 端格式）；有变化才用「纯文本 + 图片」重组
+                            val finalNotes = if (notes == initialText && images == initialImages) initialNotes
+                                else notesToHtml(notes, images)
+                            onConfirm(taskTitle.trim(), finalNotes, date)
+                        }) {
+                            Text(confirmLabel, color = GreenHover, fontWeight = FontWeight.SemiBold)
+                        }
                     }
-                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+                    TextButton(onClick = onDismiss) { Text(if (readOnly) "关闭" else "取消", color = TextSecondary) }
                 }
             }
         }
@@ -591,6 +615,7 @@ private fun NotesImageStrip(
             images.forEach { rel ->
                 NotesThumbnail(
                     relPath = rel,
+                    showRemove = canEdit,
                     onRemove = { onRemove(rel) },
                     onClick = { preview = rel }
                 )
@@ -606,7 +631,12 @@ private fun NotesImageStrip(
 }
 
 @Composable
-private fun NotesThumbnail(relPath: String, onRemove: () -> Unit, onClick: () -> Unit) {
+private fun NotesThumbnail(
+    relPath: String,
+    showRemove: Boolean = true,
+    onRemove: () -> Unit,
+    onClick: () -> Unit
+) {
     val bmp = rememberImageBitmap(relPath, maxDim = 360)
     Box(
         Modifier
@@ -621,18 +651,20 @@ private fun NotesThumbnail(relPath: String, onRemove: () -> Unit, onClick: () ->
         } else {
             Text("无法加载", fontSize = 8.sp, color = TextQuaternary)
         }
-        // 右上角删除按钮：往中间收一点、缩小，避免压住图片过多
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (-2).dp, y = 2.dp)
-                .size(16.dp)
-                .clip(CircleShape)
-                .background(Color(0xCC000000))
-                .clickable(onClick = onRemove),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Close, contentDescription = "删除图片", tint = Color.White, modifier = Modifier.size(10.dp))
+        // 右上角删除按钮：往中间收一点、缩小，避免压住图片过多；只读态隐藏
+        if (showRemove) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-2).dp, y = 2.dp)
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xCC000000))
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "删除图片", tint = Color.White, modifier = Modifier.size(10.dp))
+            }
         }
     }
 }
