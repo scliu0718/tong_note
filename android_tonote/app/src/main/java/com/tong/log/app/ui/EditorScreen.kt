@@ -662,6 +662,28 @@ private fun buildEditorHtml(body: String): String {
         h2{font-size:20px;font-weight:700;margin:10px 0 5px}
         h3{font-size:18px;font-weight:600;margin:8px 0 4px}
         p{margin:0 0 8px}
+        /* 列表样式与 Mac 对齐：蓝色标记；Mac 以扁平 <li data-level="n"> 存层级，这里按层级缩进。
+           无序：一级实心 •，子级空心 ○；有序：1. → a. → i.（用 CSS 计数器逐级编号，标记不进正文 HTML） */
+        ul,ol{list-style:none;margin:0 0 4px;padding:0 0 0 8px}
+        /* min-height：空列表项（刚按回车）也要占一行，否则绝对定位的标记会叠到下一块上 */
+        li{position:relative;margin:0;padding-left:26px;line-height:1.3;min-height:1.3em}
+        li::before{position:absolute;left:4px;top:0;color:#2e7cf6;font-weight:400;line-height:inherit}
+        li[data-level="1"]{margin-left:28px}
+        li[data-level="2"]{margin-left:56px}
+        li[data-level="3"]{margin-left:84px}
+        li[data-level="4"]{margin-left:112px}
+        li[data-level="5"]{margin-left:140px}
+        li[data-level="6"]{margin-left:168px}
+        li[data-level="7"]{margin-left:196px}
+        /* 项目符号用 CSS 画圆而不用字形：实心 / 空心严格同大小，左缘也能和有序序号对齐 */
+        ul>li::before{content:"";box-sizing:border-box;width:7px;height:7px;border-radius:50%;background:#2e7cf6;border:1.2px solid #2e7cf6;left:5px;top:7px}
+        ul>li[data-level]::before,ul ul>li::before{background:transparent}
+        ol>li{counter-increment:n0;counter-reset:n1 n2}
+        ol>li::before{content:counter(n0) ".";left:4px}
+        ol>li[data-level="1"]{counter-increment:n1;counter-reset:n2}
+        ol>li[data-level="1"]::before{content:counter(n1,lower-alpha) "."}
+        ol>li[data-level="2"],ol>li[data-level="3"],ol>li[data-level="4"],ol>li[data-level="5"],ol>li[data-level="6"],ol>li[data-level="7"]{counter-increment:n2;counter-reset:none}
+        ol>li[data-level="2"]::before,ol>li[data-level="3"]::before,ol>li[data-level="4"]::before,ol>li[data-level="5"]::before,ol>li[data-level="6"]::before,ol>li[data-level="7"]::before{content:counter(n2,lower-roman) "."}
         blockquote{border-left:3px solid #1a9e5c;padding:4px 10px;margin:8px 0;color:#86868b;background:#f7faf8;}
         pre{background:#f5f5f7;padding:10px;border-radius:6px;font-family:monospace;white-space:pre-wrap;}
         img{max-width:100%;border-radius:6px;}
