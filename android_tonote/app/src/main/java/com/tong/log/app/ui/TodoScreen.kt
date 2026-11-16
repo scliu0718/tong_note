@@ -2,6 +2,10 @@ package com.tong.log.app.ui
 
 import android.app.DatePickerDialog
 import android.content.DialogInterface
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.File
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,7 +28,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -32,8 +39,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.tong.log.app.data.codec.ImagePathScanner
+import com.tong.log.app.data.codec.RichTextHTMLCodec
 import com.tong.log.app.data.model.Todo
 import com.tong.log.app.data.model.TodoStatus
+import com.tong.log.app.data.store.AttachmentStore
 import com.tong.log.app.data.store.TodoStore
 import com.tong.log.app.data.store.isOverdue
 import com.tong.log.app.ui.theme.*
@@ -292,9 +303,10 @@ private fun LazyListScope.todoGroup(
                     color = if (isDoneGroup) TextQuaternary else TextPrimary,
                     textDecoration = if (isDoneGroup) TextDecoration.LineThrough else TextDecoration.None
                 )
-                if (!t.notes.isBlank()) {
+                val snippet = todoNotesSnippet(t.notes)
+                if (snippet.isNotEmpty()) {
                     Spacer(Modifier.height(3.dp))
-                    Text(t.notes, fontSize = 11.sp, color = TextTertiary, maxLines = 2)
+                    Text(snippet, fontSize = 11.sp, color = TextTertiary, maxLines = 2)
                 }
                 if (t.plannedAt != null) {
                     Spacer(Modifier.height(3.dp))
@@ -406,7 +418,12 @@ private fun TodoEditDialog(
 ) {
     val context = LocalContext.current
     var taskTitle by remember { mutableStateOf(initialTitle) }
-    var notes by remember { mutableStateOf(initialNotes) }
+    // 备注在 Mac 端是富文本 HTML（<ol><li>1</li></ol>、<img src="attachments/...">），
+    // 这里拆成「纯文本 + 图片」两部分展示；保存时文本未改动则原样保留 HTML，
+    // 避免有损转换写坏 Mac 原稿。
+    val initialText = remember(initialNotes) { RichTextHTMLCodec.plainText(initialNotes) }
+    val images = remember(initialNotes) { ImagePathScanner.attachmentPaths(initialNotes) }
+    var notes by remember { mutableStateOf(initialText) }
     var date by remember { mutableStateOf(initialDate) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -442,6 +459,8 @@ private fun TodoEditDialog(
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    // 备注图片单独展示：缩略图，点击预览大图
+                    NotesImageStrip(images)
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("计划日期", fontSize = 12.sp, color = TextSecondary)
@@ -487,12 +506,128 @@ private fun TodoEditDialog(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = { onConfirm(taskTitle.trim(), notes.trim(), date) }) {
+                    TextButton(onClick = {
+                        // 文本未变则保留原始 HTML（不丢失 Mac 端格式）；变了才用「纯文本 + 图片」重组 HTML
+                        val finalNotes = if (notes == initialText) initialNotes
+                            else notesToHtml(notes, images)
+                        onConfirm(taskTitle.trim(), finalNotes, date)
+                    }) {
                         Text(confirmLabel, color = GreenHover, fontWeight = FontWeight.SemiBold)
                     }
                     TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
                 }
             }
         }
+    }
+}
+
+/** 列表里备注的摘要：剥标签取纯文本；只有图片时显示「图片」。 */
+private fun todoNotesSnippet(notes: String): String {
+    val text = RichTextHTMLCodec.visibleText(notes).replace('\n', ' ').trim()
+    if (text.isNotEmpty()) return text
+    if (ImagePathScanner.attachmentPaths(notes).isNotEmpty()) return "图片"
+    return ""
+}
+
+/** 把「纯文本 + 图片」重组成 HTML：文本每行一段 <p>，图片逐个 <img>。 */
+private fun notesToHtml(text: String, images: List<String>): String {
+    val sb = StringBuilder()
+    RichTextHTMLCodec.escapeText(text)
+        .split('\n')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .forEach { line -> sb.append("<p>").append(line).append("</p>") }
+    images.forEach { rel ->
+        sb.append("<img src=\"").append(RichTextHTMLCodec.escapeAttribute(rel)).append("\">")
+    }
+    return sb.toString()
+}
+
+/** 备注图片缩略图区：默认缩略图，点击预览大图。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NotesImageStrip(images: List<String>) {
+    if (images.isEmpty()) return
+    var preview by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxWidth()) {
+        Text("图片", fontSize = 12.sp, color = TextSecondary)
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            images.forEach { rel ->
+                NotesThumbnail(rel) { preview = rel }
+            }
+        }
+    }
+    preview?.let { rel ->
+        ImageViewerDialog(rel, onDismiss = { preview = null })
+    }
+}
+
+@Composable
+private fun NotesThumbnail(relPath: String, onClick: () -> Unit) {
+    val bmp = rememberImageBitmap(relPath, maxDim = 360)
+    Box(
+        Modifier
+            .size(78.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFF0F0F2))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bmp != null) {
+            Image(bmp, contentDescription = "备注图片", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Text("无法加载", fontSize = 9.sp, color = TextQuaternary)
+        }
+    }
+}
+
+/** 全屏预览大图，点击任意处关闭。 */
+@Composable
+private fun ImageViewerDialog(relPath: String, onDismiss: () -> Unit) {
+    val bmp = rememberImageBitmap(relPath, maxDim = 2048)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xE6000000))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            if (bmp != null) {
+                Image(bmp, contentDescription = "图片预览", modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
+            } else {
+                Text("图片无法加载", color = Color.White, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+/** 按需解码本地图片并缓存为 ImageBitmap，按 maxDim 降采样避免大图 OOM。 */
+@Composable
+private fun rememberImageBitmap(relPath: String, maxDim: Int): ImageBitmap? {
+    return remember(relPath, maxDim) {
+        decodeImage(AttachmentStore.absoluteFile(relPath).absolutePath, maxDim)?.asImageBitmap()
+    }
+}
+
+private fun decodeImage(path: String, maxDim: Int): Bitmap? {
+    val f = File(path)
+    if (!f.exists()) return null
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.absolutePath, bounds)
+        var sample = 1
+        while (bounds.outWidth / sample > maxDim || bounds.outHeight / sample > maxDim) sample *= 2
+        BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
+    } catch (e: Exception) {
+        null
     }
 }
