@@ -1,6 +1,8 @@
 package com.tong.log.app.data.sync
 
 import com.tong.log.app.data.model.SyncCursor
+import com.tong.log.app.data.model.Todo
+import com.tong.log.app.data.model.TodoStatus
 import java.time.Instant
 
 /**
@@ -69,4 +71,73 @@ object SyncRules {
         }
         return SyncStep.Conflict
     }
+
+    // ---------- 任务字段三方合并（与 Mac 端 SyncRules.mergeTodos 语义一致） ----------
+
+    sealed interface TodoMergeResult {
+        data class Merged(val todo: Todo) : TodoMergeResult
+        data object Unresolved : TodoMergeResult
+    }
+
+    fun mergeTodos(base: Todo?, local: Todo, remote: Todo): TodoMergeResult {
+        if (base == null || !local.id.equals(remote.id, ignoreCase = true)) return TodoMergeResult.Unresolved
+        if (local.notes != base.notes && remote.notes != base.notes && local.notes != remote.notes) {
+            return TodoMergeResult.Unresolved
+        }
+        val remoteNewer = remoteWins(local.updatedAt, remote.updatedAt)
+        val merged = base.copy(
+            id = local.id,
+            createdAt = base.createdAt,
+            title = threeWay(local.title, remote.title, base.title) {
+                if (remoteNewer) remote.title else local.title
+            },
+            notes = threeWay(local.notes, remote.notes, base.notes) { local.notes },
+            status = threeWay(local.status, remote.status, base.status) {
+                mergeStatus(local.status, remote.status)
+            },
+            plannedAt = threeWay(local.plannedAt, remote.plannedAt, base.plannedAt) {
+                pickDate(local.plannedAt, remote.plannedAt, !remoteNewer)
+            },
+            startedAt = threeWay(local.startedAt, remote.startedAt, base.startedAt) {
+                pickDate(local.startedAt, remote.startedAt, !remoteNewer)
+            },
+            completedAt = threeWay(local.completedAt, remote.completedAt, base.completedAt) {
+                pickDate(local.completedAt, remote.completedAt, !remoteNewer)
+            },
+            order = threeWay(local.order, remote.order, base.order) {
+                if (remoteNewer) remote.order else local.order
+            },
+            purged = local.purged || remote.purged,
+            rev = maxOf(local.rev, remote.rev),
+            updatedAt = laterOf(local.updatedAt, remote.updatedAt)
+        )
+        return TodoMergeResult.Merged(merged)
+    }
+
+    private fun <T> threeWay(local: T, remote: T, base: T, bothChanged: () -> T): T = when {
+        local == remote -> local
+        local == base -> remote
+        remote == base -> local
+        else -> bothChanged()
+    }
+
+    private fun mergeStatus(local: String, remote: String): String {
+        if (local == TodoStatus.TERMINATED || remote == TodoStatus.TERMINATED) return TodoStatus.TERMINATED
+        fun rank(s: String) = when (s) {
+            TodoStatus.DOING -> 1
+            TodoStatus.DONE -> 2
+            else -> 0
+        }
+        return if (rank(local) >= rank(remote)) local else remote
+    }
+
+    private fun pickDate(local: String?, remote: String?, localNewer: Boolean): String? = when {
+        local == null -> remote
+        remote == null -> local
+        else -> if (localNewer) local else remote
+    }
+
+    private fun laterOf(a: String, b: String): String = runCatching {
+        if (Instant.parse(a).isBefore(Instant.parse(b))) b else a
+    }.getOrDefault(maxOf(a, b))
 }

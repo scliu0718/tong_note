@@ -210,6 +210,10 @@ public enum RichTextHTMLCodec {
                 return listBlocks(children, style: .orderedItem)
             case "br":
                 return []
+            case "img":
+                // 块级位置的 <img>（如 Android 端写成 `<p>文字</p><img ...>`）不能丢，单独成段显示
+                return [RichTextBlock(style: .paragraph,
+                                      runs: inlineRuns([node], context: InlineContext()))]
             default:
                 var result: [RichTextBlock] = []
                 for child in children {

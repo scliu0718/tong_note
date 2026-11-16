@@ -12,17 +12,21 @@ public struct SyncCursor: Codable, Equatable, Sendable {
     public var serverMtime: Int?
     public var dirty: Bool
     public var uploadedAttachments: [String]
+    /// 上次同步成功时的任务快照，供字段三方合并。笔记对照表不写这个字段。
+    public var baseTodo: Todo?
 
     public init(baseRev: Int = 0,
                 baseUpdatedAt: Date? = nil,
                 serverMtime: Int? = nil,
                 dirty: Bool = true,
-                uploadedAttachments: [String] = []) {
+                uploadedAttachments: [String] = [],
+                baseTodo: Todo? = nil) {
         self.baseRev = baseRev
         self.baseUpdatedAt = baseUpdatedAt
         self.serverMtime = serverMtime
         self.dirty = dirty
         self.uploadedAttachments = uploadedAttachments
+        self.baseTodo = baseTodo
     }
 
     public static let unsynced = SyncCursor()
@@ -86,6 +90,75 @@ public enum SyncRules {
     public static func remoteWins(localUpdatedAt: Date, remoteUpdatedAt: Date) -> Bool {
         remoteUpdatedAt >= localUpdatedAt
     }
+
+    /// 任务字段三方合并。没有祖先快照，或两边都改了备注，合不了。
+    public static func mergeTodos(base: Todo?, local: Todo, remote: Todo) -> TodoMergeResult {
+        guard let base, local.id == remote.id else { return .unresolved }
+        let localNotesChanged = local.notes != base.notes
+        let remoteNotesChanged = remote.notes != base.notes
+        if localNotesChanged, remoteNotesChanged, local.notes != remote.notes {
+            return .unresolved
+        }
+
+        var merged = base
+        merged.id = local.id
+        merged.createdAt = base.createdAt
+        merged.title = threeWay(local.title, remote.title, base.title) {
+            remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt)
+                ? remote.title : local.title
+        }
+        merged.notes = threeWay(local.notes, remote.notes, base.notes) { local.notes }
+        merged.status = threeWay(local.status, remote.status, base.status) {
+            mergeStatus(local.status, remote.status)
+        }
+        merged.plannedAt = threeWay(local.plannedAt, remote.plannedAt, base.plannedAt) {
+            pickDate(local: local.plannedAt, remote: remote.plannedAt,
+                     localNewer: !remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt))
+        }
+        merged.startedAt = threeWay(local.startedAt, remote.startedAt, base.startedAt) {
+            pickDate(local: local.startedAt, remote: remote.startedAt,
+                     localNewer: !remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt))
+        }
+        merged.completedAt = threeWay(local.completedAt, remote.completedAt, base.completedAt) {
+            pickDate(local: local.completedAt, remote: remote.completedAt,
+                     localNewer: !remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt))
+        }
+        merged.order = threeWay(local.order, remote.order, base.order) {
+            remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt)
+                ? remote.order : local.order
+        }
+        merged.purged = local.purged || remote.purged
+        merged.rev = max(local.rev, remote.rev)
+        merged.updatedAt = max(local.updatedAt, remote.updatedAt)
+        return .merged(merged)
+    }
+
+    private static func threeWay<T: Equatable>(_ local: T, _ remote: T, _ base: T,
+                                               bothChanged: () -> T) -> T {
+        if local == remote { return local }
+        if local == base { return remote }
+        if remote == base { return local }
+        return bothChanged()
+    }
+
+    private static func mergeStatus(_ local: TodoStatus, _ remote: TodoStatus) -> TodoStatus {
+        if local == .terminated || remote == .terminated { return .terminated }
+        let rank: [TodoStatus: Int] = [.todo: 0, .doing: 1, .done: 2]
+        let left = rank[local] ?? 0
+        let right = rank[remote] ?? 0
+        return left >= right ? local : remote
+    }
+
+    private static func pickDate(local: Date?, remote: Date?, localNewer: Bool) -> Date? {
+        if local == nil { return remote }
+        if remote == nil { return local }
+        return localNewer ? local : remote
+    }
+}
+
+public enum TodoMergeResult: Equatable {
+    case merged(Todo)
+    case unresolved
 }
 
 public enum UploadChunks {

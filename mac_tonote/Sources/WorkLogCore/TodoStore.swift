@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 /// 任务状态（四态，对应「待完成 / 进行中 / 已完成 / 终止」）。
-public enum TodoStatus: String, Codable, CaseIterable {
+public enum TodoStatus: String, Codable, CaseIterable, Sendable {
     case todo, doing, done, terminated
 
     public var label: String {
@@ -16,7 +16,7 @@ public enum TodoStatus: String, Codable, CaseIterable {
 }
 
 /// 一条任务：规划条目 + 完成状态 + 计划/完成时间 + 备注。
-public struct Todo: Identifiable, Codable, Hashable {
+public struct Todo: Identifiable, Codable, Hashable, Sendable {
     public var id: UUID
     public var title: String
     public var notes: String
@@ -276,7 +276,9 @@ public final class TodoStore: ObservableObject {
         } else {
             todos.append(todo)
         }
-        cursors.set(cursor, for: todo.id)
+        var stored = cursor
+        stored.baseTodo = todo
+        cursors.set(stored, for: todo.id)
         save()
     }
 

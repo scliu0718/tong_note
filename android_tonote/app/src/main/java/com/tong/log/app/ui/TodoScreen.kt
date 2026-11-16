@@ -12,6 +12,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -32,6 +34,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -417,6 +424,41 @@ private fun TodoDeleteDialog(title: String, onDismiss: () -> Unit, onConfirm: ()
     }
 }
 
+/**
+ * 限高 + 可滚动 + 右侧滚动条：内容超过 [maxHeight] 时才出现滚动条。
+ * 输入框本身不限行数、随内容长高，由外层滚动，光标移动时外层会自动跟随。
+ */
+@Composable
+private fun ScrollableField(maxHeight: Dp, content: @Composable () -> Unit) {
+    val state = rememberScrollState()
+    val thumbColor = TextQuaternary
+    Box(
+        Modifier
+            .heightIn(max = maxHeight)
+            .drawWithContent {
+                drawContent()
+                val max = state.maxValue
+                if (max > 0) {
+                    // 滚动条画在输入框边框内侧：上方让出浮动标签的半高，右侧让出边框和内边距
+                    val inTop = 12.dp.toPx()
+                    val inBottom = 6.dp.toPx()
+                    val inRight = 4.dp.toPx()
+                    val track = (size.height - inTop - inBottom).coerceAtLeast(1f)
+                    val thumbH = (track * size.height / (size.height + max)).coerceAtLeast(24.dp.toPx()).coerceAtMost(track)
+                    val top = inTop + state.value.toFloat() / max * (track - thumbH)
+                    val w = 2.dp.toPx()
+                    drawRoundRect(
+                        color = thumbColor,
+                        topLeft = Offset(size.width - w - inRight, top),
+                        size = Size(w, thumbH),
+                        cornerRadius = CornerRadius(w / 2, w / 2)
+                    )
+                }
+            }
+            .verticalScroll(state)
+    ) { content() }
+}
+
 /** 自绘紧凑对话框：标题 / 备注 / 计划日期，避免 M3 AlertDialog 的固定大 padding。 */
 @Composable
 private fun TodoEditDialog(
@@ -484,24 +526,27 @@ private fun TodoEditDialog(
                         )
                         Spacer(Modifier.height(8.dp))
                     }
-                    OutlinedTextField(
-                        value = taskTitle,
-                        onValueChange = { taskTitle = it },
-                        label = { Text("标题", fontSize = 12.sp) },
-                        singleLine = true,
-                        readOnly = readOnly,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // 标题过长时自动换行，超过最大高度后可滚动并显示滚动条
+                    ScrollableField(maxHeight = 96.dp) {
+                        OutlinedTextField(
+                            value = taskTitle,
+                            onValueChange = { taskTitle = it.replace("\n", "") },
+                            label = { Text("标题", fontSize = 12.sp) },
+                            readOnly = readOnly,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("备注", fontSize = 12.sp) },
-                        minLines = 2,
-                        maxLines = 4,
-                        readOnly = readOnly,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    ScrollableField(maxHeight = 140.dp) {
+                        OutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it },
+                            label = { Text("备注", fontSize = 12.sp) },
+                            minLines = 2,
+                            readOnly = readOnly,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     // 备注图片单独展示：缩略图 + 删除 + 上传，点击预览大图
                     NotesImageStrip(
                         images = images,
@@ -571,12 +616,10 @@ private fun TodoEditDialog(
     }
 }
 
-/** 列表里备注的摘要：剥标签取纯文本；只有图片时显示「图片」。 */
+/** 列表里备注的摘要：剥标签取纯文本；有图片时在文字后加「[图片]」，与 Mac 端一致。 */
 private fun todoNotesSnippet(notes: String): String {
     val text = RichTextHTMLCodec.visibleText(notes).replace('\n', ' ').trim()
-    if (text.isNotEmpty()) return text
-    if (ImagePathScanner.attachmentPaths(notes).isNotEmpty()) return "图片"
-    return ""
+    return if (ImagePathScanner.attachmentPaths(notes).isNotEmpty()) "$text[图片]" else text
 }
 
 /** 把「纯文本 + 图片」重组成 HTML：文本每行一段 <p>，图片逐个 <img>。 */
@@ -588,7 +631,8 @@ private fun notesToHtml(text: String, images: List<String>): String {
         .filter { it.isNotEmpty() }
         .forEach { line -> sb.append("<p>").append(line).append("</p>") }
     images.forEach { rel ->
-        sb.append("<img src=\"").append(RichTextHTMLCodec.escapeAttribute(rel)).append("\">")
+        // 图片必须包在 <p> 里：Mac / Windows 解码器不认块级位置的裸 <img>，会整张丢掉
+        sb.append("<p><img src=\"").append(RichTextHTMLCodec.escapeAttribute(rel)).append("\"></p>")
     }
     return sb.toString()
 }

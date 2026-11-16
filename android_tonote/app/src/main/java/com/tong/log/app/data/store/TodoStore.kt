@@ -48,7 +48,7 @@ object TodoStore {
     private fun markChanged(ids: List<String>) {
         if (ids.isEmpty()) return
         ids.forEach { SyncCursorStore.markDirty(it, true) }
-        runCatching { SyncEngine.schedule() }
+        runCatching { SyncEngine.scheduleTodoUpload(ids) }
     }
 
     fun load() {

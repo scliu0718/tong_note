@@ -1,6 +1,8 @@
 package com.tong.log.app.data.sync
 
 import com.tong.log.app.data.model.SyncCursor
+import com.tong.log.app.data.model.Todo
+import com.tong.log.app.data.model.TodoStatus
 import com.tong.log.app.data.sync.SyncRules.SyncStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -380,5 +382,62 @@ class SyncRulesTest {
             cursor = cursor
         )
         assertEquals(SyncStep.Conflict, step)
+    }
+
+    // ---------- 任务字段合并 ----------
+
+    private fun todo(
+        notes: String = "", status: String = TodoStatus.TODO, title: String = "任务",
+        plannedAt: String? = null, rev: Long = 1, updatedAt: String = "2026-01-01T00:00:00Z",
+        purged: Boolean = false
+    ) = Todo(
+        id = "A", title = title, notes = notes, status = status, plannedAt = plannedAt,
+        createdAt = "2026-01-01T00:00:00Z", updatedAt = updatedAt, rev = rev, purged = purged
+    )
+
+    @Test
+    fun todoMergeTakesRemoteNotesAndLocalStatus() {
+        val base = todo()
+        val local = todo(status = TodoStatus.DONE, rev = 1, updatedAt = "2026-01-02T00:00:00Z")
+        val remote = todo(notes = "远端备注", rev = 2, updatedAt = "2026-01-03T00:00:00Z")
+        val r = SyncRules.mergeTodos(base, local, remote) as SyncRules.TodoMergeResult.Merged
+        assertEquals("远端备注", r.todo.notes)
+        assertEquals(TodoStatus.DONE, r.todo.status)
+        assertEquals(2L, r.todo.rev)
+        assertEquals("2026-01-03T00:00:00Z", r.todo.updatedAt)
+    }
+
+    @Test
+    fun todoMergeBothNotesStayUnresolved() {
+        val base = todo(notes = "a")
+        val r = SyncRules.mergeTodos(base, todo(notes = "b"), todo(notes = "c"))
+        assertEquals(SyncRules.TodoMergeResult.Unresolved, r)
+    }
+
+    @Test
+    fun todoMergeWithoutSnapshotStaysUnresolved() {
+        assertEquals(SyncRules.TodoMergeResult.Unresolved, SyncRules.mergeTodos(null, todo(), todo()))
+    }
+
+    @Test
+    fun todoMergePrefersFurtherStatusAndTombstone() {
+        val base = todo()
+        val local = todo(status = TodoStatus.DOING, purged = true)
+        val remote = todo(status = TodoStatus.DONE)
+        val r = SyncRules.mergeTodos(base, local, remote) as SyncRules.TodoMergeResult.Merged
+        assertEquals(TodoStatus.DONE, r.todo.status)
+        assertTrue(r.todo.purged)
+        val t = SyncRules.mergeTodos(base, todo(status = TodoStatus.TERMINATED), remote) as SyncRules.TodoMergeResult.Merged
+        assertEquals(TodoStatus.TERMINATED, t.todo.status)
+    }
+
+    @Test
+    fun todoMergeDeadlineTakesTheSideThatSetIt() {
+        val base = todo()
+        val local = todo(plannedAt = "2026-02-01T12:00:00Z")
+        val remote = todo(title = "新标题")
+        val r = SyncRules.mergeTodos(base, local, remote) as SyncRules.TodoMergeResult.Merged
+        assertEquals("2026-02-01T12:00:00Z", r.todo.plannedAt)
+        assertEquals("新标题", r.todo.title)
     }
 }

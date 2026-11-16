@@ -207,7 +207,7 @@ struct NoteListView: View {
     }
 
     private var syncButton: some View {
-        Button(action: { Task { await sync.quickSync(store: store, todos: todos) } }) {
+        Button(action: { Task { await sync.request(.notes, store: store, todos: todos) } }) {
             HStack(spacing: 5) {
                 if sync.status.isSyncing {
                     ProgressView()
@@ -231,7 +231,6 @@ struct NoteListView: View {
             .clipShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
-        .disabled(sync.status.isSyncing)
     }
 }
 

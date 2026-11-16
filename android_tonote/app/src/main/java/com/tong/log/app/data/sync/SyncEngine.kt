@@ -41,8 +41,14 @@ object SyncEngine {
     val status: StateFlow<Status> = _status.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var scheduleJob: Job? = null
-    private var needsAnotherRound = false
+    private var notesUploadJob: Job? = null
+    private var todoUploadJob: Job? = null
+    private val pendingTodoIds = linkedSetOf<String>()
+    /** 同步进行中又来的请求：插队的放队首，普通的放队尾；`All` 覆盖其余范围。仅主线程访问。 */
+    private val pending = ArrayDeque<SyncScope>()
+
+    /** 笔记 / 快同步：改完最多等 30 秒上传一次（节流，不是防抖）。 */
+    private const val NOTES_UPLOAD_INTERVAL_MS = 30_000L
 
     private val notesDir = "${BaiduPanConfig.REMOTE_ROOT}/notes"
     private val todosDir = "${BaiduPanConfig.REMOTE_ROOT}/todos"
@@ -54,41 +60,141 @@ object SyncEngine {
 
     // ---------- 触发 ----------
 
-    fun schedule() {
-        scheduleJob?.cancel()
-        scheduleJob = scope.launch {
-            delay(1500)
-            syncRound()
+    /** 笔记 / 快同步改动后调用：30 秒内最多传一次；离开笔记时用 [flushNotes] 立刻传。 */
+    fun scheduleNotesUpload() {
+        if (notesUploadJob?.isActive == true) return
+        notesUploadJob = scope.launch {
+            delay(NOTES_UPLOAD_INTERVAL_MS)
+            request(SyncScope.DirtyNotes, priority = false)
         }
     }
 
-    suspend fun syncRound() {
+    /** 离开笔记 / 退到后台：取消 30 秒计时，立刻上传改过的笔记。 */
+    suspend fun flushNotes() {
+        notesUploadJob?.cancel()
+        notesUploadJob = null
+        request(SyncScope.DirtyNotes, priority = false)
+    }
+
+    /** 离开编辑器时用：页面协程会随返回被取消，所以放到引擎自己的作用域里等落盘后再传。 */
+    fun flushNotesSoon(delayMs: Long = 400) {
+        scope.launch {
+            delay(delayMs)
+            flushNotes()
+        }
+    }
+
+    /**
+     * 任务保存后立刻只上传这几条。
+     * 300ms 只用来合并同一次保存里连续的几个字段写入（标题 / 备注 / 日期各写一次），不是防抖等待。
+     */
+    fun scheduleTodoUpload(ids: List<String>) {
+        pendingTodoIds.addAll(ids)
+        todoUploadJob?.cancel()
+        todoUploadJob = scope.launch {
+            delay(300)
+            val batch = pendingTodoIds.toList()
+            pendingTodoIds.clear()
+            // 另起协程：之后再来的保存只取消上面的 300ms 等待，不会中断正在跑的上传
+            scope.launch { batch.forEach { request(SyncScope.OneTodo(it), priority = false) } }
+        }
+    }
+
+    suspend fun syncRound() = request(SyncScope.All, priority = false)
+
+    suspend fun syncSingleNote(noteId: String) = request(SyncScope.OneNote(noteId))
+
+    /**
+     * 请求同步某个范围。空闲时立刻跑；正在同步时排进队列（`priority` 为 true 则插到队首，
+     * 比定时轮、普通请求都先跑）。队列里已有 `All` 时其余范围被它覆盖，新来 `All` 会清掉其余范围。
+     */
+    suspend fun request(target: SyncScope, priority: Boolean = true) {
         if (_status.value.isSyncing) {
-            needsAnotherRound = true
+            enqueue(target, priority)
             return
         }
+        run(target)
+        while (pending.isNotEmpty()) run(pending.removeFirst())
+    }
+
+    private fun enqueue(target: SyncScope, front: Boolean) {
+        if (SyncScope.All in pending) return
+        if (target == SyncScope.All) {
+            pending.clear(); pending.addLast(target); return
+        }
+        pending.remove(target)
+        if (front) pending.addFirst(target) else pending.addLast(target)
+    }
+
+    private fun hasDirtyNotes(): Boolean =
+        NoteStore.notes.value.any { SyncCursorStore.cursor(it.id, false)?.dirty == true }
+
+    private fun hasDirtyTodos(): Boolean =
+        TodoStore.todos.value.any { SyncCursorStore.cursor(it.id, true)?.dirty == true }
+
+    private suspend fun run(target: SyncScope) {
+        // 只传「改过的」且当前没有可传内容时，不动状态、不发请求
+        if (target == SyncScope.DirtyNotes && !hasDirtyNotes()) return
+        if (target == SyncScope.DirtyTodos && !hasDirtyTodos()) return
+        if (target is SyncScope.OneTodo && SyncCursorStore.cursor(target.id, true)?.dirty != true) return
+
         _status.value = Status(state = "syncing", lastMessage = "", lastSyncDate = _status.value.lastSyncDate)
         var kicked = false
-        debugLog("同步开始")
+        debugLog("同步开始 $target")
         try {
             val token = BaiduPanClient.validToken()
             DeviceRegistry.ensureNotKicked(token)
-            migrateNotesIfNeeded(token)
-            val (noteCount, noteFailed) = syncNotes(token)
-            val localNotes = NoteStore.notes.value.size
-            runCatching { syncNotebooks(token) }
-                .onFailure { debugLog("笔记本同步失败：${it.message}") }
-            val (todoCount, todoFailed) = syncTodos(token)
+            var noteCount = 0
+            var noteFailed = 0
+            var todoCount = 0
+            var todoFailed = 0
+            var message: String? = null
+            fun notes(r: Pair<Int, Int>) { noteCount = r.first; noteFailed = r.second }
+            fun todos(r: Pair<Int, Int>) { todoCount = r.first; todoFailed = r.second }
+            when (target) {
+                SyncScope.All -> {
+                    migrateNotesIfNeeded(token)
+                    notes(syncNotes(token))
+                    runCatching { syncNotebooks(token) }.onFailure { debugLog("笔记本同步失败：${it.message}") }
+                    todos(syncTodos(token))
+                    message = "笔记 $noteCount 篇 · 任务 $todoCount 条"
+                }
+                SyncScope.Notes -> {
+                    migrateNotesIfNeeded(token)
+                    notes(syncNotes(token))
+                    runCatching { syncNotebooks(token) }.onFailure { debugLog("笔记本同步失败：${it.message}") }
+                    message = "已同步笔记 $noteCount 篇"
+                }
+                is SyncScope.OneNote -> {
+                    notes(syncNotes(token, onlyNoteId = target.id))
+                    message = "已同步本篇"
+                }
+                SyncScope.DirtyNotes -> {
+                    notes(syncNotes(token, dirtyOnly = true))
+                    message = "已上传笔记"
+                }
+                SyncScope.Todos -> {
+                    todos(syncTodos(token))
+                    message = "已同步任务"
+                }
+                SyncScope.DirtyTodos -> {
+                    todos(syncTodos(token, dirtyOnly = true))
+                    message = "已上传任务"
+                }
+                is SyncScope.OneTodo -> {
+                    todos(syncTodos(token, onlyTodoId = target.id))
+                    message = "已上传任务"
+                }
+            }
             val failed = noteFailed + todoFailed
             _status.value = Status(
                 state = if (failed > 0) "failed" else "success",
-                lastMessage = if (failed > 0) "$failed 篇未同步，下一轮自动重试"
-                else "笔记 $noteCount 篇 · 任务 $todoCount 条",
+                lastMessage = if (failed > 0) "$failed 篇未同步，下一轮自动重试" else message ?: "",
                 lastSyncDate = Iso8601.now()
             )
             debugLog(
-                if (failed > 0) "同步部分失败 笔记成功 $noteCount / 失败 $noteFailed · 任务失败 $todoFailed / 本地 $localNotes 篇"
-                else "同步成功 处理笔记 $noteCount 篇 / 本地 $localNotes 篇"
+                if (failed > 0) "同步部分失败 $target 笔记失败 $noteFailed · 任务失败 $todoFailed"
+                else "同步成功 $target"
             )
         } catch (e: DeviceKickedException) {
             kicked = true
@@ -98,10 +204,7 @@ object SyncEngine {
             _status.value = Status(state = "failed", lastMessage = e.message ?: "同步失败", lastSyncDate = _status.value.lastSyncDate)
             debugLog("同步失败：${e.javaClass.simpleName} ${e.message}")
         }
-        if (needsAnotherRound && !kicked) {
-            needsAnotherRound = false
-            syncRound()
-        }
+        if (kicked) pending.clear()
     }
 
     /**
@@ -136,29 +239,19 @@ object SyncEngine {
         }
     }
 
-    suspend fun syncSingleNote(noteId: String) {
-        if (_status.value.isSyncing) {
-            needsAnotherRound = true
-            return
-        }
-        _status.value = Status(state = "syncing", lastMessage = "", lastSyncDate = _status.value.lastSyncDate)
-        try {
-            val token = BaiduPanClient.validToken()
-            DeviceRegistry.ensureNotKicked(token)
-            val remoteMtimes = BaiduPanClient.listJsonFiles(notesDir, token)
-            syncOneNote(noteId, remoteMtimes[noteId.uppercase()], token)
-            _status.value = Status(state = "success", lastMessage = "已同步本篇", lastSyncDate = Iso8601.now())
-        } catch (e: Exception) {
-            _status.value = Status(state = "failed", lastMessage = e.message ?: "同步失败", lastSyncDate = _status.value.lastSyncDate)
-        }
-    }
-
     // ---------- 笔记同步 ----------
 
     /** 返回 Pair(成功篇数, 失败篇数)。失败篇会留到下一轮重试，绝不静默算成功。 */
-    private suspend fun syncNotes(token: String): Pair<Int, Int> {
+    private suspend fun syncNotes(
+        token: String, onlyNoteId: String? = null, dirtyOnly: Boolean = false
+    ): Pair<Int, Int> {
         val remoteMtimes = BaiduPanClient.listJsonFiles(notesDir, token)
-        val ids = (NoteStore.notes.value.map { it.id } + remoteMtimes.keys).distinct()
+        var ids = (NoteStore.notes.value.map { it.id } + remoteMtimes.keys).distinct()
+        if (onlyNoteId != null) ids = ids.filter { it.equals(onlyNoteId, ignoreCase = true) }
+        if (dirtyOnly) {
+            // 只处理本机改过、还没上传的笔记；别端变化留给打开笔记时的拉取和定时全量轮
+            ids = ids.filter { NoteStore.note(it) != null && SyncCursorStore.cursor(it, false)?.dirty == true }
+        }
         var done = 0
         var failed = 0
         for (id in ids) {
@@ -311,7 +404,8 @@ object SyncEngine {
         downloadAttachmentsFor(remote.notes, remote.id, token)
         TodoStore.upsert(remote)
         SyncCursorStore.set(
-            SyncCursor(remote.rev, remote.updatedAt, serverMtime, false),
+            SyncCursor(remote.rev, remote.updatedAt, serverMtime, false,
+                attachmentPaths(remote.notes), baseTodo = remote),
             remote.id, true
         )
     }
@@ -342,9 +436,16 @@ object SyncEngine {
 
     // ---------- 任务同步 ----------
 
-    private suspend fun syncTodos(token: String): Pair<Int, Int> {
+    private suspend fun syncTodos(
+        token: String, dirtyOnly: Boolean = false, onlyTodoId: String? = null
+    ): Pair<Int, Int> {
         val remoteMtimes = BaiduPanClient.listJsonFiles(todosDir, token)
-        val ids = (TodoStore.todos.value.map { it.id } + remoteMtimes.keys).distinct()
+        var ids = (TodoStore.todos.value.map { it.id } + remoteMtimes.keys).distinct()
+        if (dirtyOnly) {
+            // 只处理本机改过、还没上传的任务；别端的变化留给全量轮拉取
+            ids = ids.filter { TodoStore.todo(it) != null && SyncCursorStore.cursor(it, true)?.dirty == true }
+        }
+        if (onlyTodoId != null) ids = ids.filter { it.equals(onlyTodoId, ignoreCase = true) }
         var done = 0
         var failed = 0
         for (id in ids) {
@@ -384,7 +485,10 @@ object SyncEngine {
         )) {
             is SyncRules.SyncStep.RememberMtime -> {
                 if (serverMtime != null) {
-                    SyncCursorStore.set((cursor ?: SyncCursor()).copy(serverMtime = serverMtime), id, true)
+                    SyncCursorStore.set(
+                        (cursor ?: SyncCursor()).copy(serverMtime = serverMtime, baseTodo = local ?: cursor?.baseTodo),
+                        id, true
+                    )
                 }
             }
             is SyncRules.SyncStep.UseRemote -> if (remoteTodo != null) {
@@ -397,17 +501,39 @@ object SyncEngine {
                     // 写回必须走 upsert（不标脏），否则会再触发一轮同步形成风暴
                     TodoStore.upsert(published)
                     SyncCursorStore.set(
-                        SyncCursor(published.rev, published.updatedAt, serverMtime, false), id, true
+                        SyncCursor(published.rev, published.updatedAt, serverMtime, false,
+                            attachmentPaths(published.notes), baseTodo = published),
+                        id, true
                     )
                 }
             }
             is SyncRules.SyncStep.Conflict -> {
                 if (local != null && remoteTodo != null) {
-                    if (SyncRules.remoteWins(local.updatedAt, remoteTodo.updatedAt)) {
+                    val merge = SyncRules.mergeTodos(cursor?.baseTodo, local, remoteTodo)
+                    if (merge is SyncRules.TodoMergeResult.Merged) {
+                        // 字段合并成功：在原 id 上以 max(rev)+1 写回，不产生冲突副本
+                        downloadAttachmentsFor(merge.todo.notes, merge.todo.id, token)
+                        val published = publishTodo(merge.todo, maxOf(local.rev, remoteTodo.rev) + 1, token)
+                        if (published != null) {
+                            TodoStore.upsert(published)
+                            SyncCursorStore.set(
+                                SyncCursor(published.rev, published.updatedAt, null, false,
+                                    attachmentPaths(published.notes), baseTodo = published),
+                                id, true
+                            )
+                        }
+                    } else if (SyncRules.remoteWins(local.updatedAt, remoteTodo.updatedAt)) {
                         applyRemoteTodo(remoteTodo, serverMtime, token)
                     } else {
                         val published = publishTodo(local, maxOf(local.rev, remoteTodo.rev) + 1, token)
-                        if (published != null) TodoStore.upsert(published)
+                        if (published != null) {
+                            TodoStore.upsert(published)
+                            SyncCursorStore.set(
+                                SyncCursor(published.rev, published.updatedAt, null, false,
+                                    attachmentPaths(published.notes), baseTodo = published),
+                                id, true
+                            )
+                        }
                     }
                 } else if (remoteTodo != null) {
                     applyRemoteTodo(remoteTodo, serverMtime, token)
@@ -422,6 +548,8 @@ object SyncEngine {
         var attempt = 0
         while (attempt < 3) {
             val toPublish = todo.copy(rev = rev)
+            // 先传备注图片再传任务 JSON：别端拉到任务时图片已经在云端（已传过的按 cursor 清单跳过）
+            if (!todo.purged) uploadAttachmentsFor(todo.notes, todo.id, token, true)
             val json = AppStorage.json.encodeToString(Todo.serializer(), toPublish).toByteArray()
             BaiduPanClient.uploadData(json, "$todosDir/${todo.id}.json", token)
             var back: Todo? = null

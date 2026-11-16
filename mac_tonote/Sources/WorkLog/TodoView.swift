@@ -19,7 +19,6 @@ struct TodoView: View {
     @State private var filter: Filter = .all
     @State private var showCalendar = false
     @State private var collapsed: Set<String> = []
-    @State private var autoSyncTask: Task<Void, Never>?
     @StateObject private var notesController = RichTextEditorController()
     /// 单一弹窗状态：多个 .alert 串在同一 SwiftUI 视图上时只有部分会生效，
     /// 因此「图片插入失败」与「删除任务二次确认」共用一个 alert。
@@ -156,8 +155,8 @@ struct TodoView: View {
     /// 与「快同步」一致的绿色同步按钮，触发全量同步（笔记 + 任务）。
     private var syncButton: some View {
         Button(action: {
-            autoSyncTask?.cancel()
-            Task { await sync.quickSync(store: noteStore, todos: store) }
+            // 只同步任务：先拉远端、有改动再上传；正在同步时插队到队首
+            Task { await sync.request(.todos, store: noteStore, todos: store) }
         }) {
             HStack(spacing: 4) {
                 if sync.status.isSyncing {
@@ -308,23 +307,23 @@ struct TodoView: View {
                 if todo.status != .done {
                     if showStart {
                         SmallActionButton(title: "开始", tint: Theme.textSecondary) {
-                            mutate { store.start(todo.id) }
+                            mutate(todo.id) { store.start(todo.id) }
                         }
                     }
                     if showComplete {
                         SmallActionButton(title: "完成", tint: Theme.accent) {
-                            mutate { store.complete(todo.id) }
+                            mutate(todo.id) { store.complete(todo.id) }
                         }
                     }
                 }
                 if showTerminate {
                     SmallActionButton(title: "终止", tint: Theme.textQuaternary) {
-                        mutate { store.terminate(todo.id) }
+                        mutate(todo.id) { store.terminate(todo.id) }
                     }
                 }
                 if showRestore {
                     SmallActionButton(title: "恢复", tint: Theme.accent) {
-                        mutate { store.restore(todo.id) }
+                        mutate(todo.id) { store.restore(todo.id) }
                     }
                 }
 
@@ -410,15 +409,17 @@ struct TodoView: View {
 
     /// 收起 / 保存：解除顺序冻结，让新的截止时间、备注等重新参与排序（置顶），并同步。
     private func finishEditing() {
+        let id = expandedID
         expandedID = nil
         frozenIDs = nil
         editingNotes = false
-        scheduleAutoSync()
+        // 保存 / 收起：立刻上传这一条任务
+        if let id { uploadNow(id) }
     }
 
     /// 删除后若该任务正展开，清掉展开 / 编辑态，避免详情区还引用已删除的任务。
     private func deleteTodo(_ id: UUID) {
-        mutate { store.remove(id) }
+        mutate(id) { store.remove(id) }
         if expandedID == id {
             expandedID = nil
             frozenIDs = nil
@@ -444,7 +445,7 @@ struct TodoView: View {
     private func checkbox(for todo: Todo) -> some View {
         let border: Color = todo.status == .doing ? Theme.amber
             : (todo.status == .done ? Theme.accent : Color(hex: 0xC7C7CC))
-        return Button(action: { mutate { store.toggleDone(todo.id) } }) {
+        return Button(action: { mutate(todo.id) { store.toggleDone(todo.id) } }) {
             ZStack {
                 if todo.status == .done {
                     Circle().fill(Theme.accent).frame(width: 17, height: 17)
@@ -593,7 +594,7 @@ struct TodoView: View {
         let on = todo.plannedAt != nil
         return Button(action: {
             guard !isReadOnly(todo) else { return }
-            mutate {
+            mutate(nil, upload: false) {
                 if var t = store.todo(with: todo.id) {
                     t.plannedAt = on ? nil : Date()
                     store.update(t)
@@ -664,8 +665,7 @@ struct TodoView: View {
         var c = DateComponents()
         c.year = y; c.month = m; c.day = d; c.hour = 12; c.minute = 0
         if let nd = Calendar.current.date(from: c) { t.plannedAt = nd }
-        store.update(t)
-        scheduleAutoSync()
+        store.update(t)   // 只标脏；点「保存」/收起/离开任务页时再上传
     }
 
     /// 紧凑版年月日步进框：与「设置截止时间」同排，不再独占一行。
@@ -705,8 +705,7 @@ struct TodoView: View {
             guard !isReadOnly(todo) else { return }
             guard var t = store.todo(with: todo.id), t.notes != newValue.body else { return }
             t.notes = newValue.body
-            store.update(t)
-            scheduleAutoSync()
+            store.update(t)   // 输入过程不上传，保存时才传
         })
     }
 
@@ -726,9 +725,9 @@ struct TodoView: View {
         let text = RichTextHTMLCodec.visibleText(notes)
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty { return text }
-        if !NoteAttachmentIndex.relativePaths(in: notes).isEmpty { return "图片" }
-        return ""
+        let hasImage = !NoteAttachmentIndex.relativePaths(in: notes).isEmpty
+        if hasImage { return text + "[图片]" }
+        return text
     }
 
     private func insertImage(into todo: Todo) {
@@ -743,30 +742,28 @@ struct TodoView: View {
         }
     }
 
-    // MARK: 自动同步
-    /// 用户操作触发任务变更后调用；同步写回（setTodos）不经过这里，避免循环。
-    private func mutate(_ action: () -> Void) {
+    // MARK: 同步
+    /// 状态流转 / 新增 / 删除这类「一步到位」的操作：改完立刻上传这一条任务。
+    /// `upload: false` 表示只是编辑中间态（截止时间等），留到「保存」或离开页面时再传。
+    /// 同步写回（setTodos）不经过这里，避免循环。
+    private func mutate(_ id: UUID?, upload: Bool = true, _ action: () -> Void) {
         action()
-        scheduleAutoSync()
+        guard upload else { return }
+        if let id { uploadNow(id) } else { uploadDirtyNow() }
     }
 
-    /// 防抖 1.2 秒后只同步改过的任务（不跑笔记和笔记本），避免连续输入/连续点击时反复请求云端。
-    private func scheduleAutoSync() {
-        autoSyncTask?.cancel()
-        autoSyncTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            guard !Task.isCancelled else { return }
-            // 未登录时不打扰用户
-            guard BaiduPanClient.shared.currentToken != nil else { return }
-            // 若上一次同步仍在进行，最多等 10 秒再执行，避免变更被跳过
-            var waited = 0
-            while sync.status.isSyncing && waited < 20 {
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                waited += 1
-                if Task.isCancelled { return }
-            }
-            guard !Task.isCancelled, !sync.status.isSyncing else { return }
-            await sync.syncDirtyTodos(store: noteStore, todos: store)
+    /// 立刻只上传这一条任务（未登录时不打扰）。
+    private func uploadNow(_ id: UUID) {
+        guard BaiduPanClient.shared.currentToken != nil else { return }
+        Task { @MainActor in
+            await sync.request(.todo(id), store: noteStore, todos: store, priority: false)
+        }
+    }
+
+    private func uploadDirtyNow() {
+        guard BaiduPanClient.shared.currentToken != nil else { return }
+        Task { @MainActor in
+            await sync.request(.dirtyTodos, store: noteStore, todos: store, priority: false)
         }
     }
 
@@ -803,7 +800,9 @@ struct TodoView: View {
     private func addTask() {
         let t = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        mutate { _ = store.add(title: t) }
+        var newID: UUID?
+        mutate(nil, upload: false) { newID = store.add(title: t).id }
+        if let newID { uploadNow(newID) }
         newTitle = ""
     }
 

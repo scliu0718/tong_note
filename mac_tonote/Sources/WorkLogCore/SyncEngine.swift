@@ -3,6 +3,17 @@ import Combine
 
 /// 按篇同步：每篇笔记一个云端文件。启动、保存后、回到窗口和定时都会跑同一轮。
 /// 失败只留到下一轮，不因此退出登录。
+/// 一次同步的范围。按页面划分：谁的按钮只同步谁。
+public enum SyncScope: Equatable, Sendable {
+    case all            // 启动 / 间隔：笔记 + 笔记本 + 任务
+    case notes          // 笔记页：全部笔记 + 笔记本
+    case note(UUID)     // 单篇（含「快同步」）：拉远端、有改动再上传
+    case dirtyNotes     // 只上传本机改过的笔记（及脏的笔记本）
+    case todos          // 任务页：拉远端、有改动再上传
+    case dirtyTodos     // 只上传本机改过的任务
+    case todo(UUID)     // 只上传这一条任务
+}
+
 public final class SyncEngine: ObservableObject {
     public enum Status: Equatable {
         case idle
@@ -23,7 +34,7 @@ public final class SyncEngine: ObservableObject {
 
     private let client = BaiduPanClient.shared
     private var scheduled: Task<Void, Never>?
-    private var needsAnotherRound = false
+    private var pending: [SyncScope] = []
     private static let lastSyncKey = "tonote.lastSyncDate"
 
     private let encoder: JSONEncoder = {
@@ -42,51 +53,122 @@ public final class SyncEngine: ObservableObject {
         lastSyncDate = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date
     }
 
-    /// 保存后一两秒再同步。连续保存只跑最后一轮。
+    // MARK: - 入口：按范围同步 + 插队队列
+
+    /// 请求同步某个范围。空闲时立刻跑；正在同步时**插到队首**（比定时轮、普通请求都先跑）。
+    /// 队列里已有 `.all` 时其余范围都被它覆盖；新来 `.all` 会清掉其余范围。
     @MainActor
-    public func schedule(store: NoteStore, todos: TodoStore) {
-        scheduled?.cancel()
-        scheduled = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            guard !Task.isCancelled else { return }
-            await self.syncRound(store: store, todos: todos)
+    public func request(_ scope: SyncScope, store: NoteStore, todos: TodoStore, priority: Bool = true) async {
+        if status.isSyncing {
+            enqueue(scope, front: priority)
+            return
+        }
+        await run(scope, store: store, todos: todos)
+        // 跑的过程中进来的请求，按队列顺序依次跑完
+        while let next = pending.first {
+            pending.removeFirst()
+            await run(next, store: store, todos: todos)
         }
     }
 
+    private func enqueue(_ scope: SyncScope, front: Bool) {
+        if pending.contains(.all) { return }
+        if scope == .all { pending = [.all]; return }
+        pending.removeAll { $0 == scope }
+        if front { pending.insert(scope, at: 0) } else { pending.append(scope) }
+    }
+
+    /// 兼容旧入口：全量。
     @MainActor
     public func quickSync(store: NoteStore, todos: TodoStore) async {
-        await syncRound(store: store, todos: todos)
+        await request(.all, store: store, todos: todos)
     }
 
     @MainActor
     public func syncSingleNote(store: NoteStore, todos: TodoStore, noteID: UUID) async {
-        await syncRound(store: store, todos: todos, onlyNoteID: noteID)
+        await request(.note(noteID), store: store, todos: todos)
+    }
+
+    /// 只同步本机有未上传修改的任务。
+    @MainActor
+    public func syncDirtyTodos(store: NoteStore, todos: TodoStore) async {
+        await request(.dirtyTodos, store: store, todos: todos, priority: false)
     }
 
     @MainActor
-    public func syncRound(store: NoteStore, todos: TodoStore, onlyNoteID: UUID? = nil) async {
-        if status.isSyncing {
-            needsAnotherRound = true
-            return
+    public func syncRound(store: NoteStore, todos: TodoStore) async {
+        await request(.all, store: store, todos: todos, priority: false)
+    }
+
+    /// 笔记 / 快同步：改完后最多等 30 秒上传一次（节流，不是防抖）；离开时用 `flushNotes` 立刻传。
+    @MainActor
+    public func scheduleNotesUpload(store: NoteStore, todos: TodoStore) {
+        guard scheduled == nil else { return }
+        scheduled = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.notesUploadInterval)
+            guard !Task.isCancelled else { return }
+            self.scheduled = nil
+            await self.request(.dirtyNotes, store: store, todos: todos, priority: false)
         }
+    }
+
+    /// 离开笔记 / 退到后台时：取消 30 秒计时，立刻上传改过的笔记。
+    @MainActor
+    public func flushNotes(store: NoteStore, todos: TodoStore) async {
+        scheduled?.cancel()
+        scheduled = nil
+        await request(.dirtyNotes, store: store, todos: todos, priority: false)
+    }
+
+    public static let notesUploadInterval: UInt64 = 30_000_000_000
+
+    @MainActor
+    private func run(_ scope: SyncScope, store: NoteStore, todos: TodoStore) async {
+        // 只传「改过的」且当前没有可传内容时，不动状态、不发请求
+        if scope == .dirtyNotes, !hasDirtyNotes(store) { return }
+        if scope == .dirtyTodos, !hasDirtyTodos(todos) { return }
+        if case .todo(let id) = scope, todos.todo(with: id) == nil || !todos.syncCursor(for: id).dirty { return }
+
         status = .syncing
         lastMessage = nil
         var kicked = false
         do {
             let token = try await client.validToken()
             try await DeviceRegistry.shared.ensureNotKicked(accessToken: token.accessToken)
-            let noteCount = try await syncNotes(store: store, token: token.accessToken, onlyNoteID: onlyNoteID)
+            var noteCount = 0
             var todoCount = 0
-            if onlyNoteID == nil {
+            var message: String?
+            switch scope {
+            case .all:
+                noteCount = try await syncNotes(store: store, token: token.accessToken)
                 try await syncNotebooks(token: token.accessToken)
                 todoCount = try await syncTodos(store: todos, token: token.accessToken)
+                message = "笔记 \(noteCount) 篇 · 任务 \(todoCount) 条"
+            case .notes:
+                noteCount = try await syncNotes(store: store, token: token.accessToken)
+                try await syncNotebooks(token: token.accessToken)
+                message = "已同步笔记 \(noteCount) 篇"
+            case .note(let id):
+                _ = try await syncNotes(store: store, token: token.accessToken, onlyNoteID: id)
+                message = "已同步本篇"
+            case .dirtyNotes:
+                _ = try await syncNotes(store: store, token: token.accessToken, dirtyOnly: true)
+                if NotebookStore.shared.isDirty { try await syncNotebooks(token: token.accessToken) }
+                message = "已上传笔记"
+            case .todos:
+                todoCount = try await syncTodos(store: todos, token: token.accessToken)
+                message = "已同步任务"
+            case .dirtyTodos:
+                _ = try await syncTodos(store: todos, token: token.accessToken, dirtyOnly: true)
+                message = "已上传任务"
+            case .todo(let id):
+                _ = try await syncTodos(store: todos, token: token.accessToken, onlyTodoID: id)
+                message = "已上传任务"
             }
             let date = Date()
             status = .success(date)
             lastSyncDate = date
-            lastMessage = onlyNoteID == nil
-                ? "笔记 \(noteCount) 篇 · 任务 \(todoCount) 条"
-                : "已同步本篇"
+            lastMessage = message
         } catch DeviceSessionError.kicked {
             kicked = true
             status = .failed(DeviceSessionError.kicked.localizedDescription)
@@ -95,23 +177,32 @@ public final class SyncEngine: ObservableObject {
             status = .failed(error.localizedDescription)
             lastMessage = error.localizedDescription
         }
-        let again = needsAnotherRound && !kicked
-        needsAnotherRound = false
-        if again {
-            await syncRound(store: store, todos: todos, onlyNoteID: onlyNoteID)
-        }
+        if kicked { pending.removeAll() }
+    }
+
+    private func hasDirtyNotes(_ store: NoteStore) -> Bool {
+        store.notes.contains { store.syncCursor(for: $0.id).dirty } || NotebookStore.shared.isDirty
+    }
+
+    private func hasDirtyTodos(_ todos: TodoStore) -> Bool {
+        todos.todos.contains { todos.syncCursor(for: $0.id).dirty }
     }
 
     // MARK: - 笔记
 
-    private func syncNotes(store: NoteStore, token: String, onlyNoteID: UUID?) async throws -> Int {
-        try await migrateNotesIfNeeded(store: store, token: token)
+    private func syncNotes(store: NoteStore, token: String, onlyNoteID: UUID? = nil, dirtyOnly: Bool = false) async throws -> Int {
+        if !dirtyOnly { try await migrateNotesIfNeeded(store: store, token: token) }
         let remoteFiles = try await listJSON(directory: notesDirectory, token: token)
         var remoteIDs = Set(remoteFiles.keys)
         var localIDs = Set(store.notes.map(\.id))
         if let onlyNoteID {
             remoteIDs = remoteIDs.contains(onlyNoteID) ? [onlyNoteID] : []
             localIDs = localIDs.contains(onlyNoteID) ? [onlyNoteID] : []
+        }
+        if dirtyOnly {
+            // 只处理本机改过、还没上传的笔记；别端变化留给打开笔记时的拉取和定时全量轮
+            remoteIDs = []
+            localIDs = localIDs.filter { store.syncCursor(for: $0).dirty }
         }
         var changed = 0
         var firstError: Error?
@@ -417,10 +508,15 @@ public final class SyncEngine: ObservableObject {
         }
     }
 
-    private func syncTodos(store: TodoStore, token: String) async throws -> Int {
+    private func syncTodos(store: TodoStore, token: String, dirtyOnly: Bool = false, onlyTodoID: UUID? = nil) async throws -> Int {
         try await migrateTodosIfNeeded(store: store, token: token)
         let remoteFiles = try await listJSON(directory: todosDirectory, token: token)
-        let ids = Set(remoteFiles.keys).union(store.todos.map(\.id))
+        var ids = Set(remoteFiles.keys).union(store.todos.map(\.id))
+        if dirtyOnly {
+            // 只处理本机改过、还没上传的任务；别端的变化留给打开任务页时的拉取和定时全量轮
+            ids = ids.filter { store.todo(with: $0) != nil && store.syncCursor(for: $0).dirty }
+        }
+        if let onlyTodoID { ids = ids.contains(onlyTodoID) ? [onlyTodoID] : [] }
         var changed = 0
         var firstError: Error?
         for id in ids {
@@ -586,6 +682,20 @@ public final class SyncEngine: ObservableObject {
                                      store: TodoStore,
                                      token: String,
                                      listingMtime: Int?) async throws {
+        if case .merged(var merged) = SyncRules.mergeTodos(base: cursor.baseTodo, local: local, remote: remote) {
+            var mergedCursor = cursor
+            mergedCursor.dirty = true
+            if await downloadTodoImages(merged, cursor: &mergedCursor, store: store, token: token) == false {
+                mergedCursor.serverMtime = nil
+            }
+            _ = try await publishTodo(&merged,
+                                      rev: max(local.rev, remote.rev) + 1,
+                                      cursor: &mergedCursor,
+                                      store: store,
+                                      token: token,
+                                      listingMtime: listingMtime)
+            return
+        }
         if SyncRules.remoteWins(localUpdatedAt: local.updatedAt, remoteUpdatedAt: remote.updatedAt) {
             var clean = SyncCursor(baseRev: remote.rev, baseUpdatedAt: remote.updatedAt,
                                    serverMtime: listingMtime, dirty: false,

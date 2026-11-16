@@ -89,6 +89,91 @@ final class SyncRulesTests: XCTestCase {
         )
     }
 
+    func testTodoMergeTakesRemoteNotesAndLocalStatus() {
+        let id = UUID()
+        let base = sampleTodo(id: id, title: "买菜", notes: "", status: .todo, rev: 1)
+        var local = base
+        local.status = .doing
+        local.updatedAt = now.addingTimeInterval(5)
+        var remote = base
+        remote.notes = "记得带袋子"
+        remote.updatedAt = now.addingTimeInterval(8)
+        switch SyncRules.mergeTodos(base: base, local: local, remote: remote) {
+        case .merged(let merged):
+            XCTAssertEqual(merged.id, id)
+            XCTAssertEqual(merged.status, .doing)
+            XCTAssertEqual(merged.notes, "记得带袋子")
+            XCTAssertEqual(merged.title, "买菜")
+        case .unresolved:
+            XCTFail("交叉改状态和备注应能自动合并")
+        }
+    }
+
+    func testTodoMergeBothNotesStayUnresolved() {
+        let id = UUID()
+        let base = sampleTodo(id: id, notes: "原备注", rev: 2)
+        var local = base
+        local.notes = "本机改了"
+        var remote = base
+        remote.notes = "云端改了"
+        XCTAssertEqual(SyncRules.mergeTodos(base: base, local: local, remote: remote), .unresolved)
+    }
+
+    func testTodoMergeWithoutSnapshotStaysUnresolved() {
+        let local = sampleTodo(title: "A", status: .doing)
+        let remote = sampleTodo(id: local.id, title: "A", notes: "云端")
+        XCTAssertEqual(SyncRules.mergeTodos(base: nil, local: local, remote: remote), .unresolved)
+    }
+
+    func testTodoMergePrefersFurtherStatusAndTombstone() {
+        let id = UUID()
+        let base = sampleTodo(id: id, status: .todo, rev: 1)
+        var local = base
+        local.status = .done
+        local.completedAt = now
+        var remote = base
+        remote.status = .terminated
+        remote.purged = true
+        switch SyncRules.mergeTodos(base: base, local: local, remote: remote) {
+        case .merged(let merged):
+            XCTAssertEqual(merged.status, .terminated)
+            XCTAssertTrue(merged.purged)
+            XCTAssertEqual(merged.completedAt, now)
+        case .unresolved:
+            XCTFail("状态和墓碑应能自动合并")
+        }
+    }
+
+    func testTodoMergeDeadlineTakesTheSideThatSetIt() {
+        let id = UUID()
+        let base = sampleTodo(id: id, rev: 1)
+        var local = base
+        local.plannedAt = now.addingTimeInterval(86_400)
+        var remote = base
+        remote.title = "改名"
+        switch SyncRules.mergeTodos(base: base, local: local, remote: remote) {
+        case .merged(let merged):
+            XCTAssertEqual(merged.plannedAt, now.addingTimeInterval(86_400))
+            XCTAssertEqual(merged.title, "改名")
+        case .unresolved:
+            XCTFail("截止时间和标题交叉修改应能自动合并")
+        }
+    }
+
+    private func sampleTodo(id: UUID = UUID(),
+                            title: String = "任务",
+                            notes: String = "",
+                            status: TodoStatus = .todo,
+                            rev: Int = 1) -> Todo {
+        Todo(id: id,
+             title: title,
+             notes: notes,
+             status: status,
+             createdAt: now,
+             updatedAt: now,
+             rev: rev)
+    }
+
     func testNotebookNamesUnionAndRemovals() {
         let merged = NotebookMerge.merge(localNames: ["客户", "草稿"],
                                          localRemoved: ["旧本"],

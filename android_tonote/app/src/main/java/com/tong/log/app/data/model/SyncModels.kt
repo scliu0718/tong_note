@@ -12,7 +12,9 @@ data class SyncCursor(
     val baseUpdatedAt: String? = null,
     val serverMtime: Long? = null,
     val dirty: Boolean = false,
-    val uploadedAttachments: List<String> = emptyList()
+    val uploadedAttachments: List<String> = emptyList(),
+    /** 仅任务使用：上次同步成功时的任务快照，供冲突时字段三方合并。只落本机，不上传。 */
+    val baseTodo: Todo? = null
 )
 
 /** 云端设备记录，字段名与 Mac 端一致（snake_case）。 */
