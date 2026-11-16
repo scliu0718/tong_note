@@ -102,10 +102,15 @@ public final class SyncEngine: ObservableObject {
 
     /// 笔记 / 快同步：改完后最多等 30 秒上传一次（节流，不是防抖）；离开时用 `flushNotes` 立刻传。
     @MainActor
-    public func scheduleNotesUpload(store: NoteStore, todos: TodoStore) {
-        guard scheduled == nil else { return }
+    public func scheduleNotesUpload(store: NoteStore, todos: TodoStore, quick: Bool = false) {
+        // 普通笔记 30 秒、「快同步」15 秒（节流）。已有计时时只在新截止时间更早时才改期
+        let wait = quick ? Self.quickNoteUploadInterval : Self.notesUploadInterval
+        let deadline = Date().addingTimeInterval(Double(wait) / 1_000_000_000)
+        if scheduled != nil, scheduledDeadline <= deadline { return }
+        scheduled?.cancel()
+        scheduledDeadline = deadline
         scheduled = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: Self.notesUploadInterval)
+            try? await Task.sleep(nanoseconds: wait)
             guard !Task.isCancelled else { return }
             self.scheduled = nil
             await self.request(.dirtyNotes, store: store, todos: todos, priority: false)
@@ -121,6 +126,8 @@ public final class SyncEngine: ObservableObject {
     }
 
     public static let notesUploadInterval: UInt64 = 30_000_000_000
+    public static let quickNoteUploadInterval: UInt64 = 15_000_000_000
+    private var scheduledDeadline = Date.distantFuture
 
     @MainActor
     private func run(_ scope: SyncScope, store: NoteStore, todos: TodoStore) async {

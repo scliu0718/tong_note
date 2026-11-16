@@ -48,6 +48,7 @@ import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.sync.SyncCursorStore
 import com.tong.log.app.data.sync.SyncEngine
 import com.tong.log.app.data.sync.SyncScope
+import com.tong.log.app.data.model.QUICK_SYNC_NOTE_ID
 import androidx.activity.compose.BackHandler
 import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.delay
@@ -143,10 +144,12 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         }
     }
 
-    // 编辑中每 30 秒自动保存并上传一次
+    // 编辑中定时自动保存并上传：「快同步」15 秒，其它笔记 30 秒
     LaunchedEffect(noteId) {
+        val interval = if (noteId.equals(QUICK_SYNC_NOTE_ID, ignoreCase = true))
+            SyncEngine.QUICK_NOTE_UPLOAD_INTERVAL_MS else SyncEngine.NOTES_UPLOAD_INTERVAL_MS
         while (true) {
-            delay(30_000)
+            delay(interval)
             if (edited || SyncCursorStore.cursor(noteId, false)?.dirty == true) {
                 if (edited) saveBody()
                 delay(350)

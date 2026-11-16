@@ -135,7 +135,8 @@ struct MainView: View {
         }
         // 笔记 / 快同步：改完最多等 30 秒上传一次；离开笔记时立刻传（见下面的 selectedID / showTodos）
         .onReceive(NotificationCenter.default.publisher(for: .tonoteLocalDataChanged)) { _ in
-            sync.scheduleNotesUpload(store: store, todos: todos)
+            // 「快同步」15 秒，其它笔记 30 秒
+            sync.scheduleNotesUpload(store: store, todos: todos, quick: selectedID == NoteStore.quickSyncNoteID)
         }
         // 兜底：当前选中的笔记被删除/消失时，选中当前分类第一条，而不是「快同步」
         .onReceive(store.$notes) { notes in

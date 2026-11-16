@@ -47,8 +47,10 @@ object SyncEngine {
     /** 同步进行中又来的请求：插队的放队首，普通的放队尾；`All` 覆盖其余范围。仅主线程访问。 */
     private val pending = ArrayDeque<SyncScope>()
 
-    /** 笔记 / 快同步：改完最多等 30 秒上传一次（节流，不是防抖）。 */
-    private const val NOTES_UPLOAD_INTERVAL_MS = 30_000L
+    /** 笔记：改完最多等 30 秒上传一次（节流，不是防抖）；「快同步」更勤，15 秒。 */
+    const val NOTES_UPLOAD_INTERVAL_MS = 30_000L
+    const val QUICK_NOTE_UPLOAD_INTERVAL_MS = 15_000L
+    private var notesUploadDeadline = 0L
 
     private val notesDir = "${BaiduPanConfig.REMOTE_ROOT}/notes"
     private val todosDir = "${BaiduPanConfig.REMOTE_ROOT}/todos"
@@ -60,11 +62,18 @@ object SyncEngine {
 
     // ---------- 触发 ----------
 
-    /** 笔记 / 快同步改动后调用：30 秒内最多传一次；离开笔记时用 [flushNotes] 立刻传。 */
-    fun scheduleNotesUpload() {
-        if (notesUploadJob?.isActive == true) return
+    /**
+     * 笔记改动后调用：普通笔记 30 秒内最多传一次，「快同步」15 秒；离开笔记时用 [flushNotes] 立刻传。
+     * 已有计时时只在新的截止时间更早时才改期（先改了普通笔记、又去改快同步，要按 15 秒来）。
+     */
+    fun scheduleNotesUpload(quick: Boolean = false) {
+        val wait = if (quick) QUICK_NOTE_UPLOAD_INTERVAL_MS else NOTES_UPLOAD_INTERVAL_MS
+        val deadline = System.currentTimeMillis() + wait
+        if (notesUploadJob?.isActive == true && notesUploadDeadline <= deadline) return
+        notesUploadJob?.cancel()
+        notesUploadDeadline = deadline
         notesUploadJob = scope.launch {
-            delay(NOTES_UPLOAD_INTERVAL_MS)
+            delay(wait)
             request(SyncScope.DirtyNotes, priority = false)
         }
     }
