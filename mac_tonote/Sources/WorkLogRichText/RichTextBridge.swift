@@ -25,6 +25,11 @@ enum RichTextBridge {
     /// 正文字号 14pt；标题按 18 / 24 / 32 / 40 递进
     static let defaultFontSize: CGFloat = 14
     static let defaultTextColor = NSColor(srgbRed: 0.28, green: 0.28, blue: 0.29, alpha: 1)
+    /// 引用块的正文色，对齐 Android CSS `blockquote{color:#86868b}`。
+    /// 这是块样式自带的呈现色，序列化时由 `block(from:range:)` 过滤，不写进 HTML。
+    static let quoteTextColor = NSColor(srgbRed: 134.0 / 255.0,
+                                        green: 134.0 / 255.0,
+                                        blue: 139.0 / 255.0, alpha: 1)
     static let maxImageWidth: CGFloat = 480
     /// 列表编号 / 圆点的蓝色，与工具栏样式菜单的强调色一致
     static let listMarkerColor = NSColor(srgbRed: 0.18, green: 0.486, blue: 0.965, alpha: 1)
@@ -121,15 +126,19 @@ enum RichTextBridge {
             paragraph.paragraphSpacing = 4
             paragraph.lineSpacing = 1
         case .quote:
-            paragraph.headIndent = 20
-            paragraph.firstLineHeadIndent = 20
+            // Android CSS：3px 绿竖线 + 10px 左内边距；底色块由
+            // RichTextBlockLayoutManager 再左右各外扩 4pt。
+            paragraph.headIndent = 10
+            paragraph.firstLineHeadIndent = 10
+            paragraph.paragraphSpacingBefore = 6
+            paragraph.paragraphSpacing = 6
+        case .code:
+            // Android CSS：pre 四周 10px 内边距、white-space:pre-wrap，
+            // 折行不额外缩进，所以首行与续行用同一个缩进。
+            paragraph.headIndent = 6
+            paragraph.firstLineHeadIndent = 6
             paragraph.paragraphSpacingBefore = 4
             paragraph.paragraphSpacing = 4
-        case .code:
-            paragraph.headIndent = 12
-            paragraph.firstLineHeadIndent = 0
-            paragraph.paragraphSpacingBefore = 2
-            paragraph.paragraphSpacing = 2
         case .bulletItem, .orderedItem:
             // 标记写在段落开头（marker + \t）；第一行从 markerIndent 起，
             // \t 跳到 textIndent，换行后的续行也对齐到 textIndent。
@@ -571,7 +580,7 @@ enum RichTextBridge {
             .font: block.style == .code
                 ? monoFont(size: baseSize, bold: false)
                 : font(size: baseSize, bold: isHeading(block.style), italic: false),
-            .foregroundColor: defaultTextColor,
+            .foregroundColor: block.style == .quote ? quoteTextColor : defaultTextColor,
             .paragraphStyle: resolvedStyle,
             RichTextKeys.blockStyle: block.style.rawValue,
             RichTextKeys.baseFontSize: NSNumber(value: Double(baseSize)),
@@ -742,7 +751,13 @@ enum RichTextBridge {
                 var colorHex: String?
                 if let color = attributes[.foregroundColor] as? NSColor {
                     let hex = hexString(from: color)
-                    if hex != hexString(from: defaultTextColor) { colorHex = hex }
+                    // 引用灰是块样式自带的呈现色，不是用户手动设的颜色：
+                    // 写进 HTML 会被 Android 当成 <span style="color:…"> 固化下来。
+                    let isQuoteStyleColor = style == .quote
+                        && hex == hexString(from: quoteTextColor)
+                    if hex != hexString(from: defaultTextColor), !isQuoteStyleColor {
+                        colorHex = hex
+                    }
                 }
 
                 var backgroundHex: String?

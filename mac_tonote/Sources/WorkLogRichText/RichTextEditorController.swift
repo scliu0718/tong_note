@@ -432,6 +432,21 @@ public final class RichTextEditorController: ObservableObject {
                     ? RichTextBridge.monoFont(size: baseSize, bold: bold)
                     : RichTextBridge.font(size: baseSize, bold: bold, italic: italic)
                 storage.addAttribute(.font, value: newFont, range: runRange)
+                // 引用块正文色跟随块样式（Android CSS 的 #86868b）；
+                // 切走时只还原「引用灰」，绝不覆盖用户手动设过的文字颜色。
+                if style == .quote {
+                    storage.addAttribute(.foregroundColor,
+                                         value: RichTextBridge.quoteTextColor,
+                                         range: runRange)
+                } else if let current = storage.attribute(.foregroundColor,
+                                                          at: runRange.location,
+                                                          effectiveRange: nil) as? NSColor,
+                          RichTextBridge.hexString(from: current)
+                            == RichTextBridge.hexString(from: RichTextBridge.quoteTextColor) {
+                    storage.addAttribute(.foregroundColor,
+                                         value: RichTextBridge.defaultTextColor,
+                                         range: runRange)
+                }
             }
         }
         storage.endEditing()

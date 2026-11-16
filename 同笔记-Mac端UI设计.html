@@ -226,7 +226,9 @@
   .ed-content ul{margin:0 0 12px 18px}
   .ed-content li{margin-bottom:5px}
   .ed-content .mk{color:var(--table-accent);font-weight:600}
-  .ed-content blockquote{border-left:3px solid var(--accent);padding:6px 14px;margin:12px 0;background:#f7faf8;color:var(--text-3);font-size:13.5px;border-radius:0 6px 6px 0}
+  /* 引用 / 代码块：与 Android WebView 的 CSS 逐项对齐 */
+  .ed-content blockquote{border-left:3px solid var(--accent);padding:4px 10px;margin:8px 0;background:#f7faf8;color:#86868b;font-size:13.5px}
+  .ed-content pre{background:#f5f5f7;padding:10px;border-radius:6px;font-family:var(--mono);font-size:12.5px;line-height:1.7;margin:8px 0;white-space:pre-wrap;color:var(--text-2)}
   .ed-content .hl{background:#fff3d6;padding:1px 5px;border-radius:4px;color:#8a5a00}
 
   /* ============ ③ 侧栏三档对照 ============ */
@@ -736,7 +738,9 @@
             <p>正文 14pt 常规。切到正文/引用/代码块/列表时强制清粗体，标题强制加粗；H5/H6 仅为兼容旧笔记保留，菜单不暴露。</p>
             <h2>二级标题 32pt</h2>
             <p>文字颜色 9 色 + 自定义 ColorPicker，背景色 9 浅色 + 自定义 + 「清除背景色」；色值按 sRGB 十六进制精确往返。</p>
-            <blockquote>引用左右缩进 20；代码块 headIndent 12 + 等宽字体。</blockquote>
+            <blockquote>引用：3pt 绿色左竖线 + <code>#F7FAF8</code> 淡绿底，正文色 <code>#86868B</code>，缩进 10pt。</blockquote>
+            <pre>代码块：#F5F5F7 圆角 6 底 + 10pt 内边距，等宽字体、缩进 6pt；
+两种块级装饰由 RichTextBlockLayoutManager 在 TextKit 1 里补画，只读 blockStyle、不写进 HTML。</pre>
             <ul><li><span class="mk">1.</span> 有序列表按层级 1. → a. → i.</li><li><span class="mk">•</span> 无序列表父子共用同一字形，子级靠描边做空心</li></ul>
             <p>列表标记是<b>视图层前缀</b>，不写进 HTML；末尾 <code>\t</code> 用正文属性，避免正文变蓝加粗。</p>
           </div>
@@ -1061,6 +1065,7 @@
     <div class="cl-item"><span class="n">20</span><span>设置面板：新增「登录设备」卡片、「使用说明」卡片与关闭按钮；账号改为真实 <code>displayName</code>；面板是 900×640 sheet</span></div>
     <div class="cl-item"><span class="n">21</span><span>侧栏计数：<del>写死 128/46/31/…</del> → 全部由 <code>store.count(...)</code> 动态计算</span></div>
     <div class="cl-item"><span class="n">22</span><span>tab：<del>3 个</del> → <b>8 个视图</b>，并把连续拖动演示改为三档对照</span></div>
+    <div class="cl-item"><span class="n">23</span><span>引用 / 代码块补齐<b>块级视觉</b>：Mac 此前只设 <code>headIndent</code>（看起来「只有 tab」）；现按 Android CSS 画 3pt 绿竖线 + 淡绿底 / 灰圆角底，引用正文色 <code>#86868B</code>，且样式色不写进 HTML</span></div>
   </div>
   <div class="tokens"><b>本版补充的设计令牌：</b><br>
     --table-accent:#2E7CF6; <span style="color:var(--text-4)">/* 表格蓝加号、色板选中环、样式菜单勾选 */</span><br>

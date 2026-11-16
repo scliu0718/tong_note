@@ -23,7 +23,9 @@ final class RichTextNSTextView: NSTextView {
         container.widthTracksTextView = true
         container.heightTracksTextView = false
         container.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        let layoutManager = NSLayoutManager()
+        // 自定义 LayoutManager：TextKit 1 不会自己画引用竖线 / 代码块底色，
+        // 规格与 Android WebView 的 CSS 对齐，见 RichTextBlockLayoutManager。
+        let layoutManager = RichTextBlockLayoutManager()
         // 大表格有几百个格子。默认会先把整张表排完再显示，切换笔记时主线程能卡几秒。
         // 非连续排版先出看得见的内容；整行补排见 scheduleTableRowFill。
         layoutManager.allowsNonContiguousLayout = true
