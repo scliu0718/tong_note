@@ -394,9 +394,10 @@ struct TodoView: View {
                 expandedID = id
                 frozenIDs = currentOrder()
                 if let todo = store.todo(with: id) {
-                    editingNotes = !hasNotes(todo)
+                    // 已完成 / 已终止是终态：展开后只能查看，不进编辑态
+                    editingNotes = isReadOnly(todo) ? false : !hasNotes(todo)
                 } else {
-                    editingNotes = true
+                    editingNotes = false
                 }
             }
         }
@@ -424,6 +425,12 @@ struct TodoView: View {
             editingNotes = false
         }
         if hoveredID == id { hoveredID = nil }
+    }
+
+    /// 已完成 / 已终止是终态：内容只读，仍可展开查看；
+    /// 状态流转（取消完成 / 恢复）与删除不受影响。
+    private func isReadOnly(_ todo: Todo) -> Bool {
+        todo.status == .done || todo.status == .terminated
     }
 
     /// 编辑期间按冻结顺序渲染；未冻结时直接用仓库的排序结果。
@@ -460,16 +467,27 @@ struct TodoView: View {
 
     // MARK: 展开编辑
     private func detail(_ todo: Todo) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let readOnly = isReadOnly(todo)
+        let writable = editingNotes && !readOnly
+        return VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     sectionLabel("备注")
+                    if readOnly {
+                        Text("只读")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(Theme.textQuaternary)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color(hex: 0xF2F2F4))
+                            .clipShape(Capsule())
+                            .help("已完成 / 已终止的任务不可编辑")
+                    }
                     // 「最近修改」用极淡的灰色，不再用蓝色抢视线
                     Text("最近修改 \(Self.createdFmt.string(from: todo.updatedAt))")
                         .font(.system(size: 10.5))
                         .foregroundColor(Theme.textQuaternary)
                     Spacer(minLength: 0)
-                    if editingNotes {
+                    if writable {
                         Button(action: { insertImage(into: todo) }) {
                             Image(systemName: "photo")
                                 .font(.system(size: 12, weight: .medium))
@@ -486,14 +504,14 @@ struct TodoView: View {
                                controller: notesController,
                                attachments: noteStore.attachments,
                                onEditorError: { activeDialog = .imageFailure($0) },
-                               readOnly: !editingNotes,
-                               textInset: CGSize(width: 10, height: editingNotes ? 10 : 12),
+                               readOnly: !writable,
+                               textInset: CGSize(width: 10, height: writable ? 10 : 12),
                                opaqueBackground: false)
                     .id(todo.id)
                     .frame(height: notesPaneHeight(todo))
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(editingNotes ? Color.white : Color(hex: 0xF8FCFA))
+                            .fill(writable ? Color.white : Color(hex: 0xF8FCFA))
                     )
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
             }
@@ -524,23 +542,27 @@ struct TodoView: View {
     // MARK: 截止时间（全部收进一行：保存 + 设置截止时间 + 紧凑年月日 + 日历）
     @ViewBuilder
     private func deadlineSection(_ todo: Todo) -> some View {
+        let readOnly = isReadOnly(todo)
         HStack(spacing: 9) {
-            Button(action: {
-                if editingNotes {
-                    finishEditing()
-                } else {
-                    editingNotes = true
+            // 终态任务不提供「编辑 / 保存」入口
+            if !readOnly {
+                Button(action: {
+                    if editingNotes {
+                        finishEditing()
+                    } else {
+                        editingNotes = true
+                    }
+                }) {
+                    Text(editingNotes ? "保存" : "编辑")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 3)
+                        .background(Theme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-            }) {
-                Text(editingNotes ? "保存" : "编辑")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10).padding(.vertical, 3)
-                    .background(Theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                .buttonStyle(.plain)
+                .help(editingNotes ? "保存并收起" : "编辑备注")
             }
-            .buttonStyle(.plain)
-            .help(editingNotes ? "保存并收起" : "编辑备注")
 
             plannedToggle(todo)
 
@@ -562,12 +584,15 @@ struct TodoView: View {
             }
             Spacer(minLength: 0)
         }
+        // 终态任务整行截止控件灰化禁用（勾选框 / 年月日步进 / 日历 popover）
+        .disabled(readOnly)
     }
 
     /// 自定义主题色勾选框（替代系统蓝色 checkbox，与整体配色统一）
     private func plannedToggle(_ todo: Todo) -> some View {
         let on = todo.plannedAt != nil
         return Button(action: {
+            guard !isReadOnly(todo) else { return }
             mutate {
                 if var t = store.todo(with: todo.id) {
                     t.plannedAt = on ? nil : Date()
@@ -634,6 +659,7 @@ struct TodoView: View {
     }
 
     private func setDate(_ todo: Todo, y: Int, m: Int, d: Int) {
+        guard !isReadOnly(todo) else { return }
         guard var t = store.todo(with: todo.id) else { return }
         var c = DateComponents()
         c.year = y; c.month = m; c.day = d; c.hour = 12; c.minute = 0
@@ -676,6 +702,7 @@ struct TodoView: View {
         Binding(get: {
             NoteContent(body: store.todo(with: todo.id)?.notes ?? "", format: .richText)
         }, set: { newValue in
+            guard !isReadOnly(todo) else { return }
             guard var t = store.todo(with: todo.id), t.notes != newValue.body else { return }
             t.notes = newValue.body
             store.update(t)
@@ -689,7 +716,7 @@ struct TodoView: View {
 
     /// 查看态：纯文字用矮框，有图再加高；编辑态仍用紧凑输入框。
     private func notesPaneHeight(_ todo: Todo) -> CGFloat {
-        if editingNotes { return 120 }
+        if editingNotes && !isReadOnly(todo) { return 120 }
         if !NoteAttachmentIndex.relativePaths(in: todo.notes).isEmpty { return 320 }
         return 90
     }
@@ -705,6 +732,7 @@ struct TodoView: View {
     }
 
     private func insertImage(into todo: Todo) {
+        guard !isReadOnly(todo) else { return }
         guard let url = ImagePicker.pickImage(message: "选择一张图片插入任务备注") else { return }
         notesController.noteID = todo.id
         notesController.attachments = noteStore.attachments
