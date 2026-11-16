@@ -307,6 +307,15 @@ object SyncEngine {
         if (remote.purged) AttachmentStore.removeAttachmentsIfUnreferenced(remote.id)
     }
 
+    private suspend fun applyRemoteTodo(remote: Todo, serverMtime: Long?, token: String) {
+        downloadAttachmentsFor(remote.notes, remote.id, token)
+        TodoStore.upsert(remote)
+        SyncCursorStore.set(
+            SyncCursor(remote.rev, remote.updatedAt, serverMtime, false),
+            remote.id, true
+        )
+    }
+
     private suspend fun resolveConflict(
         local: Note, remote: Note, remoteRev: Long, serverMtime: Long?, token: String
     ) {
@@ -351,6 +360,12 @@ object SyncEngine {
 
     private suspend fun syncOneTodo(id: String, serverMtime: Long?, token: String) {
         val cursor = SyncCursorStore.cursor(id, true)
+        // 补齐缺失的备注图片：老版本只下载笔记图片、漏掉任务图片，
+        // 这里对已同步任务也兜底补齐（downloadAttachmentsFor 会跳过已存在的文件）。
+        val localTodo = TodoStore.todo(id)
+        if (localTodo != null && localTodo.notes.isNotBlank()) {
+            downloadAttachmentsFor(localTodo.notes, id, token)
+        }
         if (SyncRules.shouldSkipFetch(serverMtime, cursor)) return
         val remoteTodo: Todo? = if (serverMtime == null) {
             if (cursor != null && cursor.baseRev != 0L) {
@@ -373,10 +388,7 @@ object SyncEngine {
                 }
             }
             is SyncRules.SyncStep.UseRemote -> if (remoteTodo != null) {
-                TodoStore.upsert(remoteTodo)
-                SyncCursorStore.set(
-                    SyncCursor(remoteTodo.rev, remoteTodo.updatedAt, serverMtime, false), id, true
-                )
+                applyRemoteTodo(remoteTodo, serverMtime, token)
             }
             is SyncRules.SyncStep.Upload -> {
                 val l = local ?: return
@@ -392,16 +404,13 @@ object SyncEngine {
             is SyncRules.SyncStep.Conflict -> {
                 if (local != null && remoteTodo != null) {
                     if (SyncRules.remoteWins(local.updatedAt, remoteTodo.updatedAt)) {
-                        TodoStore.upsert(remoteTodo)
-                        SyncCursorStore.set(
-                            SyncCursor(remoteTodo.rev, remoteTodo.updatedAt, serverMtime, false), id, true
-                        )
+                        applyRemoteTodo(remoteTodo, serverMtime, token)
                     } else {
                         val published = publishTodo(local, maxOf(local.rev, remoteTodo.rev) + 1, token)
                         if (published != null) TodoStore.upsert(published)
                     }
                 } else if (remoteTodo != null) {
-                    TodoStore.upsert(remoteTodo)
+                    applyRemoteTodo(remoteTodo, serverMtime, token)
                 }
             }
             is SyncRules.SyncStep.Skip -> Unit
@@ -499,8 +508,9 @@ object SyncEngine {
                 val bytes = BaiduPanClient.downloadData("${BaiduPanConfig.REMOTE_ROOT}/$rel", token)
                 file.parentFile?.mkdirs()
                 file.writeBytes(bytes)
+                debugLog("附件下载成功 $rel (${bytes.size}B)")
             } catch (e: Exception) {
-                // 下载失败留待下一轮重试
+                debugLog("附件下载失败 $rel：${e.javaClass.simpleName} ${e.message}")
             }
         }
     }
