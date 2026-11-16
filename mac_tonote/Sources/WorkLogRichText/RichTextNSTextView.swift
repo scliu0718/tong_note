@@ -63,6 +63,8 @@ final class RichTextNSTextView: NSTextView {
     /// 宽表格会把文档撑得很宽，`setSelectedRange` 常把横向滚动停在中间，
     /// 打开笔记时就看不到最左侧。
     private var lockScrollToOrigin = false
+    /// 任务备注查看态：一直挡住「滚到光标」，否则第一行会被裁掉。
+    var suppressCaretScroll = false
     private var originLockToken = 0
 
     /// 只画灰圆 / 蓝圆 / 下箭头，不接收事件；事件仍由 NSTextView 自己处理。
@@ -137,6 +139,7 @@ final class RichTextNSTextView: NSTextView {
         let widthChanged = abs(newSize.width - bounds.width) > 0.5
         super.setFrameSize(newSize)
         tableGutter?.frame = NSRect(origin: .zero, size: newSize)
+        if lockScrollToOrigin { pinClipToOrigin() }
         refreshTableGutter()
         // 宽度一变，格子的横向位置全部作废。只清记录，让补排从屏幕上的整行重新来。
         if widthChanged {
@@ -162,11 +165,16 @@ final class RichTextNSTextView: NSTextView {
         scheduleTableRowFill()
     }
 
-    /// 打开或切换笔记后，把滚动位置钉在文档左上角。
-    /// 排版和 `scrollRangeToVisible` 会在当前回合之后再改一次原点，所以多钉两拍。
-    func showFromDocumentStart() {
+    /// 打开备注或笔记时，把滚动条钉在 y = 0。
+    /// 先锁住 `scrollRangeToVisible`，避免选区把视口又拖偏。
+    func beginPinningToOrigin() {
         originLockToken += 1
         lockScrollToOrigin = true
+        pinClipToOrigin()
+    }
+
+    func showFromDocumentStart() {
+        beginPinningToOrigin()
         let token = originLockToken
         pinClipToOrigin()
         DispatchQueue.main.async { [weak self] in
@@ -195,15 +203,26 @@ final class RichTextNSTextView: NSTextView {
             pinClipToOrigin()
             return
         }
+        if suppressCaretScroll { return }
         super.scrollRangeToVisible(range)
     }
 
-    private func pinClipToOrigin() {
+    override func scrollWheel(with event: NSEvent) {
+        lockScrollToOrigin = false
+        (enclosingScrollView as? RichTextScrollView)?.snapToTop = false
+        super.scrollWheel(with: event)
+    }
+
+    /// 滚动条回到文档顶部。有内容溢出时必须按翻转坐标系把 y 钉在 0。
+    func pinClipToOrigin() {
+        if let scroll = enclosingScrollView as? RichTextScrollView {
+            scroll.pinTop()
+            return
+        }
         guard let scroll = enclosingScrollView else { return }
-        let clip = scroll.contentView
-        guard clip.bounds.origin.x != 0 || clip.bounds.origin.y != 0 else { return }
-        clip.scroll(to: .zero)
-        scroll.reflectScrolledClipView(clip)
+        scroll.documentView?.scroll(NSPoint.zero)
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
     }
 
     private var gutterRefreshPending = false

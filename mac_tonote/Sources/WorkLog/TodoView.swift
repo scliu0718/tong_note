@@ -11,6 +11,8 @@ struct TodoView: View {
 
     @State private var newTitle = ""
     @State private var expandedID: UUID?
+    /// 有备注时先查看；点「编辑」后才进入编辑。无备注时直接编辑。
+    @State private var editingNotes = false
     /// 展开编辑期间冻结的列表顺序：避免一改截止时间就立刻跳到组内第一条
     @State private var frozenIDs: [UUID]?
     @State private var hoveredID: UUID?
@@ -310,7 +312,7 @@ struct TodoView: View {
             .background(rowBackground(todo))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(todo.isOverdue ? Theme.red : Color.clear, lineWidth: 1)
+                    .strokeBorder(todo.isOverdue ? Theme.red : Color.clear, lineWidth: 0.5)
             )
             .contentShape(Rectangle())
             .onHover { inside in
@@ -325,7 +327,11 @@ struct TodoView: View {
                     .padding(.bottom, 10)
             }
         }
-        .overlay(Rectangle().fill(Theme.lineSoft).frame(height: 1), alignment: .bottom)
+        .overlay(alignment: .bottom) {
+            if !todo.isOverdue {
+                Rectangle().fill(Theme.lineSoft).frame(height: 1)
+            }
+        }
     }
 
     private func rowTitleColor(_ todo: Todo) -> Color {
@@ -348,6 +354,11 @@ struct TodoView: View {
             } else {
                 expandedID = id
                 frozenIDs = currentOrder()
+                if let todo = store.todo(with: id) {
+                    editingNotes = !hasNotes(todo)
+                } else {
+                    editingNotes = true
+                }
             }
         }
     }
@@ -361,6 +372,7 @@ struct TodoView: View {
     private func finishEditing() {
         expandedID = nil
         frozenIDs = nil
+        editingNotes = false
         scheduleAutoSync()
     }
 
@@ -407,26 +419,32 @@ struct TodoView: View {
                         .font(.system(size: 10.5))
                         .foregroundColor(Theme.textQuaternary)
                     Spacer(minLength: 0)
-                    Button(action: { insertImage(into: todo) }) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Theme.textSecondary)
-                            .frame(width: 22, height: 22)
-                            .contentShape(Rectangle())
+                    if editingNotes {
+                        Button(action: { insertImage(into: todo) }) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Theme.textSecondary)
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("插入图片")
                     }
-                    .buttonStyle(.plain)
-                    .help("插入图片")
                 }
                 RichTextEditor(noteID: todo.id,
                                content: notesContentBinding(todo),
                                controller: notesController,
                                attachments: noteStore.attachments,
                                onEditorError: { imageError = $0 },
-                               textInset: CGSize(width: 8, height: 6))
+                               readOnly: !editingNotes,
+                               textInset: CGSize(width: 10, height: editingNotes ? 10 : 12),
+                               opaqueBackground: false)
                     .id(todo.id)
-                    .frame(height: 120)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(height: notesPaneHeight(todo))
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(editingNotes ? Color.white : Color(hex: 0xF8FCFA))
+                    )
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
             }
 
@@ -457,11 +475,22 @@ struct TodoView: View {
     @ViewBuilder
     private func deadlineSection(_ todo: Todo) -> some View {
         HStack(spacing: 9) {
-            Button("保存") { finishEditing() }
+            Button(action: {
+                if editingNotes {
+                    finishEditing()
+                } else {
+                    editingNotes = true
+                }
+            }) {
+                Text(editingNotes ? "保存" : "编辑")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10).padding(.vertical, 3)
+                    .background(Theme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
             .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(Theme.accent)
-            .help("保存并收起")
+            .help(editingNotes ? "保存并收起" : "编辑备注")
 
             plannedToggle(todo)
 
@@ -602,6 +631,17 @@ struct TodoView: View {
             store.update(t)
             scheduleAutoSync()
         })
+    }
+
+    private func hasNotes(_ todo: Todo) -> Bool {
+        !notesPreview(todo.notes).isEmpty
+    }
+
+    /// 查看态：纯文字用矮框，有图再加高；编辑态仍用紧凑输入框。
+    private func notesPaneHeight(_ todo: Todo) -> CGFloat {
+        if editingNotes { return 120 }
+        if !NoteAttachmentIndex.relativePaths(in: todo.notes).isEmpty { return 320 }
+        return 90
     }
 
     /// 列表里只显示可见文字。只有图片时显示「图片」，避免把 HTML 标签铺出来。

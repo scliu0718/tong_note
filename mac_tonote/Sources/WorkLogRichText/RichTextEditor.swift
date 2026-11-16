@@ -19,6 +19,8 @@ public struct RichTextEditor: NSViewRepresentable {
     public var readOnly: Bool = false
     /// 正文距边框的留白。笔记要给表格圆点留位置，任务备注可以更紧。
     public var textInset: CGSize = CGSize(width: 24, height: 24)
+    /// 任务备注用透明底，圆角由外层 SwiftUI 画，避免 clipShape 裁掉第一行。
+    public var opaqueBackground: Bool = true
     /// 选区变化回调。
     /// - 传入 nil：当前无选区（或只读/窗口失焦），上层应收起浮动格式窗口；
     /// - 传入 rect：选区首字所在的屏幕坐标矩形，供上层定位浮动格式窗口。
@@ -31,6 +33,7 @@ public struct RichTextEditor: NSViewRepresentable {
                 onEditorError: ((String) -> Void)? = nil,
                 readOnly: Bool = false,
                 textInset: CGSize = CGSize(width: 24, height: 24),
+                opaqueBackground: Bool = true,
                 onSelectionChange: ((NSRect?) -> Void)? = nil) {
         self.noteID = noteID
         self._content = content
@@ -39,22 +42,33 @@ public struct RichTextEditor: NSViewRepresentable {
         self.onEditorError = onEditorError
         self.readOnly = readOnly
         self.textInset = textInset
+        self.opaqueBackground = opaqueBackground
         self.onSelectionChange = onSelectionChange
     }
 
     public func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     public func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = RichTextScrollView()
         // 表格用 NSTextTable，只有 TextKit 1 会画边框并让单元格横排。
         let tv = RichTextNSTextView.makeTextKit1()
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = false
         tv.autoresizingMask = [.width]
         tv.textContainer?.widthTracksTextView = true
-        scrollView.documentView = tv
-        scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.automaticallyAdjustsContentInsets = false
+        if !opaqueBackground {
+            let scroller = CompactScroller()
+            scroller.controlSize = .mini
+            scrollView.verticalScroller = scroller
+            scrollView.scrollerStyle = .overlay
+            scrollView.autohidesScrollers = true
+            scrollView.snapToTop = true
+        }
+        scrollView.hasVerticalScroller = true
+        scrollView.documentView = tv
 
         tv.delegate = context.coordinator
         tv.isRichText = true
@@ -68,8 +82,8 @@ public struct RichTextEditor: NSViewRepresentable {
         // 左右各留 24pt：表格左边界外侧要放「增加行」的小灰圆，放 4pt 会被裁掉；
         // 上方同样留 24pt，给顶部「增加列」的灰圆和蓝色圆留位置。
         tv.textContainerInset = NSSize(width: textInset.width, height: textInset.height)
-        tv.backgroundColor = .white
-        tv.drawsBackground = true
+        applyCanvas(to: tv, scrollView: scrollView)
+        (tv as? RichTextNSTextView)?.suppressCaretScroll = readOnly && !opaqueBackground
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = false
         tv.autoresizingMask = [.width]
@@ -118,6 +132,8 @@ public struct RichTextEditor: NSViewRepresentable {
         tv.isEditable = !readOnly
         tv.isSelectable = true
         tv.textContainerInset = NSSize(width: textInset.width, height: textInset.height)
+        applyCanvas(to: tv, scrollView: scrollView)
+        (tv as? RichTextNSTextView)?.suppressCaretScroll = readOnly && !opaqueBackground
 
         // 粘贴回调要随笔记切换重新绑定，避免指向旧笔记的附件目录
         if let richTextView = tv as? RichTextNSTextView {
@@ -128,11 +144,33 @@ public struct RichTextEditor: NSViewRepresentable {
         if context.coordinator.loadedBody != content.body {
             context.coordinator.load(content: content, into: tv, attachments: attachments)
         }
+
+        if !opaqueBackground, context.coordinator.needsScrollYZero {
+            if let scroll = scrollView as? RichTextScrollView {
+                scroll.snapToTop = true
+                scroll.pinTop()
+            }
+            (tv as? RichTextNSTextView)?.pinClipToOrigin()
+            context.coordinator.needsScrollYZero = false
+        }
+    }
+
+    /// 任务备注查看态用浅灰底，编辑态和笔记正文用白底。
+    private func applyCanvas(to tv: NSTextView, scrollView: NSScrollView) {
+        let card = NSColor(srgbRed: 0xF8 / 255, green: 0xFC / 255, blue: 0xFA / 255, alpha: 1)
+        let canvas: NSColor = (!opaqueBackground && readOnly) ? card : .white
+        tv.backgroundColor = canvas
+        tv.drawsBackground = true
+        scrollView.drawsBackground = false
+        scrollView.contentView.drawsBackground = true
+        scrollView.contentView.backgroundColor = canvas
     }
 
     public final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: RichTextEditor
         var isUpdatingProgrammatically = false
+        /// 刚点开任务备注时，等 SwiftUI 把高度定下来再把滚动条拉到 y = 0。
+        var needsScrollYZero = false
         private weak var textView: NSTextView?
         private var representedNoteID: UUID
         /// 最近一次载入或写回正文的原始字符串，用于判断外部是否真的变了
@@ -161,9 +199,11 @@ public struct RichTextEditor: NSViewRepresentable {
                 selectionWork?.cancel()
                 parent.onSelectionChange?(nil)
                 loadedBody = parent.content.body
+                needsScrollYZero = true
             } else if readOnlyChanged {
                 // 进入 / 退出回收站时立刻收起或恢复浮窗
                 refreshSelection()
+                if parent.readOnly { needsScrollYZero = true }
             }
         }
 
@@ -219,8 +259,11 @@ public struct RichTextEditor: NSViewRepresentable {
             let attributed = RichTextBridge.attributedString(from: document, attachments: attachments)
 
             isUpdatingProgrammatically = true
+            (tv as? RichTextNSTextView)?.beginPinningToOrigin()
             tv.textStorage?.setAttributedString(attributed)
-            tv.setSelectedRange(NSRange(location: 0, length: 0))
+            if !parent.readOnly {
+                tv.setSelectedRange(NSRange(location: 0, length: 0))
+            }
             tv.typingAttributes = [
                 .font: NSFont.systemFont(ofSize: RichTextBridge.defaultFontSize),
                 .foregroundColor: RichTextBridge.defaultTextColor
@@ -228,9 +271,14 @@ public struct RichTextEditor: NSViewRepresentable {
             isUpdatingProgrammatically = false
 
             loadedBody = content.body
+            needsScrollYZero = true
             // 载入会清空选区，浮窗也随之收起
             parent.onSelectionChange?(nil)
             parent.controller.refreshCurrentStyle()
+            if let container = tv.textContainer {
+                tv.layoutManager?.ensureLayout(for: container)
+            }
+            tv.sizeToFit()
             // 编程式 setAttributedString 不触发 didChangeText，手动重算表格灰圆与格子矩形。
             // 宽表格会把横向滚动停在中间，打开笔记时强制从最左侧开始。
             if let rich = tv as? RichTextNSTextView {
@@ -397,5 +445,52 @@ public struct RichTextEditor: NSViewRepresentable {
             let windowRect = tv.convert(rect, to: nil)
             return window.convertToScreen(windowRect)
         }
+    }
+}
+
+/// 任务备注用的窄滚动条，系统默认 overlay 太宽。
+final class CompactScroller: NSScroller {
+    override class func scrollerWidth(for controlSize: NSControl.ControlSize,
+                                      scrollerStyle: NSScroller.Style) -> CGFloat {
+        7
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
+        // 不画宽槽，只留细滑块。
+    }
+}
+
+/// 任务备注打开时把视口钉在顶部，直到用户自己滚动。
+final class RichTextScrollView: NSScrollView {
+    var snapToTop = false
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if snapToTop { pinTop() }
+    }
+
+    override func tile() {
+        super.tile()
+        if snapToTop { pinTop() }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        snapToTop = false
+        super.scrollWheel(with: event)
+    }
+
+    func pinTop() {
+        guard let doc = documentView else { return }
+        let clip = contentView
+        let target: NSPoint
+        if clip.isFlipped || doc.isFlipped {
+            target = .zero
+        } else {
+            target = NSPoint(x: 0, y: max(0, doc.frame.height - clip.bounds.height))
+        }
+        guard abs(clip.bounds.origin.x - target.x) > 0.5
+                || abs(clip.bounds.origin.y - target.y) > 0.5 else { return }
+        clip.scroll(to: target)
+        doc.scroll(NSPoint.zero)
     }
 }

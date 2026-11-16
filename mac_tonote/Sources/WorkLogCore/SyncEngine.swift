@@ -162,7 +162,19 @@ public final class SyncEngine: ObservableObject {
         if let mtime = listing?.serverMtime, SyncRules.shouldSkipFetch(serverMtime: mtime, cursor: cursor) {
             return false
         }
-        let remote = try await downloadNote(id: id, token: token)
+        let remote: Note?
+        if listing == nil {
+            // 目录里没有这个文件。若本篇曾经同步过（baseRev != 0），说明是列表抖动或刚被别端删除，
+            // 绝不能当成「云端无此文件」拿本地旧版覆盖，跳过等下一轮列表恢复。
+            if cursor.baseRev != 0 {
+                return false
+            }
+            remote = nil
+        } else {
+            // 目录里既然有这个 id，任何下载/解析失败都只是临时错误：一律上抛，
+            // 交给 syncNotes 记失败、下一轮重试，绝不退化成用本地内容覆盖云端笔记。
+            remote = try await downloadNote(id: id, token: token)
+        }
         let step = SyncRules.afterFetch(dirty: cursor.dirty,
                                         remoteRev: remote?.rev,
                                         remoteUpdatedAt: remote?.updatedAt,
@@ -228,10 +240,18 @@ public final class SyncEngine: ObservableObject {
                 try await uploadAttachments(of: publishing, cursor: &attemptCursor, store: store, token: token)
                 try await uploadNote(publishing, token: token)
             }
-            let check = try await downloadNote(id: publishing.id, token: token)
-            if check?.rev == publishing.rev,
-               let updated = check?.updatedAt,
-               SyncRules.sameTime(updated, publishing.updatedAt) {
+            // create errno=0 即代表文件已写入。回读只用于确认，不能因为直链抖动就 rev+1 反复重传
+            // （旧实现最后会误报「连续三次没能写上云端」）。回读失败只重试回读。
+            var confirmed: Note?
+            for retry in 0..<3 {
+                if retry > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(retry) * 400_000_000)
+                }
+                confirmed = try? await downloadNote(id: publishing.id, token: token)
+                if confirmed != nil { break }
+            }
+            guard let check = confirmed else {
+                // 上传已成功但回读未确认：记下已发布状态，留待下一轮校验，不再 rev+1 重传
                 attemptCursor.baseRev = publishing.rev
                 attemptCursor.baseUpdatedAt = publishing.updatedAt
                 attemptCursor.dirty = false
@@ -250,25 +270,43 @@ public final class SyncEngine: ObservableObject {
                 cursor = attemptCursor
                 return true
             }
-            if let check {
-                let again = SyncRules.afterFetch(dirty: true,
-                                                 remoteRev: check.rev,
-                                                 remoteUpdatedAt: check.updatedAt,
-                                                 localUpdatedAt: publishing.updatedAt,
-                                                 cursor: attemptCursor)
-                if case .upload(let next) = again {
-                    nextRev = next
-                    continue
+            if check.rev == publishing.rev,
+               SyncRules.sameTime(check.updatedAt, publishing.updatedAt) {
+                attemptCursor.baseRev = publishing.rev
+                attemptCursor.baseUpdatedAt = publishing.updatedAt
+                attemptCursor.dirty = false
+                attemptCursor.serverMtime = listingMtime
+                if publishing.purged {
+                    let prefix = "attachments/\(publishing.id.uuidString)/"
+                    let stillUsed = store.notes.contains { other in
+                        other.id != publishing.id && !other.purged && other.body.contains(prefix)
+                    }
+                    if !stillUsed {
+                        try? await client.deleteRemote(path: attachmentDirectory(publishing.id), accessToken: token)
+                    }
                 }
-                if case .conflict = again, let current = store.note(with: publishing.id) {
-                    try await resolveConflict(local: current,
-                                              remote: check,
-                                              cursor: attemptCursor,
-                                              store: store,
-                                              token: token,
-                                              listingMtime: listingMtime)
-                    return true
-                }
+                store.applySyncedNote(publishing, cursor: attemptCursor)
+                note = publishing
+                cursor = attemptCursor
+                return true
+            }
+            let again = SyncRules.afterFetch(dirty: true,
+                                             remoteRev: check.rev,
+                                             remoteUpdatedAt: check.updatedAt,
+                                             localUpdatedAt: publishing.updatedAt,
+                                             cursor: attemptCursor)
+            if case .upload(let next) = again {
+                nextRev = next
+                continue
+            }
+            if case .conflict = again, let current = store.note(with: publishing.id) {
+                try await resolveConflict(local: current,
+                                          remote: check,
+                                          cursor: attemptCursor,
+                                          store: store,
+                                          token: token,
+                                          listingMtime: listingMtime)
+                return true
             }
         }
         throw BaiduPanError.server(message: "笔记「\(publishing.title)」连续三次没能写上云端")
@@ -351,8 +389,6 @@ public final class SyncEngine: ObservableObject {
                     try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(),
                                                            withIntermediateDirectories: true)
                     try data.write(to: dest)
-                } catch BaiduPanError.notFound {
-                    continue
                 } catch {
                     complete = false
                     continue
@@ -430,7 +466,19 @@ public final class SyncEngine: ObservableObject {
         if let mtime = listing?.serverMtime, SyncRules.shouldSkipFetch(serverMtime: mtime, cursor: cursor) {
             return false
         }
-        let remote = try await downloadTodo(id: id, token: token)
+        let remote: Todo?
+        if listing == nil {
+            // 目录里没有这个文件。若本篇曾经同步过（baseRev != 0），说明是列表抖动或刚被别端删除，
+            // 绝不能当成「云端无此文件」拿本地旧版覆盖，跳过等下一轮列表恢复。
+            if cursor.baseRev != 0 {
+                return false
+            }
+            remote = nil
+        } else {
+            // 目录里既然有这个 id，任何下载/解析失败都只是临时错误：一律上抛，
+            // 交给 syncTodos 记失败、下一轮重试，绝不退化成用本地内容覆盖云端任务。
+            remote = try await downloadTodo(id: id, token: token)
+        }
         let step = SyncRules.afterFetch(dirty: cursor.dirty,
                                         remoteRev: remote?.rev,
                                         remoteUpdatedAt: remote?.updatedAt,
@@ -483,10 +531,17 @@ public final class SyncEngine: ObservableObject {
                 try await uploadTodoImages(publishing, cursor: &attempt, store: store, token: token)
             }
             try await uploadTodo(publishing, token: token)
-            let check = try await downloadTodo(id: publishing.id, token: token)
-            if check?.rev == publishing.rev,
-               let updated = check?.updatedAt,
-               SyncRules.sameTime(updated, publishing.updatedAt) {
+            // create errno=0 即代表文件已写入。回读只用于确认，回读失败只重试回读、不 rev+1 重传。
+            var confirmed: Todo?
+            for retry in 0..<3 {
+                if retry > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(retry) * 400_000_000)
+                }
+                confirmed = try? await downloadTodo(id: publishing.id, token: token)
+                if confirmed != nil { break }
+            }
+            guard let check = confirmed else {
+                // 上传已成功但回读未确认：记下已发布状态，留待下一轮校验
                 attempt.baseRev = publishing.rev
                 attempt.baseUpdatedAt = publishing.updatedAt
                 attempt.dirty = false
@@ -496,21 +551,30 @@ public final class SyncEngine: ObservableObject {
                 cursor = attempt
                 return true
             }
-            if let check {
-                let again = SyncRules.afterFetch(dirty: true,
-                                                 remoteRev: check.rev,
-                                                 remoteUpdatedAt: check.updatedAt,
-                                                 localUpdatedAt: publishing.updatedAt,
-                                                 cursor: attempt)
-                if case .upload(let next) = again {
-                    nextRev = next
-                    continue
-                }
-                if case .conflict = again, let current = store.todo(with: publishing.id) {
-                    try await resolveTodoConflict(local: current, remote: check, cursor: attempt,
-                                                 store: store, token: token, listingMtime: listingMtime)
-                    return true
-                }
+            if check.rev == publishing.rev,
+               SyncRules.sameTime(check.updatedAt, publishing.updatedAt) {
+                attempt.baseRev = publishing.rev
+                attempt.baseUpdatedAt = publishing.updatedAt
+                attempt.dirty = false
+                attempt.serverMtime = listingMtime
+                store.applySyncedTodo(publishing, cursor: attempt)
+                todo = publishing
+                cursor = attempt
+                return true
+            }
+            let again = SyncRules.afterFetch(dirty: true,
+                                             remoteRev: check.rev,
+                                             remoteUpdatedAt: check.updatedAt,
+                                             localUpdatedAt: publishing.updatedAt,
+                                             cursor: attempt)
+            if case .upload(let next) = again {
+                nextRev = next
+                continue
+            }
+            if case .conflict = again, let current = store.todo(with: publishing.id) {
+                try await resolveTodoConflict(local: current, remote: check, cursor: attempt,
+                                             store: store, token: token, listingMtime: listingMtime)
+                return true
             }
         }
         throw BaiduPanError.server(message: "任务「\(publishing.title)」连续三次没能写上云端")
@@ -592,8 +656,6 @@ public final class SyncEngine: ObservableObject {
                     try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(),
                                                            withIntermediateDirectories: true)
                     try data.write(to: dest)
-                } catch BaiduPanError.notFound {
-                    continue
                 } catch {
                     complete = false
                     continue
@@ -637,26 +699,18 @@ public final class SyncEngine: ObservableObject {
         return result
     }
 
-    private func downloadNote(id: UUID, token: String) async throws -> Note? {
-        do {
-            let data = try await client.downloadData(notePath(id), accessToken: token)
-            return try decoder.decode(Note.self, from: data)
-        } catch BaiduPanError.notFound {
-            return nil
-        }
+    private func downloadNote(id: UUID, token: String) async throws -> Note {
+        let data = try await client.downloadData(notePath(id), accessToken: token)
+        return try decoder.decode(Note.self, from: data)
     }
 
     private func uploadNote(_ note: Note, token: String) async throws {
         try await client.uploadData(try encoder.encode(note), to: notePath(note.id), accessToken: token)
     }
 
-    private func downloadTodo(id: UUID, token: String) async throws -> Todo? {
-        do {
-            let data = try await client.downloadData(todoPath(id), accessToken: token)
-            return try decoder.decode(Todo.self, from: data)
-        } catch BaiduPanError.notFound {
-            return nil
-        }
+    private func downloadTodo(id: UUID, token: String) async throws -> Todo {
+        let data = try await client.downloadData(todoPath(id), accessToken: token)
+        return try decoder.decode(Todo.self, from: data)
     }
 
     private func uploadTodo(_ todo: Todo, token: String) async throws {
@@ -667,7 +721,8 @@ public final class SyncEngine: ObservableObject {
         do {
             let data = try await client.downloadData(notebooksPath, accessToken: token)
             return try decoder.decode(NotebookCloud.self, from: data)
-        } catch BaiduPanError.notFound {
+        } catch {
+            // 云端尚无笔记本清单或临时读取失败：按无远端处理，不阻塞整轮
             return nil
         }
     }
@@ -687,7 +742,8 @@ public final class SyncEngine: ObservableObject {
         do {
             let data = try await client.downloadData(manifestPath, accessToken: token)
             return try decoder.decode(OldManifest.self, from: data)
-        } catch BaiduPanError.notFound {
+        } catch {
+            // 云端尚无旧清单或临时读取失败：按无旧数据处理
             return nil
         }
     }

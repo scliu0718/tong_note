@@ -56,6 +56,8 @@ public struct BaiduPanListEntry: Codable, Equatable, Sendable {
     public let path: String?
     public let serverFilename: String?
     public let isdir: Int?
+    /// 网盘文件唯一标识（filemetas 兜底取直链只认 fs_id，不认 path）。
+    public let fsId: Int64?
     /// 网盘目录项的修改时间（秒）。只用来跳过没变的文件。
     public let serverMtime: Int?
 
@@ -63,6 +65,7 @@ public struct BaiduPanListEntry: Codable, Equatable, Sendable {
         case path
         case serverFilename = "server_filename"
         case isdir
+        case fsId = "fs_id"
         case serverMtime = "server_mtime"
     }
 
@@ -71,6 +74,13 @@ public struct BaiduPanListEntry: Codable, Equatable, Sendable {
         path = try c.decodeIfPresent(String.self, forKey: .path)
         serverFilename = try c.decodeIfPresent(String.self, forKey: .serverFilename)
         isdir = try c.decodeIfPresent(Int.self, forKey: .isdir)
+        if let value = try? c.decode(Int64.self, forKey: .fsId) {
+            fsId = value
+        } else if let value = try? c.decode(String.self, forKey: .fsId), let number = Int64(value) {
+            fsId = number
+        } else {
+            fsId = nil
+        }
         if let value = try? c.decode(Int.self, forKey: .serverMtime) {
             serverMtime = value
         } else if let value = try? c.decode(Double.self, forKey: .serverMtime) {
@@ -87,6 +97,7 @@ public struct BaiduPanListEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(path, forKey: .path)
         try c.encodeIfPresent(serverFilename, forKey: .serverFilename)
         try c.encodeIfPresent(isdir, forKey: .isdir)
+        try c.encodeIfPresent(fsId, forKey: .fsId)
         try c.encodeIfPresent(serverMtime, forKey: .serverMtime)
     }
 }

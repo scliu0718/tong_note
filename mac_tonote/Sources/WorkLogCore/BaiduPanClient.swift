@@ -31,6 +31,15 @@ public final class BaiduPanClient {
     public let tokenStore = BaiduPanTokenStore()
     private let session = URLSession.shared
 
+    /// 列目录时顺手记下 路径 → fs_id，供下载走 filemetas 兜底，避免重复列目录。
+    private let cacheLock = NSLock()
+    private var fsIdCache: [String: Int64] = [:]
+
+    /// 百度对部分应用禁止 xpan/file?method=download&path=（errno 20020
+    /// 「该路径不在允许的访问范围内」）。命中一次后本进程直接走 filemetas，
+    /// 不再每篇笔记都先发一个必然失败的请求。
+    private var downloadByPathBlocked = false
+
     public init() {}
 
     public var currentToken: BaiduPanToken? { tokenStore.load() }
@@ -202,7 +211,13 @@ public final class BaiduPanClient {
         guard errno == 0 else {
             throw BaiduPanError.server(message: "列出目录失败（errno=\(errno)）\(Self.bodySnippet(data))")
         }
-        return resp.list ?? []
+        let list = resp.list ?? []
+        for entry in list {
+            if let fsId = entry.fsId, let p = entry.path {
+                cacheFsId(fsId, path: p)
+            }
+        }
+        return list
     }
 
     // MARK: 文件读写（PCS 个人云存储）
@@ -223,44 +238,171 @@ public final class BaiduPanClient {
         _ = try? await session.data(for: req)
     }
 
-    /// 下载远端文件，返回 Data；远端不存在时抛 `notFound`。
-    /// 采用开放平台 xpan `method=download` 取直链再拉取（老版 pcs 接口对开放平台应用会 403）。
+    /// 下载远端文件，返回 Data。
+    ///
+    /// 百度对部分开放平台应用禁止 `method=download&path`（恒返回 errno 20020
+    /// 「该路径不在允许的访问范围内」），因此取直链的顺序是：先试 download&path，
+    /// 被拒后改用 `filemetas&fsids&dlink=1`（先列父目录拿 fs_id）。
+    /// 三次重试 + 退避，每次重新取链；直链 GET 偶发 404 也在重试范围内。
+    ///
+    /// 注意：本方法只抛「临时错误」，**绝不抛 notFound**。文件是否存在由调用方依据
+    /// 「目录列表 + 是否同步过」判断——绝不能用「列目录查不到」推断不存在（断网时同样查不到），
+    /// 避免网络抖动/风控被当成「云端无文件」而用本地旧版反向覆盖。
     public func downloadData(_ remotePath: String, accessToken: String) async throws -> Data {
+        var lastError: Error?
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(attempt) * 300_000_000)
+            }
+            guard let link = await resolveDlink(remotePath, accessToken: accessToken, refresh: attempt > 0) else {
+                lastError = BaiduPanError.server(message: "获取下载直链失败：\(remotePath)")
+                continue
+            }
+            do {
+                return try await fetchDlink(link, accessToken: accessToken, path: remotePath)
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? BaiduPanError.server(message: "下载失败：\(remotePath)")
+    }
+
+    /// 远端文件是否存在。目录不存在或列表里没有该文件返回 false；
+    /// 列表失败（网络异常等）会抛错——绝不把「查不到」误判成「不存在」。
+    public func remoteFileExists(_ path: String, accessToken: String) async throws -> Bool {
+        let dir = (path as NSString).deletingLastPathComponent
+        let entries: [BaiduPanListEntry]
+        do {
+            entries = try await listFiles(directory: dir, accessToken: accessToken)
+        } catch BaiduPanError.notFound {
+            return false
+        }
+        return entries.contains { ($0.path ?? "").caseInsensitiveCompare(path) == .orderedSame }
+    }
+
+    /// 取下载直链。首试 method=download&path，被拒后走 filemetas&fsids&dlink=1；
+    /// 拿不到时再稍候强刷父目录重拿 fs_id（列表有延迟、filemetas 偶发漏项）。返回 nil 表示临时失败。
+    private func resolveDlink(_ path: String, accessToken: String, refresh: Bool) async -> String? {
+        if !refresh && !downloadByPathBlocked {
+            let direct = await dlinkByPath(path, accessToken: accessToken)
+            if direct.blocked { downloadByPathBlocked = true }
+            if let d = direct.dlink { return d }
+        }
+        var fsId: Int64?
+        if refresh {
+            fsId = await findFsId(path, accessToken: accessToken)
+        } else if let cached = cachedFsId(path) {
+            fsId = cached
+        } else {
+            fsId = await findFsId(path, accessToken: accessToken)
+        }
+        if let fsId, let d = await dlinkByFsId(fsId, accessToken: accessToken) { return d }
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        fsId = await findFsId(path, accessToken: accessToken)
+        if let fsId, let d = await dlinkByFsId(fsId, accessToken: accessToken) { return d }
+        return nil
+    }
+
+    /// method=download&path 取直链。返回 (dlink, 是否被拒)。被 errno 20020 拒绝后本进程改走 filemetas。
+    private func dlinkByPath(_ path: String, accessToken: String) async -> (dlink: String?, blocked: Bool) {
         var dc = URLComponents(url: URL(string: "https://pan.baidu.com/rest/2.0/xpan/file")!, resolvingAgainstBaseURL: false)!
         dc.queryItems = [
             URLQueryItem(name: "method", value: "download"),
             URLQueryItem(name: "access_token", value: accessToken),
-            URLQueryItem(name: "path", value: remotePath),
+            URLQueryItem(name: "path", value: path),
             URLQueryItem(name: "threshold", value: "0"),
         ]
-        let (metaData, _) = try await session.data(from: dc.url!)
-        // 解析直链：{ "errno":0, "list":[ { "dlink":"https://...pcs.baidu.com/..." } ] }
         struct DlMeta: Codable {
             let errno: Int?
             let list: [DlItem]?
             struct DlItem: Codable { let dlink: String? }
         }
-        guard let meta = try? JSONDecoder().decode(DlMeta.self, from: metaData) else {
-            // 响应不是 JSON（多为百度风控/网关返回的 HTML 页），把原文带出来，不要静默当成「云端无文件」
-            throw BaiduPanError.server(message: "查询云端文件失败\(Self.bodySnippet(metaData))")
+        guard let (metaData, _) = try? await session.data(from: dc.url!),
+              let meta = try? JSONDecoder().decode(DlMeta.self, from: metaData) else {
+            return (nil, false)
         }
-        guard meta.errno ?? -1 == 0,
-              let dlink = meta.list?.first?.dlink, !dlink.isEmpty else {
-            // JSON 但 errno 非 0 / 无直链 → 多为文件不存在，视为无远端文件（首次同步正常路径）
-            throw BaiduPanError.notFound
+        if let d = meta.list?.first?.dlink, !d.isEmpty {
+            return (d, false)
         }
-        guard var dl = URLComponents(string: dlink) else { throw BaiduPanError.invalidResponse }
+        return (nil, (meta.errno ?? 0) != 0)
+    }
+
+    /// 从直链拉取文件体（附 access_token 与 User-Agent，否则会被 403 拒绝）。
+    private func fetchDlink(_ link: String, accessToken: String, path: String) async throws -> Data {
+        guard var dl = URLComponents(string: link) else { throw BaiduPanError.invalidResponse }
         var q = dl.queryItems ?? []
         q.append(URLQueryItem(name: "access_token", value: accessToken))
         dl.queryItems = q
-        // 百度开放平台要求下载 dlink 时携带 User-Agent: pan.baidu.com，否则会被 403 拒绝
         var dlReq = URLRequest(url: dl.url!)
         dlReq.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
         let (fileData, resp) = try await session.data(for: dlReq)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
             throw BaiduPanError.server(message: "下载文件失败（HTTP \(http.statusCode)）\(Self.bodySnippet(fileData))")
         }
+        if fileData.isEmpty {
+            throw BaiduPanError.server(message: "下载内容为空：\(path)")
+        }
         return fileData
+    }
+
+    /// 列父目录，按 path 精确匹配拿 fs_id（filemetas 只认 fsids 不认 path）。拿不到/列表失败返回 nil。
+    private func findFsId(_ path: String, accessToken: String) async -> Int64? {
+        let dir = (path as NSString).deletingLastPathComponent
+        guard !dir.isEmpty else { return nil }
+        var start = 0
+        while start < 5000 {
+            let page: [BaiduPanListEntry]
+            do {
+                page = try await listFilePage(directory: dir, accessToken: accessToken, start: start, limit: 200)
+            } catch {
+                return nil
+            }
+            var hit: Int64? = nil
+            for f in page {
+                if let fsId = f.fsId, let p = f.path {
+                    cacheFsId(fsId, path: p)
+                    if p.caseInsensitiveCompare(path) == .orderedSame { hit = fsId }
+                }
+            }
+            if let hit { return hit }
+            if page.count < 200 { return nil }
+            start += page.count
+        }
+        return nil
+    }
+
+    /// method=filemetas&fsids=[id]&dlink=1 → 下载直链。返回体是 { info: [ { dlink } ] }。
+    private func dlinkByFsId(_ fsId: Int64, accessToken: String) async -> String? {
+        var comps = URLComponents(url: URL(string: "https://pan.baidu.com/rest/2.0/xpan/file")!, resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            URLQueryItem(name: "method", value: "filemetas"),
+            URLQueryItem(name: "access_token", value: accessToken),
+            URLQueryItem(name: "fsids", value: "[\(fsId)]"),
+            URLQueryItem(name: "dlink", value: "1"),
+        ]
+        var req = URLRequest(url: comps.url!)
+        req.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
+        guard let (data, _) = try? await session.data(for: req),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errno = obj["errno"] as? Int, errno == 0,
+              let info = obj["info"] as? [[String: Any]],
+              let first = info.first,
+              let dlink = first["dlink"] as? String, !dlink.isEmpty else {
+            return nil
+        }
+        return dlink
+    }
+
+    /// 云端文件名大小写可能与本地 id 不一致，查缓存时忽略大小写。
+    private func cachedFsId(_ path: String) -> Int64? {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if let v = fsIdCache[path] { return v }
+        return fsIdCache.first { $0.key.caseInsensitiveCompare(path) == .orderedSame }?.value
+    }
+
+    private func cacheFsId(_ fsId: Int64, path: String) {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        fsIdCache[path] = fsId
     }
 
     /// 上传文件到远端（覆盖写）。开放平台标准三步：precreate → 上传分片 → create。
@@ -359,6 +501,16 @@ public final class BaiduPanClient {
         if let errno = obj["errno"] as? Int, errno != 0 {
             throw BaiduPanError.server(message: "create 失败（errno=\(errno)）\(Self.bodySnippet(created))")
         }
+        // 该接口会 HTTP 200 但返回体带 error_code/error_msg；不校验会拼出不完整文件
+        if obj["error_code"] != nil || obj["error_msg"] != nil {
+            throw BaiduPanError.server(message: "create 被拒\(Self.bodySnippet(created))")
+        }
+        // create 返回 fs_id，缓存后 publish 的回读校验能立刻走 filemetas，不必等云端列表刷新
+        if let fsId = (obj["fs_id"] as? NSNumber)?.int64Value, fsId != 0 {
+            cacheFsId(fsId, path: remotePath)
+        } else if let str = obj["fs_id"] as? String, let fsId = Int64(str), fsId != 0 {
+            cacheFsId(fsId, path: remotePath)
+        }
     }
 
     // MARK: 私有
@@ -419,9 +571,15 @@ public final class BaiduPanClient {
         if let http = resp as? HTTPURLResponse, http.statusCode >= 300 {
             throw BaiduPanError.server(message: "上传分片失败（HTTP \(http.statusCode)）\(Self.bodySnippet(respData))")
         }
-        if let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
-           let errno = obj["errno"] as? Int, errno != 0 {
-            throw BaiduPanError.server(message: "上传分片失败（errno=\(errno)）\(Self.bodySnippet(respData))")
+        if let obj = try? JSONSerialization.jsonObject(with: respData) as? [String: Any] {
+            // 该接口会 HTTP 200 但返回体带 error_code/error_msg；不校验会让 create 拼出不完整文件，
+            // 另一端下载后 JSON 解析失败，表现为「同步成功但笔记空」。
+            if obj["error_code"] != nil || obj["error_msg"] != nil {
+                throw BaiduPanError.server(message: "上传分片被拒\(Self.bodySnippet(respData))")
+            }
+            if let errno = obj["errno"] as? Int, errno != 0 {
+                throw BaiduPanError.server(message: "上传分片失败（errno=\(errno)）\(Self.bodySnippet(respData))")
+            }
         }
     }
 

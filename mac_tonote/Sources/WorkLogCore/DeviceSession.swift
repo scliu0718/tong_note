@@ -218,11 +218,13 @@ public final class DeviceRegistry: @unchecked Sendable {
         guard let sessionId = identity.sessionId else { return }
 
         let remote: DeviceRecord?
-        do {
+        // 只有「列目录成功且确实无本机设备文件」才视为首次登录；网络异常时 remoteFileExists 会抛错，
+        // 绝不把读不到当成「无文件」而回写覆盖（避免冲掉刚被别的设备写上的下线标记）。
+        if try await client.remoteFileExists(Self.filePath(deviceId: identity.deviceId), accessToken: accessToken) {
             let data = try await client.downloadData(Self.filePath(deviceId: identity.deviceId),
                                                      accessToken: accessToken)
             remote = try DeviceRecord.decode(data)
-        } catch BaiduPanError.notFound {
+        } else {
             remote = nil
         }
 
@@ -262,7 +264,7 @@ public final class DeviceRegistry: @unchecked Sendable {
                 let record = try DeviceRecord.decode(data)
                 guard DeviceRecord.isSafeDeviceId(record.deviceId) else { continue }
                 records.append(record)
-            } catch BaiduPanError.notFound {
+            } catch {
                 continue
             }
         }
