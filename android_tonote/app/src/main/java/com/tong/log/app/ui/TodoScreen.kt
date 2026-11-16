@@ -644,7 +644,7 @@ private fun AddImageTile(onClick: () -> Unit) {
         Modifier
             .size(52.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF7F7F9))
+            .background(Color(0xFFFBFBFB))
             .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
