@@ -46,7 +46,7 @@ object NoteStore {
     private fun markChanged(ids: List<String>) {
         if (ids.isEmpty()) return
         ids.forEach { SyncCursorStore.markDirty(it, false) }
-        runCatching { SyncEngine.schedule() }
+        runCatching { SyncEngine.scheduleNotesUpload() }
     }
 
     fun load() {

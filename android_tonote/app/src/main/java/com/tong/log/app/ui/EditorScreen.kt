@@ -47,6 +47,8 @@ import com.tong.log.app.data.store.AttachmentStore
 import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.sync.SyncCursorStore
 import com.tong.log.app.data.sync.SyncEngine
+import com.tong.log.app.data.sync.SyncScope
+import androidx.activity.compose.BackHandler
 import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -117,6 +119,43 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
 
     fun saveBody() = captureBody()
 
+    // 离开编辑器（返回键 / 左上角返回）：正文先落盘，再由引擎在自己的作用域里立刻上传
+    fun leave() {
+        if (edited) saveBody()
+        SyncEngine.flushNotesSoon()
+        onBack()
+    }
+    BackHandler { leave() }
+
+    // 点开笔记：先拉远端（插队，优先于定时轮）；本篇没被用户改过且拉到新内容时，刷新编辑器
+    LaunchedEffect(noteId) {
+        val before = NoteStore.note(noteId)?.body
+        SyncEngine.request(SyncScope.OneNote(noteId))
+        // 若请求被排进队列，request 立即返回；等同步空闲后再看有没有拉到新内容
+        var waited = 0
+        while (SyncEngine.status.value.isSyncing && waited < 60) { delay(300); waited++ }
+        val after = NoteStore.note(noteId) ?: return@LaunchedEffect
+        if (after.body != before && !edited) {
+            title = after.title
+            val html = if (after.contentFormat == NoteContentFormat.RICH_TEXT) after.body
+            else MarkdownConverter.toHtml(after.body)
+            webView?.loadDataWithBaseURL(BASE_URL, buildEditorHtml(html), "text/html", "utf-8", null)
+        }
+    }
+
+    // 编辑中每 30 秒自动保存并上传一次
+    LaunchedEffect(noteId) {
+        while (true) {
+            delay(30_000)
+            if (edited || SyncCursorStore.cursor(noteId, false)?.dirty == true) {
+                if (edited) saveBody()
+                delay(350)
+                SyncEngine.flushNotes()
+                edited = false
+            }
+        }
+    }
+
     fun exec(cmd: String, value: String? = null) {
         val js = if (value == null) "document.execCommand('$cmd');"
         else "document.execCommand('$cmd', false, '$value');"
@@ -151,7 +190,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 0.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { saveBody(); onBack() }) {
+            IconButton(onClick = { leave() }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = TextPrimary)
             }
             Text(

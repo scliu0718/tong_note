@@ -126,11 +126,16 @@ struct MainView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            Task { await sync.syncRound(store: store, todos: todos) }
+            if phase == .active {
+                Task { await sync.syncRound(store: store, todos: todos) }
+            } else {
+                // 退到后台：把没传的笔记和任务都传上去
+                flushPendingUploads()
+            }
         }
+        // 笔记 / 快同步：改完最多等 30 秒上传一次；离开笔记时立刻传（见下面的 selectedID / showTodos）
         .onReceive(NotificationCenter.default.publisher(for: .tonoteLocalDataChanged)) { _ in
-            sync.schedule(store: store, todos: todos)
+            sync.scheduleNotesUpload(store: store, todos: todos)
         }
         // 兜底：当前选中的笔记被删除/消失时，选中当前分类第一条，而不是「快同步」
         .onReceive(store.$notes) { notes in
@@ -138,13 +143,37 @@ struct MainView: View {
             guard !notes.contains(where: { $0.id == id }) else { return }
             selectedID = displayedNotes.first?.id ?? NoteStore.quickSyncNoteID
         }
-        .onChange(of: selectedID) { _, newValue in
+        .onChange(of: selectedID) { oldValue, newValue in
             if newValue != nil { showTodos = false }
+            // 离开上一篇：立刻上传改过的笔记；点开新的一篇：先拉远端（插队，优先于定时轮）
+            if oldValue != nil { Task { await sync.flushNotes(store: store, todos: todos) } }
+            if let id = newValue, BaiduPanClient.shared.currentToken != nil {
+                Task { await sync.request(.note(id), store: store, todos: todos) }
+            }
+        }
+        .onChange(of: showTodos) { oldValue, newValue in
+            guard BaiduPanClient.shared.currentToken != nil else { return }
+            if newValue {
+                // 点开任务页：先拉远端并插队
+                Task { await sync.request(.todos, store: store, todos: todos) }
+            } else if oldValue {
+                // 返回：把没传的任务同步到远端
+                Task { await sync.syncDirtyTodos(store: store, todos: todos) }
+            }
         }
         .sheet(isPresented: $showSync) {
             SyncView(store: store, todos: todos)
                 .environmentObject(sync)
                 .frame(width: 900, height: 640)
+        }
+    }
+
+    /// 退到后台 / 关窗口前：笔记和任务里没传的都立刻传。
+    private func flushPendingUploads() {
+        guard BaiduPanClient.shared.currentToken != nil else { return }
+        Task {
+            await sync.flushNotes(store: store, todos: todos)
+            await sync.syncDirtyTodos(store: store, todos: todos)
         }
     }
 

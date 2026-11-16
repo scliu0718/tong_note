@@ -109,6 +109,13 @@ object SyncEngine {
      * 比定时轮、普通请求都先跑）。队列里已有 `All` 时其余范围被它覆盖，新来 `All` 会清掉其余范围。
      */
     suspend fun request(target: SyncScope, priority: Boolean = true) {
+        // 实际同步放在引擎自己的作用域里跑：调用方多是 LaunchedEffect / 页面协程，
+        // 切 tab、返回都会取消它，同步若跟着被取消就会半途失败（日志里的 LeftCompositionCancellationException）。
+        // 这里只 join 等结果；调用方被取消时 join 抛出，但同步照常跑完。
+        scope.launch { dispatch(target, priority) }.join()
+    }
+
+    private suspend fun dispatch(target: SyncScope, priority: Boolean) {
         if (_status.value.isSyncing) {
             enqueue(target, priority)
             return

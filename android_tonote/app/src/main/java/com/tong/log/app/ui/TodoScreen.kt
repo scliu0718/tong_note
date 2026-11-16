@@ -34,6 +34,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.tong.log.app.data.sync.SyncEngine
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -108,8 +115,22 @@ fun TodoScreen(onSync: () -> Unit) {
         ) {
             Text("任务", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
+            // 同步中（含切页自动拉取、保存后上传）图标持续旋转，停了就回正
+            val syncing = SyncEngine.status.collectAsState().value.isSyncing
+            val spin = rememberInfiniteTransition(label = "sync-spin")
+            val angle by spin.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+                label = "sync-angle"
+            )
             IconButton(onClick = onSync) {
-                Icon(Icons.Default.Refresh, contentDescription = "同步", tint = TextPrimary)
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "同步",
+                    tint = if (syncing) Green else TextPrimary,
+                    modifier = Modifier.rotate(if (syncing) angle else 0f)
+                )
             }
         }
         // 标题栏分割线

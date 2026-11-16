@@ -44,6 +44,8 @@ import com.tong.log.app.data.store.NoteStore
 import com.tong.log.app.data.store.TodoStore
 import com.tong.log.app.data.store.isOverdue
 import com.tong.log.app.data.sync.SyncEngine
+import com.tong.log.app.data.sync.SyncScope
+import com.tong.log.app.data.net.BaiduPanTokenStore
 import com.tong.log.app.ui.*
 import com.tong.log.app.ui.theme.*
 import kotlinx.coroutines.delay
@@ -110,6 +112,21 @@ private fun AppRoot() {
         return
     }
 
+    // 退到后台：把没传的笔记和任务都传上去
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP && BaiduPanTokenStore.current() != null) {
+                scope.launch {
+                    SyncEngine.flushNotes()
+                    SyncEngine.request(SyncScope.DirtyTodos, priority = false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val navController = rememberNavController()
     NavHost(navController, startDestination = "main") {
         composable("main") { MainScaffold(navController) }
@@ -153,6 +170,16 @@ private fun MainScaffold(navController: NavController) {
     var tab by remember { mutableStateOf(0) }
     var showAvatar by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // 切页：点开「笔记」/「任务」先拉远端（插队）；离开「任务」时把没传的任务同步到远端
+    var prevTab by remember { mutableStateOf(-1) }
+    LaunchedEffect(tab) {
+        val from = prevTab
+        prevTab = tab
+        if (from == -1) return@LaunchedEffect // 刚进主页，启动全量同步已覆盖
+        if (from == 1 && tab != 1) SyncEngine.request(SyncScope.DirtyTodos, priority = false)
+        if (tab == 0) SyncEngine.request(SyncScope.Notes)
+        if (tab == 1) SyncEngine.request(SyncScope.Todos)
+    }
     // 底栏「任务」角标：逾期任务数；collect todos 触发重组，否则 overdueCount 不刷新
     val todos by TodoStore.todos.collectAsState()
     val overdueCount = todos.count { !it.purged && it.isOverdue }
@@ -241,7 +268,7 @@ private fun MainScaffold(navController: NavController) {
                         navController.navigate("editor/${n.id}")
                     }
                 )
-                1 -> TodoScreen(onSync = { scope.launch { SyncEngine.syncRound() } })
+                1 -> TodoScreen(onSync = { scope.launch { SyncEngine.request(SyncScope.Todos) } })
                 2 -> MeScreen(
                     onOpenSync = { navController.navigate("sync") },
                     onOpenDevices = { navController.navigate("devices") },

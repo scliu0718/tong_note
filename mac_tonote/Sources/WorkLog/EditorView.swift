@@ -289,8 +289,7 @@ struct EditorView: View {
                             .background(Theme.accent)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
-                        .buttonStyle(.plain)
-                        .disabled(sync.status.isSyncing)
+                        .buttonStyle(.plain)   // 同步中也可点击：请求会插队到队首
                     }
                 } else {
                     HStack(spacing: 5) {
