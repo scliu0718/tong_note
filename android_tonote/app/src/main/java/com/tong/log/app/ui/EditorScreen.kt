@@ -688,7 +688,7 @@ private fun buildEditorHtml(body: String): String {
         pre{background:#f5f5f7;padding:10px;border-radius:6px;font-family:monospace;white-space:pre-wrap;}
         img{max-width:100%;border-radius:6px;}
         table{border-collapse:collapse;margin:8px 0;width:100%;}
-        td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;height:calc(2.5em - 2px);vertical-align:top;}
+        td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;height:calc(2.5em - 2px);vertical-align:top;word-break:keep-all;overflow-wrap:normal;}
         td>p,th>p{margin:0;min-height:1.75em}
         td[data-align="center"]{text-align:center}
         td[data-align="right"]{text-align:right}
@@ -707,17 +707,35 @@ private fun buildEditorHtml(body: String): String {
             if (!sel || sel.rangeCount === 0) return null;
             var range = sel.getRangeAt(0);
             var rects = range.getClientRects();
-            if (rects && rects.length) return rects[rects.length - 1];
+            if (rects && rects.length) {
+              var lr = rects[rects.length - 1];
+              if (lr.height || lr.width) return lr;   // 空单元格里常是全 0 矩形，不能直接用
+            }
             var r = range.getBoundingClientRect();
-            return (r && (r.height || r.width || r.top)) ? r : null;
+            if (r && (r.height || r.width)) return r;
+            // 空单元格/空段落里光标没有文本矩形，退回到所在元素的矩形（表格里点空格子时常见）
+            var n = sel.anchorNode;
+            if (n && n.nodeType === 3) n = n.parentNode;
+            while (n && n !== document.body && n.getBoundingClientRect) {
+              var er = n.getBoundingClientRect();
+              if (er && er.height) return er;
+              n = n.parentNode;
+            }
+            return (r && r.top) ? r : null;
           }
           function ensureCaretVisible(){
             pending = false;
             var r = caretRect();
             if (!r) return;
-            var vh = window.innerHeight || document.documentElement.clientHeight;
-            if (r.bottom > vh - MARGIN) window.scrollBy(0, r.bottom - (vh - MARGIN));
-            else if (r.top < 12) window.scrollBy(0, r.top - 12);
+            // 表格较宽时布局视口会被撑大（innerHeight 大于屏幕真正可见的高度），
+            // 必须用 visualViewport 才知道键盘上方实际可见的区间
+            var vv = window.visualViewport;
+            var top = vv ? vv.offsetTop : 0;
+            var vh = vv ? vv.height : (window.innerHeight || document.documentElement.clientHeight);
+            var margin = Math.min(MARGIN, vh * 0.25);
+            var bottom = top + vh;
+            if (r.bottom > bottom - margin) window.scrollBy(0, r.bottom - (bottom - margin));
+            else if (r.top < top + 12) window.scrollBy(0, r.top - (top + 12));
           }
           window.__caretIntoView = ensureCaretVisible;
           function schedule(){

@@ -37,8 +37,8 @@ enum RichTextTableCodec {
 
     static func decode(attributes: [String: String], children: [HTMLNode]) -> RichTextTable {
         var rows: [[RichTextTableCell]] = []
-        for child in children {
-            guard case .element(let tag, _, let rowChildren) = child, tag == "tr" else { continue }
+        for child in rowNodes(in: children) {
+            guard case .element(_, _, let rowChildren) = child else { continue }
             var cells: [RichTextTableCell] = []
             for cellNode in rowChildren {
                 guard case .element(let cellTag, let cellAttributes, let cellChildren) = cellNode else { continue }
@@ -56,6 +56,20 @@ enum RichTextTableCodec {
         let weights = RichTextTable.weights(from: attributes["data-widths"], columnCount: columnCount)
         let fullWidth = attributes["data-fullwidth"] != "0"
         return RichTextTable(rows: rows, columnWeights: weights, fullWidth: fullWidth)
+    }
+
+    /// 浏览器（Android WebView）的 innerHTML 会把 `<tr>` 包进 `<tbody>`，这里递归展开 tbody/thead/tfoot。
+    private static func rowNodes(in nodes: [HTMLNode]) -> [HTMLNode] {
+        var result: [HTMLNode] = []
+        for node in nodes {
+            guard case .element(let tag, _, let inner) = node else { continue }
+            if tag == "tr" {
+                result.append(node)
+            } else if tag == "tbody" || tag == "thead" || tag == "tfoot" {
+                result.append(contentsOf: rowNodes(in: inner))
+            }
+        }
+        return result
     }
 
     /// 兼容外部粘贴进来的 `style="background-color:#RRGGBB"` 或 `rgb(r,g,b)`。

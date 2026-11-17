@@ -3,6 +3,14 @@ import XCTest
 
 final class RichTextTableCodecTests: XCTestCase {
 
+    func testDecodeUnwrapsTbodyFromBrowserHTML() {
+        let html = "<table data-fullwidth=\"0\"><tbody><tr><td><p>1</p></td><td><p></p></td></tr><tr><td><p></p></td><td><p>x</p></td></tr></tbody></table>"
+        let table = RichTextHTMLCodec.decode(html).blocks.first?.table
+        XCTAssertEqual(table?.rowCount, 2)
+        XCTAssertEqual(table?.columnCount, 2)
+        XCTAssertEqual(table?.rows[1][1].plainText, "x")
+    }
+
     func testHTMLRoundTripKeepsGridAndFormatting() {
         var table = RichTextTable.make(rows: 2, columns: 2)
         table.rows[0][0] = RichTextTableCell(blocks: [
