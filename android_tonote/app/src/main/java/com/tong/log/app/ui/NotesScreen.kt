@@ -1,6 +1,7 @@
 package com.tong.log.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -133,7 +134,9 @@ fun NotesScreen(
 
         // 笔记本 chips
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth()
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             notebooks.take(6).forEach { nb ->
@@ -147,6 +150,8 @@ fun NotesScreen(
                         .padding(horizontal = 13.dp, vertical = 6.dp),
                     color = if (on) Color.White else TextSecondary,
                     fontSize = 12.sp,
+                    maxLines = 1,
+                    softWrap = false,
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
                 )
             }
@@ -253,6 +258,7 @@ private fun QuickCard(
     Box(modifier) {
         Row(
             Modifier
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White)
                 .clickable(onClick = onClick)
@@ -269,8 +275,8 @@ private fun QuickCard(
                 Text(sub, fontSize = 10.sp, color = TextQuaternary)
             }
         }
-        // 右上角逾期数量角标（badge 为 null 或 0 时不渲染）
-        OverdueCountBadge(badge ?: 0, Modifier.align(Alignment.TopEnd).padding(6.dp))
+        // 逾期数量角标放在卡片内部右上角（badge 为 null 或 0 时不渲染）
+        OverdueCountBadge(badge ?: 0, Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 9.dp))
     }
 }
 
