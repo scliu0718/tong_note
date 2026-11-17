@@ -129,7 +129,7 @@
 
 本地待办 : 5 条 → 8 条（与云端 todos/ 的 8 个文件一致）
 本地笔记 : 32 篇（不变），同步游标 note-sync 32 / todo-sync 8</pre>
-<p>同步轮次真实跑完，云端较新的待办被补齐，没有出现旧版那种卡在 <code>Syncing</code> 的情况。</p>
+<p>同步轮次真实跑完，云端较新的待办被补齐，没有出现旧版那种卡在 <code>Syncing</code> 的情况。交付时已用<strong>最终构建</strong>重新拉起正式 GUI（不设任何沙箱变量），进程常驻、状态落定 <code>Success</code>；最终核对云端笔记 32 / 本地 32、云端待办 8 / 本地 8，ID 集合完全一致。</p>
 
 <h2>四、生产目录只读验收（H 组）</h2>
 <p>新增 <code>tests/Tonote.LiveTests/ProdCheck.cs</code> 与 <code>--prod</code> 入口。该分支<strong>刻意不设</strong> <code>TONOTE_REMOTE_ROOT</code>，直接读 <code>/apps/tong_log</code>；只调用列目录与下载接口，不启动同步引擎、不写任何云端文件。</p>
