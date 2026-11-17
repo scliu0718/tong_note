@@ -22,7 +22,14 @@ public sealed class TodoStore
 
     public int PendingCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.todo);
     public int DoingCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.doing);
+    public int DoneCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.done);
+    public int TerminatedCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.terminated);
     public int OverdueCount => Todos.Count(todo => !todo.Purged && todo.IsOverdue);
+    public int ActiveCount => PendingCount + DoingCount;
+
+    /// <summary>统计文案「待完成 N · 进行中 N · 已完成 N · 终止 N · 逾期 N」。</summary>
+    public string SummaryText =>
+        $"待完成 {PendingCount} · 进行中 {DoingCount} · 已完成 {DoneCount} · 终止 {TerminatedCount} · 逾期 {OverdueCount}";
 
     public IReadOnlyList<Todo> InStatus(TodoStatus status) => Todos
         .Where(todo => !todo.Purged && todo.Status == status)
@@ -97,7 +104,8 @@ public sealed class TodoStore
     public void SetPlannedAt(Guid id, DateTime? plannedAt)
     {
         var todo = Find(id);
-        if (todo == null)
+        // 终态只读：Mac 版禁用整行日期控件
+        if (todo == null || todo.IsTerminal)
             return;
         todo.PlannedAt = plannedAt;
         todo.UpdatedAt = DateTime.UtcNow;
@@ -108,7 +116,7 @@ public sealed class TodoStore
     public void UpdateNotes(Guid id, string notes)
     {
         var todo = Find(id);
-        if (todo == null)
+        if (todo == null || todo.IsTerminal)
             return;
         todo.Notes = notes;
         todo.UpdatedAt = DateTime.UtcNow;
@@ -119,7 +127,7 @@ public sealed class TodoStore
     public void UpdateTitle(Guid id, string title)
     {
         var todo = Find(id);
-        if (todo == null)
+        if (todo == null || todo.IsTerminal)
             return;
         todo.Title = title;
         todo.UpdatedAt = DateTime.UtcNow;

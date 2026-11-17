@@ -120,15 +120,7 @@ public sealed class LoginView : UserControl
                     Height = 20,
                     CornerRadius = new CornerRadius(10),
                     Background = new SolidColorBrush(Color.FromArgb(46, 255, 255, 255)),
-                    Child = new TextBlock
-                    {
-                        Text = "✓",
-                        Foreground = Palette.White,
-                        FontSize = 11,
-                        FontWeight = FontWeight.Bold,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    },
+                    Child = Ui.Icon(Glyphs.Check, 11, Palette.White),
                 },
                 new TextBlock
                 {

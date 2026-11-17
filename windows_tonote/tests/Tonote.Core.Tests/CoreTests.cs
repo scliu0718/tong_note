@@ -91,12 +91,15 @@ public class CoreTests
     }
 
     [Fact]
-    public void CorruptFileFallsBackToSamples()
+    public void CorruptFileFallsBackToEmptyStore()
     {
         var dir = Temp();
         File.WriteAllText(Path.Combine(dir, "notes.json"), "{");
         var store = new NoteStore(dir);
-        Assert.Contains(store.Notes, note => note.Title == "产品经理周会纪要");
+        // 与 Mac 一致：本地文件损坏时保持空列表，由同步引擎从真实网盘拉取。
+        // 早期实现会灌入演示笔记，结果被当成本地新增推上云端，与真实数据混淆。
+        Assert.DoesNotContain(store.Notes, note => note.Title == "产品经理周会纪要");
+        Assert.Contains(store.Notes, note => note.IsQuickSync);
     }
 
     [Fact]

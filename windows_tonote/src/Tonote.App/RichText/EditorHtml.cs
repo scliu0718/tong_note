@@ -1,7 +1,9 @@
 namespace Tonote.App;
 
 /// <summary>
-/// WebView2 里运行的受控 HTML 编辑器。
+/// WebView2 里运行的受控 HTML 编辑器。CSS 与 Mac 端 RichTextBridge / 编辑器设计稿 1:1：
+/// 正文 #47474A / 14px / 行高 1.85、标题 40/32/24/18、引用绿竖线、代码块圆角、
+/// 列表标记蓝、表格 100pt 列宽与 #D8D9DE 边框、图片最大 480px。
 /// 浏览器 contenteditable 会产出 div / font / tbody / 绝对路径图片，
 /// 这里在 JS 侧先规整成三端约定的受控标签集，C# 侧再用 RichTextHtmlCodec 校验一遍。
 /// </summary>
@@ -17,19 +19,85 @@ public static class EditorHtml
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: #FFFFFF; }
-  body { font-family: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif; color: #1D1D1F; }
-  #editor { outline: none; min-height: 100%; padding: 18px 22px 80px; font-size: 15px; line-height: 1.75; }
-  #editor:empty::before { content: "开始写点什么…"; color: #A1A1A6; }
-  p, div { margin: 0 0 8px; }
-  h1 { font-size: 26px; } h2 { font-size: 22px; } h3 { font-size: 19px; }
-  h1, h2, h3, h4, h5, h6 { margin: 14px 0 8px; }
-  blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid #1A9E5C; background: #E6F4EC; color: #48484A; }
-  pre { margin: 8px 0; padding: 10px 12px; background: #F5F5F7; border-radius: 6px; font-family: Consolas, "Courier New", monospace; white-space: pre-wrap; }
+  body {
+    font-family: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", Inter, sans-serif;
+    color: #47474A;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  #editor {
+    outline: none; min-height: 100%;
+    padding: 28px 28px 96px;
+    font-size: 14px; line-height: 1.85;
+    letter-spacing: .005em;
+    max-width: 680px;
+    caret-color: #1A9E5C;
+    text-wrap: pretty;
+  }
+  ::selection { background: #CFE9D9; color: #1D1D1F; }
+  #editor[contenteditable="false"] { background: #F8FCFA; }
+  #editor:empty::before {
+    content: "开始写点什么…"; color: #A1A1A6;
+    animation: tn-fade .25s ease;
+  }
+  @keyframes tn-fade { from { opacity: 0; } to { opacity: 1; } }
+  /* 细滚动条：与外层 Avalonia 9px 滚动条同一视觉 */
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #C9CCD4; border-radius: 9px; border: 2px solid #FFFFFF;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #A1A1A6; }
+  p, div { margin: 0 0 8px; min-height: 1.3em; }
+  h1 { font-size: 40px; margin: 18px 0 8px; line-height: 1.2; }
+  h2 { font-size: 32px; margin: 15px 0 6px; line-height: 1.25; }
+  h3 { font-size: 24px; margin: 12px 0 5px; line-height: 1.3; }
+  h4 { font-size: 18px; margin: 10px 0 4px; line-height: 1.3; }
+  h5 { font-size: 16px; margin: 10px 0 4px; line-height: 1.3; }
+  h6 { font-size: 14px; margin: 10px 0 4px; line-height: 1.3; }
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700; color: #1D1D1F;
+    letter-spacing: -.02em;
+  }
+  blockquote {
+    margin: 8px 0; padding: 6px 12px;
+    border-left: 3px solid #1A9E5C; border-radius: 0 6px 6px 0;
+    background: #F7FAF8; color: #86868B; font-size: 13.5px;
+  }
+  pre {
+    margin: 8px 0; padding: 10px 12px;
+    background: #F5F5F7; border: 1px solid #ECECEF; border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace;
+    white-space: pre-wrap; font-size: 12.5px; line-height: 1.7;
+  }
   ul, ol { margin: 6px 0; padding-left: 26px; }
-  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-  td, th { border: 1px solid #E0E0E4; padding: 6px 8px; min-width: 40px; vertical-align: top; }
-  img { max-width: 100%; height: auto; border-radius: 6px; }
-  a { color: #06A7FF; }
+  li { line-height: 1.3; padding-left: 2px; }
+  li::marker { color: #2E7CF6; }
+  table {
+    border-collapse: collapse; table-layout: fixed;
+    margin: 20px 0 10px; margin-left: 16px;
+  }
+  td, th {
+    border: 1px solid #D8D9DE; padding: 6px 10px;
+    min-width: 40px; vertical-align: top;
+    line-height: 1.3;
+    transition: background-color .12s ease;
+  }
+  td:hover, th:hover { background: #FAFCFB; }
+  td[data-align="center"], th[data-align="center"] { text-align: center; }
+  td[data-align="right"], th[data-align="right"] { text-align: right; }
+  td[data-align="justify"], th[data-align="justify"] { text-align: justify; }
+  table[data-fullwidth="1"] { width: 100%; }
+  img {
+    max-width: 480px; height: auto; border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(20,20,22,.10);
+  }
+  a {
+    color: #1A73E6; text-decoration: underline;
+    text-underline-offset: 2px; text-decoration-thickness: 1px;
+  }
+  hr { border: none; border-top: 1px solid #EFEFF2; margin: 18px 0; }
 </style>
 </head>
 <body>
@@ -47,7 +115,7 @@ public static class EditorHtml
     table: ['data-widths', 'data-fullwidth'],
     td: ['data-align', 'data-bg'], th: ['data-align', 'data-bg'], li: ['data-level']
   };
-  var SIZES = { '1': 12, '2': 13, '3': 16, '4': 18, '5': 24, '6': 32, '7': 48 };
+  var SIZES = { '1': 11, '2': 12, '3': 13, '4': 14, '5': 16, '6': 18, '7': 40 };
 
   function post(payload) {
     if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(payload);
@@ -106,7 +174,7 @@ public static class EditorHtml
       var color = node.getAttribute('color');
       if (color) css.push('color:' + color);
       var size = node.getAttribute('size');
-      if (size) css.push('font-size:' + (SIZES[size] || 16) + 'px');
+      if (size) css.push('font-size:' + (SIZES[size] || 14) + 'px');
       var styled = cleanStyle(node.getAttribute('style'));
       if (styled) css.push(styled);
       if (css.length) span.setAttribute('style', css.join(';'));
@@ -145,6 +213,16 @@ public static class EditorHtml
     timer = setTimeout(function () { post({ type: 'changed', html: clean() }); }, 350);
   }
 
+  function applyCellStyles() {
+    var cells = editor.querySelectorAll('td[data-bg], td[data-align], th[data-bg], th[data-align]');
+    for (var i = 0; i < cells.length; i++) {
+      var bg = cells[i].getAttribute('data-bg');
+      var align = cells[i].getAttribute('data-align');
+      if (bg) cells[i].style.backgroundColor = bg;
+      if (align) cells[i].style.textAlign = align;
+    }
+  }
+
   editor.addEventListener('input', changed);
   editor.addEventListener('blur', function () {
     if (timer) clearTimeout(timer);
@@ -160,7 +238,27 @@ public static class EditorHtml
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
       event.preventDefault(); document.execCommand('bold'); changed();
     }
+    if (event.key === 'Tab') {
+      var cell = currentCell();
+      if (cell) {
+        event.preventDefault();
+        var cells = cell.closest('table').querySelectorAll('td, th');
+        var index = Array.prototype.indexOf.call(cells, cell);
+        var next = cells[index + (event.shiftKey ? -1 : 1)];
+        if (next) { next.focus(); placeCaret(next); }
+        else { window.tn.insertRow(); }
+      }
+    }
   });
+
+  function placeCaret(node) {
+    var range = document.createRange();
+    range.selectNodeContents(node);
+    range.collapse(true);
+    var selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
 
   try { document.execCommand('styleWithCSS', false, false); } catch (ignored) {}
 
@@ -185,6 +283,7 @@ public static class EditorHtml
   window.tn = {
     setContent: function (html) {
       editor.innerHTML = html || '<p><br></p>';
+      applyCellStyles();
       post({ type: 'loaded', html: clean() });
     },
     getHTML: clean,
@@ -195,6 +294,18 @@ public static class EditorHtml
       changed();
     },
     block: function (tag) { window.tn.exec('formatBlock', tag); },
+    setFontSize: function (px) {
+      editor.focus();
+      document.execCommand('fontSize', false, '7');
+      var fonts = editor.querySelectorAll('font[size="7"]');
+      for (var i = 0; i < fonts.length; i++) {
+        var span = document.createElement('span');
+        span.style.fontSize = px + 'px';
+        while (fonts[i].firstChild) span.appendChild(fonts[i].firstChild);
+        fonts[i].parentNode.replaceChild(span, fonts[i]);
+      }
+      changed();
+    },
     insertImage: function (src) {
       editor.focus();
       document.execCommand('insertHTML', false, '<img src="' + src + '">');
@@ -216,6 +327,7 @@ public static class EditorHtml
       html += '</table><p><br></p>';
       editor.focus();
       document.execCommand('insertHTML', false, html);
+      applyCellStyles();
       changed();
     },
     insertRow: function () {
@@ -232,15 +344,15 @@ public static class EditorHtml
       changed();
     },
     insertColumn: function () {
-      var table = currentCell();
-      if (!table) return;
-      table = table.closest('table');
+      var cell = currentCell();
+      if (!cell) return;
+      var table = cell.closest('table');
       if (!table) return;
       var rows = table.querySelectorAll('tr');
       for (var i = 0; i < rows.length; i++) {
-        var cell = document.createElement('td');
-        cell.innerHTML = '<p><br></p>';
-        rows[i].appendChild(cell);
+        var fresh = document.createElement('td');
+        fresh.innerHTML = '<p><br></p>';
+        rows[i].appendChild(fresh);
       }
       changed();
     },
@@ -263,6 +375,20 @@ public static class EditorHtml
       }
       changed();
     },
+    removeTable: function () {
+      var cell = currentCell();
+      if (!cell) return;
+      var table = cell.closest('table');
+      if (table && table.parentNode) { table.parentNode.removeChild(table); changed(); }
+    },
+    setFullWidth: function (value) {
+      var cell = currentCell();
+      if (!cell) return;
+      var table = cell.closest('table');
+      if (!table) return;
+      table.setAttribute('data-fullwidth', value);
+      changed();
+    },
     setCellAlign: function (value) {
       var cell = currentCell();
       if (!cell) return;
@@ -274,6 +400,7 @@ public static class EditorHtml
       var cell = currentCell();
       if (!cell) return;
       cell.setAttribute('data-bg', value);
+      cell.style.backgroundColor = value;
       changed();
     }
   };

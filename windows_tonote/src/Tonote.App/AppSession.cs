@@ -9,6 +9,7 @@ namespace Tonote.App;
 public sealed class AppSession
 {
     private bool _syncStarted;
+    private CancellationTokenSource? _pollCancellation;
 
     public AppSession(string? root = null)
     {
@@ -40,6 +41,37 @@ public sealed class AppSession
         _syncStarted = true;
         Sync.Start();
         _ = AfterSignInAsync();
+        StartPolling();
+    }
+
+    /// <summary>
+    /// Mac MainView.swift:120-127 的 45 秒轮询：本地改动之外，定期拉取其它设备的变更。
+    /// 单轮异常不影响后续轮次，状态由 SyncEngine 的状态机落盘。
+    /// </summary>
+    private void StartPolling()
+    {
+        _pollCancellation = new CancellationTokenSource();
+        var token = _pollCancellation.Token;
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(45));
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+                {
+                    try { await Sync.QuickSyncAsync().ConfigureAwait(false); }
+                    catch { /* 网络瞬态由下一轮重试 */ }
+                }
+            }
+            catch (OperationCanceledException) { }
+        }, token);
+    }
+
+    public void StopPolling()
+    {
+        _pollCancellation?.Cancel();
+        _pollCancellation?.Dispose();
+        _pollCancellation = null;
     }
 
     private async Task AfterSignInAsync()

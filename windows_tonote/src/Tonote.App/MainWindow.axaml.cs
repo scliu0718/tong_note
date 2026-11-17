@@ -58,6 +58,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        _session.StopPolling();
         _session.Sync.Dispose();
         base.OnClosing(e);
     }

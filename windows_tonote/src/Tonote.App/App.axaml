@@ -2,7 +2,121 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Tonote.App.App"
              RequestedThemeVariant="Light">
+  <Application.Resources>
+    <!--
+      Mac 设计稿 font 变量: -apple-system, "SF Pro Text", "PingFang SC", …
+      Windows 侧用「微软雅黑 UI」承担中文（比普通雅黑更细、更适合 UI），
+      Segoe UI 承担拉丁字符与数字，Inter 作为内嵌字体兜底。
+      不设置这一项时 Avalonia 会回退到系统默认字体，中文显示为宋体，是「粗糙感」的最大来源。
+    -->
+    <FontFamily x:Key="TnFont">Microsoft YaHei UI, Segoe UI, Inter, PingFang SC, sans-serif</FontFamily>
+
+    <!--
+      自绘按钮外观：模板只对本地属性做 TemplateBinding，
+      因此 FluentTheme 的 :pointerover 蓝灰底 / :pressed 深蓝 / 焦点虚线框都不会生效。
+      hover 与 pressed 改为 0.12s 的透明度过渡，接近 macOS 的克制反馈。
+    -->
+    <ControlTheme x:Key="TnButton" TargetType="Button">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#1D1D1F" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Padding" Value="11,6" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Padding="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            TextElement.Foreground="{TemplateBinding Foreground}"
+                            TextElement.FontFamily="{TemplateBinding FontFamily}"
+                            TextElement.FontSize="{TemplateBinding FontSize}"
+                            TextElement.FontWeight="{TemplateBinding FontWeight}">
+            <ContentPresenter.Transitions>
+              <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+              </Transitions>
+            </ContentPresenter.Transitions>
+          </ContentPresenter>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.88" />
+      </Style>
+      <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.72" />
+      </Style>
+      <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.38" />
+      </Style>
+    </ControlTheme>
+  </Application.Resources>
+
   <Application.Styles>
     <FluentTheme />
+
+    <!-- 全局排版：字号、字体族、字色由窗口继承到所有未显式指定的 TextBlock -->
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="#1D1D1F" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Theme" Value="{StaticResource TnButton}" />
+    </Style>
+
+    <!-- 输入框：去掉 WinUI 的蓝色 focus 边框，光标与选区换成主题绿 -->
+    <Style Selector="TextBox">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CaretBrush" Value="#1A9E5C" />
+      <Setter Property="SelectionBrush" Value="#CFE9D9" />
+      <Setter Property="SelectionForegroundBrush" Value="#1D1D1F" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="#F2F2F4" />
+      <Setter Property="Padding" Value="9,5" />
+    </Style>
+
+    <!-- 细窄滚动条：Mac overlay scroller 的视觉，thumb 常驻但极淡 -->
+    <Style Selector="ScrollBar:vertical">
+      <Setter Property="Width" Value="9" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+      <Setter Property="Height" Value="9" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+      <Setter Property="Background" Value="#C9CCD4" />
+    </Style>
+    <Style Selector="ScrollBar:pointerover /template/ Thumb">
+      <Setter Property="Background" Value="#A1A1A6" />
+    </Style>
+
+    <!-- 深色小气泡（设计稿 .tb .bubble / rgba(44,44,46,.95)） -->
+    <Style Selector="ToolTip">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="Background" Value="#F22C2C2E" />
+      <Setter Property="Padding" Value="7,4" />
+    </Style>
+
+    <!-- 右键菜单也用同一套字体 -->
+    <Style Selector="MenuItem">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="FontSize" Value="12.5" />
+    </Style>
   </Application.Styles>
 </Application>

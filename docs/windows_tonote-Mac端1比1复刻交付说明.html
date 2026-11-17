@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同笔记 Windows 端 · Mac 1:1 复刻交付说明</title>
+<style>
+  :root {
+    --bg: #e9e9ec; --window-bg: #f5f5f7; --panel: #ffffff;
+    --text-1: #1d1d1f; --text-2: #48484a; --text-3: #86868b; --text-4: #a1a1a6;
+    --line: #e0e0e4; --hairline: #efeff2;
+    --accent: #1a9e5c; --accent-hover: #147a46; --accent-tint: #e6f4ec;
+    --red: #e5484d; --red-tint: #fcebeb; --amber: #f5a623;
+    --table-accent: #2e7cf6; --shadow: 0 1px 2px rgba(20,20,22,.06), 0 1px 6px rgba(20,20,22,.05);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text-1);
+    font-family: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.7; padding: 28px 20px 60px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 32px 38px 44px; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+  h2 { font-size: 17px; font-weight: 700; margin: 30px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hairline); }
+  h3 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; }
+  p { color: var(--text-2); margin: 8px 0; }
+  .sub { color: var(--text-3); font-size: 12.5px; }
+  .lead { background: var(--accent-tint); border: 1px solid #cfe9d9; border-radius: 8px; padding: 14px 16px; margin: 18px 0 10px; }
+  .lead strong { color: var(--accent-hover); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
+  .stat { background: var(--window-bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 21px; color: var(--accent-hover); }
+  .stat span { font-size: 11.5px; color: var(--text-3); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--window-bg); font-weight: 600; color: var(--text-2); }
+  td:first-child { white-space: nowrap; color: var(--text-1); font-weight: 600; }
+  .tag { display: inline-block; border-radius: 5px; padding: 1px 7px; font-size: 11px; font-weight: 600; }
+  .ok { background: var(--accent-tint); color: var(--accent-hover); }
+  .part { background: #fff4de; color: #a06a00; }
+  .gap { background: var(--red-tint); color: var(--red); }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 12px; background: var(--window-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--window-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; font-family: Consolas, monospace; font-size: 12px; overflow-x: auto; color: var(--text-2); margin: 8px 0 14px; }
+  ul { margin: 6px 0 12px 20px; color: var(--text-2); }
+  li { margin: 3px 0; }
+  .note { border-left: 3px solid var(--accent); background: #f7faf8; color: var(--text-3); padding: 8px 12px; font-size: 12.5px; margin: 10px 0; }
+  .warn { border-left: 3px solid var(--amber); background: #fffaee; color: #8a5a00; padding: 10px 12px; font-size: 12.5px; border-radius: 0 6px 6px 0; margin: 10px 0; }
+  footer { margin-top: 34px; border-top: 1px solid var(--hairline); padding-top: 14px; color: var(--text-4); font-size: 11.5px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: repeat(2, 1fr); } .page { padding: 22px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>同笔记 Windows 端 · Mac 1:1 复刻 + UI 精致化交付说明</h1>
+  <p class="sub">2026-11-17 · 第二轮补充：全局字体与控件主题、28 枚矢量线性图标、阴影与过渡、编辑器排版。只修改 <code>windows_tonote/</code>，未触碰 <code>mac_tonote/</code> 与 <code>android_tonote/</code></p>
+
+  <div class="lead">
+    <strong>结论：</strong>Windows 端的 UI 层已按 Mac 设计稿（8 视图 / 19+ 设计令牌）与 Mac 源码行为系统性重写：设计令牌、三栏与三档侧栏、笔记卡片、任务面板、编辑器 16 项工具条、全部弹窗与设置 sheet 均已对齐；核心数据／同步层保持原有三端契约不变。针对「用着很粗糙」的反馈又做了第二轮精致化：统一中文字体族、把全部 emoji／全角符号换成矢量线性图标、去掉 Fluent 的 WinUI 蓝灰 hover 与蓝色 focus 边框、修复失效阴影、给卡片与浮层补 hover 过渡与抬升层次、编辑器补字距／光标色／选区／细滚动条。编译 0 错误 0 警告，13/13 离线单测通过，隔离数据 GUI 冒烟与 28 条图标路径自检通过。
+  </div>
+
+  <div class="grid">
+    <div class="stat"><b>16</b><span>改动／新增文件（含 2 份文档）</span></div>
+    <div class="stat"><b>28</b><span>矢量线性图标 · 全部解析通过</span></div>
+    <div class="stat"><b>0 / 0</b><span>编译错误 / 警告</span></div>
+    <div class="stat"><b>13 / 13</b><span>离线单测通过</span></div>
+  </div>
+
+  <h2>一、复刻范围对照</h2>
+  <table>
+    <tr><th style="width:150px">模块</th><th>本轮实现</th><th style="width:80px">状态</th></tr>
+    <tr><td>设计令牌</td><td><code>Theme.cs</code> 重写：Mac <code>Theme.swift</code> 全部 19 色 + 设计稿补充令牌（<code>accentTint2 / baiduDeep / baiduTint / amber / redTint / tableAccent / hairline / panelSoft / bg</code>），修正 Windows 原先把 <code>lineSoft</code> 与 <code>hairline</code> 混用的色值错位；新增 <code>Metrics</code> 尺寸／字号／圆角／浮层常量表。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>控件底座</td><td>新增 <code>UiKit.cs</code>：按钮（主／次／危险）、30×30 工具按钮（hover 淡绿 + 气泡提示）、胶囊、标签 chip、18px 红/绿角标、17px 四态状态圈、卡片、popover、1pt 发丝线、空态、hover 效果。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>主窗口 / 三栏</td><td>1120×700（min 960×620）、侧栏 52/112/200 三档吸附（阈值 82/156）、6px 手柄、292px 列表、1px 竖线；极窄档 hover 名称浮窗（ToolTip）；头像点击弹出 244px 选择器。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>侧栏</td><td>标题、32px 渐变头像、同步状态、新建笔记、设置、笔记本（含右键删除确认与笔记迁移）、标签（右键删除）、回收站计数、快任务双角标；字号按档位 10/11/13、选中淡绿、hover <code>#EFEFF1</code>。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>笔记列表</td><td>快同步/快任务固定卡（绿未完成 + 红逾期双角标）、搜索框 <code>#F2F2F4</code>、三种排序（选中绿字 + 2px 下划线）、卡片 13.5/12/11 字号、两行摘要、置顶 <code>◆</code> 琥珀、标签 chip、1pt 发丝线、选中 <code>#F4FAF6</code> + <code>#DCEDE2</code> 描边、hover 态、右键菜单（置顶/删除/恢复/彻底删除）。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>编辑器容器</td><td>标题 22 bold → 元数据（笔记本 + 标签 chip + 「● 已保存到本地」绿点 + 时间）→ 1pt 分割线 → 工具条 → 正文；回收站只读时整条工具条隐藏；快同步篇显示同步状态。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>任务面板</td><td>头部（20pt 标题、五段统计文案、全部/仅未完成筛选、上次同步、同步按钮）+ 四组（可折叠、组色圆点、计数胶囊、32px 组距）+ 行（状态圈、逾期红框 <code>#FCEBEB</code>、日期胶囊、状态流转按钮、删除确认）+ 展开详情（备注查看/编辑双态、图片插入与缩略图、年月日步进、348px 日历、时间说明）+ 底部快捷添加。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>终态只读</td><td><code>Todo.IsTerminal</code>（<code>[JsonIgnore]</code>，不写进云端 JSON）+ <code>TodoStore</code> 对标题/备注/计划日期加守卫；已完成与已终止内容只读并显示「只读」胶囊，但状态流转与删除仍可用（与 Mac 一致）。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>富文本工具条</td><td>16 项：T 样式（正文/H1-H4/列表）、B/I/U/S、字号 12 档、文字色 8 色 + 自定义、背景色 9 色 + 自定义 + 清除、引用、代码块、有序/无序列表、链接、图片、表格 6×8 网格 + 增删行列/删表/满宽、单元格对齐 + 20 色底色、删除、字数。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>编辑器 CSS</td><td>正文 <code>#47474A</code>/14px/行高 1.85、H1-H4 = 40/32/24/18、引用绿竖线 + <code>#F7FAF8</code>、代码块圆角 6、列表标记蓝 <code>#2E7CF6</code>、表格 <code>#D8D9DE</code> 边框 + 100pt 列宽 + <code>data-align/data-bg</code>、图片最大 480px、链接 <code>#1A73E6</code>、只读画布 <code>#F8FCFA</code>。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>弹窗体系</td><td>新增 <code>Dialogs.cs</code>：Mac 风格确认框（0.75pt 分割线、红「删除」/灰「取消」）、输入框、348px 日历、900×640「同步与存储」sheet（四态徽标、云端目录树、账号、8 预设头像、设备下线二次确认、配额、数据说明）、860×740 使用说明窗口。所有删除／新建／下线操作均补二次确认。</td><td><span class="tag ok">已对齐</span></td></tr>
+    <tr><td>同步时机</td><td>补齐 Mac 的 45 秒轮询；进入任务页插队拉一次；本地改动仍走 1.5 秒防抖；关闭窗口时停止轮询。Mac 的「按页面分范围同步队列 / 笔记 30 秒、快同步 15 秒节流」未移植。</td><td><span class="tag part">部分</span></td></tr>
+    <tr><td>表格边沿交互</td><td>Mac 用 AppKit <code>NSTextTable</code> + 自绘 gutter（常驻灰圆、hover 蓝加号、引导线、单元格右上角下拉菜单）。Windows 编辑器是 WebView2 DOM，未提供同款边沿手柄；Excel 风格增删行列/对齐/底色改由工具条浮层提供。</td><td><span class="tag part">平台差异</span></td></tr>
+    <tr><td>图标 / 标题栏</td><td>Mac 用 SF Symbols + 44px 交通灯标题栏；Windows 第二轮已改用 28 枚自绘 24×24 线性矢量图标（统一 1.7 描边、圆头圆角、可随 hover 换色），不再使用 emoji／全角符号；字体族统一为 <code>Microsoft YaHei UI / Segoe UI</code>。系统标题栏与 macOS 交通灯仍属平台差异，列宽拖拽手柄与选中文字浮动格式窗（Mac 本身已关闭）未做。</td><td><span class="tag part">平台差异</span></td></tr>
+  </table>
+
+  <div class="note">说明：Mac 端「置顶只显示图标、不参与排序」，所以 Windows 端排序保持按 <code>updatedAt</code> 降序，未擅自改成置顶分组；同理 Mac 无深色模式，Windows 保持 <code>RequestedThemeVariant="Light"</code>。这两处是刻意的不改。</div>
+
+  <h2>二、改动文件清单</h2>
+  <table>
+    <tr><th style="width:300px">文件</th><th>变更</th></tr>
+    <tr><td><code>src/Tonote.App/Theme.cs</code></td><td>重写：完整色板 + <code>Metrics</code> 常量；<strong>第二轮</strong>修复阴影构造（原多阴影字符串解析静默失败）、补 <code>ShadowXs</code> 与输入框令牌</td></tr>
+    <tr><td><code>src/Tonote.App/App.axaml</code></td><td><strong>新增（第二轮）</strong>：全局字体栈 <code>TnFont</code>、自绘 <code>TnButton</code> ControlTheme、TextBox / ComboBox / ScrollBar / ToolTip / MenuItem 样式</td></tr>
+    <tr><td><code>src/Tonote.App/Icons.cs</code></td><td><strong>新增（第二轮）</strong>：28 枚 24×24 线性矢量路径 + 启动自检 + 解析失败回退文字</td></tr>
+    <tr><td><code>src/Tonote.App/UiKit.cs</code></td><td><strong>新增</strong>：控件工厂、状态圈、角标；<strong>第二轮</strong>接入矢量图标、<code>BrushTransition</code>、<code>Field</code> 输入框外壳、<code>WithElevate</code>、卡片/浮层阴影</td></tr>
+    <tr><td><code>src/Tonote.App/Dialogs.cs</code></td><td><strong>新增</strong>：确认/输入/日历/头像/设置 sheet/使用说明窗口</td></tr>
+    <tr><td><code>src/Tonote.App/LoginView.cs</code></td><td><strong>第二轮</strong>：特性清单勾点改矢量，按钮走统一主题</td></tr>
+    <tr><td><code>src/Tonote.App/ShellView.cs</code></td><td>重写：三栏、侧栏、列表、任务面板、编辑器容器、右键菜单与全部确认；<strong>第二轮</strong>笔记卡片 8px 圆角与 hover 抬升、侧栏矢量图标、搜索框 focus 细环、排序/快捷卡过渡</td></tr>
+    <tr><td><code>src/Tonote.App/RichText/RichTextEditor.cs</code></td><td>重写：16 项工具条 + 6 类浮层 + 只读隐藏工具条；<strong>第二轮</strong>图标走矢量</td></tr>
+    <tr><td><code>src/Tonote.App/RichText/EditorHtml.cs</code></td><td>CSS 1:1 + JS 新增 <code>setFontSize / removeTable / setFullWidth / applyCellStyles / Tab 跳格</code>；<strong>第二轮</strong>补字距、光标色、选区、细滚动条、图片软阴影等排版细节</td></tr>
+    <tr><td><code>src/Tonote.App/AppSession.cs</code></td><td>45 秒轮询与 <code>StopPolling()</code></td></tr>
+    <tr><td><code>src/Tonote.App/MainWindow.axaml.cs</code></td><td>关窗时停止轮询</td></tr>
+    <tr><td><code>src/Tonote.Core/Models/Todo.cs</code></td><td>新增 <code>[JsonIgnore] IsTerminal</code>（不改云端 JSON）</td></tr>
+    <tr><td><code>src/Tonote.Core/Storage/TodoStore.cs</code></td><td>终态只读守卫 + 完成/终止计数 + 统计文案</td></tr>
+    <tr><td><code>tests/Tonote.Core.Tests/CoreTests.cs</code></td><td>校正历史遗留断言：损坏文件应回退空列表而非演示笔记</td></tr>
+  </table>
+
+  <h2>三、验证结果</h2>
+  <pre>dotnet build Tonote.sln --disable-parallel -v minimal
+  → 已成功生成。0 个警告  0 个错误（第二轮精致化后复核同样 0/0）
+
+dotnet test tests/Tonote.Core.Tests -v minimal
+  → 已通过! 失败 0 / 通过 13 / 总计 13
+
+GUI 冒烟（TONOTE_DATA_ROOT 隔离目录，模拟登录态 + 4 篇笔记 + 4 状态任务）
+  → 进程常驻、无 stdout/stderr 异常
+  → editor.html 13,726 B 生成成功（含第二轮 caret-color / ::selection / 细滚动条 CSS）
+       ⇒ ShellView / RichTextEditor / 新 ControlTheme / 矢量图标控件树均构造通过
+  → 图标体系启动自检：28 条 StreamGeometry 路径全部解析成功，无一条回退成文字或 emoji
+  → WebView2 目录初始化、sync-status.json 正常落盘</pre>
+  <p class="sub">冒烟用的模拟 token 会产生 HTTP 401 的同步失败状态，属预期；该状态用于验证「同步失败」红色文案与四态徽标路径，不影响 UI 构造。真实网盘同步请使用正式凭证。第二轮共修复 3 类编译适配问题：矢量 Path 与 <code>System.IO.Path</code> 撞名、Button 无 <code>BoxShadow</code> 属性、Avalonia 11.3 的 <code>BoxShadows</code> 不接受数组构造。</p>
+
+  <h2>四、尚未 1:1 的部分（如实说明）</h2>
+  <ul>
+    <li><strong>同步范围队列</strong>：Mac 有 <code>SyncScope</code>（谁点同步谁、笔记 30 秒 / 快同步 15 秒节流、切换笔记插队单篇拉取）。Windows 目前是「1.5 秒防抖全量 + 新增 45 秒轮询 + 单篇同步按钮」，语义接近但不等价。</li>
+    <li><strong>表格边沿 gutter</strong>：灰圆／蓝加号／引导线是 AppKit 自绘，Windows WebView2 版以工具条浮层替代，交互入口不同。</li>
+    <li><strong>列宽拖拽</strong>：模型层支持 <code>data-widths</code>，但两端 UI 都未提供拖拽手柄；Mac 也无。</li>
+    <li><strong>SF Symbols 与 macOS 标题栏</strong>：Windows 第二轮已换成自绘线性矢量图标（轮廓按 SF Symbols 的极简风格重画，并非同一套字形），标题栏仍是 Windows 系统样式，不可能逐像素一致。</li>
+    <li><strong>使用说明内容</strong>：Mac 加载打包的 <code>guide/index.html</code>，Windows 用内建结构化说明窗口（内容按 Mac 功能点清单编写）。</li>
+  </ul>
+
+  <h2>五、UI 精致化（第二轮 · 针对「用着很粗糙」的反馈）</h2>
+  <p>第一轮解决了「有没有」与「像不像」，但真实运行时仍有五处让界面显得廉价。定位结果与改法如下：</p>
+  <table>
+    <tr><th style="width:160px">粗糙来源</th><th>原因</th><th>本轮改法</th></tr>
+    <tr><td>中文字体发虚、字重不一</td><td>所有 TextBlock / Button 都没有指定字体族，Avalonia 回退到系统默认字体，中文接近宋体；设计稿的 font 变量只写进了 WebView 的 CSS，没进原生层。</td><td><code>App.axaml</code> 定义全局 <code>TnFont = Microsoft YaHei UI, Segoe UI, Inter, …</code>，Window / Button / TextBox / ComboBox / ToolTip / MenuItem 统一继承；编辑器 CSS 同步加 <code>text-rendering: optimizeLegibility</code>。</td></tr>
+    <tr><td>彩色 emoji 与豆腐块</td><td>旧 <code>Glyphs</code> 用 🔖 / 🔗 / ☁ / ⌫ / 全角 ＋ 等字符，还试图用 Segoe MDL2 Assets 渲染，缺字时回退成彩色 Emoji 或方框。</td><td>新增 <code>Icons.cs</code>：28 枚 24×24 描边矢量图标，统一 1.7 线宽、圆头圆角、单色可换色；<code>Ui.Icon / Tool / Small / Chip / StateRing / EmptyState</code> 与登录页勾点全部改走矢量，字母类工具按钮（B/I/U/S/T/字号）保留文字。</td></tr>
+    <tr><td>按钮 hover 变 WinUI 蓝</td><td>代码式创建的 Button 使用 FluentTheme 默认 ControlTheme，<code>:pointerover</code> 蓝灰底、<code>:pressed</code> 深蓝、焦点虚线框，与 Mac 的克制风格冲突。</td><td>自定义 <code>TnButton</code> ControlTheme：模板只做本地属性 TemplateBinding，hover/pressed 改为 0.12s 透明度过渡；TextBox 去掉蓝色 focus 边框，改主题绿光标 + 淡绿选区 + 淡绿细环；滚动条 9px、ToolTip 深色小气泡、右键菜单同字体。</td></tr>
+    <tr><td>界面「平」、没有层次</td><td>旧代码用 <code>BoxShadows.Parse</code> 解析多阴影字符串，解析失败被 try/catch 吞掉并静默返回 default，所有卡片／浮层其实都没有阴影；笔记卡片未选中时是直角 + 底部硬线，与设计稿 <code>.note-card{8px}</code> 不符。</td><td>改为直接构造 <code>BoxShadow</code>（Sm / Md / Xs 三档，保证生效）；笔记卡片统一 8px 圆角 + 6px 外边距 + 淡边框，选中淡绿、hover 淡灰并轻微抬升；卡片／浮层／侧栏项／工具按钮全部加 0.12s <code>BrushTransition</code>；工具条分割线由 <code>line</code> 换成更淡的 <code>lineSoft</code>。</td></tr>
+    <tr><td>编辑器排版偏生硬</td><td>只有基础 CSS，缺少选区色、光标色、字距、滚动条、图片质感。</td><td>补 <code>caret-color:#1A9E5C</code>、<code>::selection:#CFE9D9</code>、正文 <code>letter-spacing:.005em</code> 与 <code>text-wrap:pretty</code>、标题负字距、<code>hr</code>、引用右圆角、代码块 1px 边框、单元格 hover、图片软阴影、链接下划线偏移、9px 细滚动条、占位符淡入。</td></tr>
+  </table>
+  <div class="note">本轮只动 <code>Tonote.App</code> 的显示层与 <code>App.axaml</code>，<strong>未改任何 Core 数据模型、同步逻辑或云端 JSON 字段</strong>，三端共用数据契约不受影响。图标路径在 <code>Icons</code> 静态构造时自检，失败会把 glyph 写到 stderr，避免以后又悄悄回退成 emoji。</div>
+  <div class="warn"><strong>如实说明：</strong>后台验证会话里 Avalonia 窗口没有映射到交互桌面（GetWindowRect 只有 160×28），因此没能做像素级截图比对；视觉参数以设计稿令牌与代码为准，最终观感需在本机启动 GUI 确认。</div>
+
+  <div class="warn"><strong>注意：</strong>本轮改动未提交、未推送。工作区里另有 <code>docs/windows_tonote-生产网盘数据打通验证.html</code> 的 11-16 遗留文档补充，与本次改动无关，提交时请按需分别 <code>git add</code>。编译期间已关闭占用 DLL 的旧 <code>Tonote.exe</code>（PID 16436，16:39 启动），<strong>查看新界面请重新启动应用</strong>；之后每次重新编译／部署前仍需先关闭，否则 <code>Tonote.Core.dll</code> 被占用。</div>
+
+  <h2>六、本地运行</h2>
+  <pre>export APPDATA="C:/Users/Administrator/AppData/Roaming" \
+       ProgramData="C:/ProgramData" ALLUSERSPROFILE="C:/ProgramData" \
+       ProgramFiles="C:/Program Files" CommonProgramFiles="C:/Program Files/Common Files" \
+       NUGET_PACKAGES="D:/dev/_nuget_app"
+"D:/dev/dotnet/dotnet.exe" build "windows_tonote/Tonote.sln" --disable-parallel
+"D:/dev/dotnet/dotnet.exe" "windows_tonote/src/Tonote.App/bin/Debug/net8.0/Tonote.dll"</pre>
+
+  <footer>同笔记 · 三端共用一套数据格式是全项目最高优先级约束。本轮所有 Core 改动只增加只读计算属性与行为守卫，未新增、未修改任何云端 JSON 字段，未改动 rev / updatedAt 规则。</footer>
+</div>
+</body>
+</html>

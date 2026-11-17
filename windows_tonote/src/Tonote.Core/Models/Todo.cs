@@ -88,4 +88,11 @@ public sealed class Todo
             return PlannedAt.Value.ToLocalTime() < start;
         }
     }
+
+    /// <summary>
+    /// 与 Mac 版一致：已完成 / 已终止的任务内容只读，但状态流转与删除仍然可用。
+    /// 这是纯计算属性，不能进云端 JSON（System.Text.Json 会默认序列化只读属性）。
+    /// </summary>
+    [JsonIgnore]
+    public bool IsTerminal => Status is TodoStatus.done or TodoStatus.terminated;
 }
