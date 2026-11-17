@@ -689,6 +689,7 @@ private fun buildEditorHtml(body: String): String {
         img{max-width:100%;border-radius:6px;}
         table{border-collapse:collapse;margin:8px 0;width:100%;}
         td,th{border:1px solid #d9dadf;padding:6px 10px;min-width:40px;height:calc(2.5em - 2px);vertical-align:top;}
+        td>p,th>p{margin:0;min-height:1.75em}
         td[data-align="center"]{text-align:center}
         td[data-align="right"]{text-align:right}
         td[data-align="justify"]{text-align:justify}
@@ -737,6 +738,19 @@ private fun buildEditorHtml(body: String): String {
           document.addEventListener('keyup', schedule);
           document.addEventListener('focusin', schedule);
           document.addEventListener('click', schedule);
+          // 点在单元格内边距/空白处时，Chromium 常把光标落到相邻格或无反应；
+          // 这里直接把光标放进被点的单元格末尾
+          document.addEventListener('click', function(e){
+            var t = e.target;
+            if (!t || (t.tagName !== 'TD' && t.tagName !== 'TH')) return;
+            var host = t.lastElementChild || t;
+            var range = document.createRange();
+            range.selectNodeContents(host);
+            range.collapse(false);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          });
           // WebView 被键盘压小后 Chromium 不会自己把光标滚进来，靠 resize 兜一次；
           // 同时按高度突变判断键盘开合，切换尾部留白
           var lastH = window.innerHeight;
