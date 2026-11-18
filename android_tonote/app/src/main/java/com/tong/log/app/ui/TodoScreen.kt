@@ -300,7 +300,15 @@ private fun LazyListScope.todoGroup(
     if (!show || list.isEmpty()) return
     item {
         Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(color, CircleShape))
+            // 分类图标与 Mac 对齐：13% 透明度的主题色底圆 + 8dp 实心点（浅粉底 + 红点）
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .background(color.copy(alpha = 0.13f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(Modifier.size(8.dp).background(color, CircleShape))
+            }
             Spacer(Modifier.width(8.dp))
             Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
             Spacer(Modifier.width(4.dp))
@@ -325,7 +333,7 @@ private fun LazyListScope.todoGroup(
             val filled = t.status == TodoStatus.DONE || t.status == TodoStatus.TERMINATED
             Box(
                 Modifier
-                    .size(21.dp)
+                    .size(19.dp)
                     .clickable { TodoStore.toggleDone(t.id) }
                     .background(if (filled) ringColor else Color.Transparent, CircleShape)
                     .border(2.dp, ringColor, CircleShape)
