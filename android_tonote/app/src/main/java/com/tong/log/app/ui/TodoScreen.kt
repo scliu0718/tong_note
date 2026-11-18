@@ -333,7 +333,7 @@ private fun LazyListScope.todoGroup(
             val filled = t.status == TodoStatus.DONE || t.status == TodoStatus.TERMINATED
             Box(
                 Modifier
-                    .size(19.dp)
+                    .size(17.dp)
                     .clickable { TodoStore.toggleDone(t.id) }
                     .background(if (filled) ringColor else Color.Transparent, CircleShape)
                     .border(2.dp, ringColor, CircleShape)
