@@ -239,12 +239,24 @@ fun NotesScreen(
 
             FloatingActionButton(
                 onClick = { onNewNote(selectedNotebook) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).size(48.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).size(50.dp),
                 shape = CircleShape,
                 containerColor = Green,
                 contentColor = Color.White
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新建笔记", modifier = Modifier.size(22.dp))
+                // + 号加一点立体感：底层深色描边阴影轻微下移，上层白色盖住，形成浮雕
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Add, contentDescription = null,
+                        modifier = Modifier.size(24.dp).offset(y = 1.dp),
+                        tint = Color(0x66000000)
+                    )
+                    Icon(
+                        Icons.Default.Add, contentDescription = "新建笔记",
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.White
+                    )
+                }
             }
         }
     }

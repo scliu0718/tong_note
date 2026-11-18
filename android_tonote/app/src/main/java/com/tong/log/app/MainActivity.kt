@@ -306,7 +306,8 @@ private fun AvatarPicker(onDismiss: () -> Unit) {
                                     Brush.linearGradient(listOf(Color(preset.color1), Color(preset.color2))),
                                     CircleShape
                                 )
-                                .clickable { AvatarStore.select(preset.id) },
+                                // 不要按压涟漪：默认 indication 会按 Box 的方形 bounds 画阴影，很突兀
+                                .clickable(interactionSource = null, indication = null) { AvatarStore.select(preset.id) },
                             contentAlignment = Alignment.Center
                         ) {
                             AvatarGlyph(preset, 52.dp)
