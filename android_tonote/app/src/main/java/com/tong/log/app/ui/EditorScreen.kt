@@ -218,6 +218,49 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         }
     }
 
+    /**
+     * 引用 / 代码块按钮：toggle 切换。
+     * - 光标不在对应块里 → formatBlock 包一层；
+     * - 光标已在对应块里（含历史嵌套的多层）→ 逐层 unwrap 解回正文，
+     *   避免重复点击无限嵌套（引用绿线越叠越多、代码块层层加框）。
+     */
+    fun execBlockToggle(tag: String) {
+        if (note.contentFormat != NoteContentFormat.RICH_TEXT) return
+        val wv = webView ?: return
+        val target = tag.uppercase()
+        val js = """
+            (function(){
+              var target = '$target';
+              var sel = window.getSelection();
+              if(!sel || sel.rangeCount === 0) return document.body.innerHTML;
+              var node = sel.anchorNode;
+              if(node && node.nodeType === 3) node = node.parentNode;
+              // 从光标向上收集所有同类型祖先块（历史嵌套的层一次解干净）
+              var blocks = [];
+              while(node && node.nodeType !== 9){
+                if(node.nodeType === 1 && node.tagName === target) blocks.push(node);
+                node = node.parentNode;
+              }
+              if(blocks.length){
+                blocks.forEach(function(b){
+                  var p = b.parentNode;
+                  if(!p) return;
+                  while(b.firstChild) p.insertBefore(b.firstChild, b);
+                  p.removeChild(b);
+                });
+              } else {
+                document.execCommand('formatBlock', false, target.toLowerCase());
+              }
+              return document.body.innerHTML;
+            })()
+        """.trimIndent()
+        wv.evaluateJavascript(js) { v ->
+            val html = jsString(v).replace(BASE_URL, "")
+            if (html.isBlank()) return@evaluateJavascript
+            NoteStore.updateContent(noteId, html, NoteContentFormat.RICH_TEXT)
+        }
+    }
+
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             val rel = AttachmentStore.importImage(it, noteId)
@@ -354,8 +397,8 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             FmtTextChip("H2") { exec("formatBlock", "h2") }
             FmtTextChip("H3") { exec("formatBlock", "h3") }
             FmtSep()
-            FmtIconButton(Icons.Default.FormatQuote, "引用") { exec("formatBlock", "blockquote") }
-            FmtIconButton(Icons.Default.Code, "代码块") { exec("formatBlock", "pre") }
+            FmtIconButton(Icons.Default.FormatQuote, "引用") { execBlockToggle("blockquote") }
+            FmtIconButton(Icons.Default.Code, "代码块") { execBlockToggle("pre") }
             FmtIconButton(Icons.Default.FormatListBulleted, "无序列表") { execListCycle("ul") }
             FmtIconButton(Icons.Default.FormatListNumbered, "有序列表") { execListCycle("ol") }
             FmtSep()
