@@ -168,14 +168,15 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     /**
      * 列表按钮循环切换层级，与 Mac 的扁平 `<li data-level="n">` 结构对齐（缩进用 data-level，不嵌套 <ul>）：
      *   无序：正文 → 一级(•) → 二级(○) → 正文
-     *   有序：正文 → 一级(1.) → 二级(a.) → 三级(i.) → 正文
+     *   有序：正文 → 一级(1.) → 二级(a.) → 正文
      */
     fun execListCycle(tag: String) {
         if (note.contentFormat != NoteContentFormat.RICH_TEXT) return
         val wv = webView ?: return
         val tagUpper = tag.uppercase()
         val cmd = if (tag == "ol") "insertOrderedList" else "insertUnorderedList"
-        val maxLevel = if (tag == "ol") 2 else 1
+        // 无序 / 有序都是「正文 → 一级 → 二级 → 正文」两级循环
+        val maxLevel = 1
         val js = """
             (function(){
               function findLi(n){
