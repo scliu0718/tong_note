@@ -59,6 +59,17 @@
 安全护栏：普通分组的所有云端写操作被强制限制在 `/apps/tong_log/__selftest__/<runId>/`，本地数据写到 `windows_tonote/.test-data/`（已 gitignore）；程序启动时会校验远端根确实落在沙箱内，否则拒绝执行；正常结束会自动删除本次云端沙箱。可用 `TONOTE_TEST_ROOT` 改本地测试目录。
 `--prod` 是独立分支，刻意不设沙箱变量，只调用列目录/下载接口核对正式数据根与生产网盘是否一致，**不启动同步引擎、不写任何云端文件**，因此不会污染生产笔记。
 
+## 离线单测与故障注入
+
+`tests/Tonote.Core.Tests/` 是**不连网盘的离线单测**，`dotnet test` 即可跑，无需 `baidupan.secret.json` 或已授权令牌：
+
+- `CoreTests.cs`：JSON / 存储 / 回收站 / 笔记本 / 任务 / 可见文本 / OAuth 等基础单测。
+- `FaultInjectionTests.cs`（批次 0 同步三铁律回归网）：内置内存假网盘 `FakePan`，注入断网 / 列目录异常 / 下载 404 / `errno 20020` / `31034` 限速 / 回读失败等故障，断言「本地旧数据不覆盖云端、不重复上传、下轮收敛」。
+
+```bash
+"D:/dev/dotnet/dotnet.exe" test tests/Tonote.Core.Tests/Tonote.Core.Tests.csproj -c Debug
+```
+
 ## 编译
 
 需要 .NET 8 SDK 与 WebView2 Runtime。本机 SDK 在 `D:\dev\dotnet`，NuGet 包在 `D:\dev\_nuget_app`：

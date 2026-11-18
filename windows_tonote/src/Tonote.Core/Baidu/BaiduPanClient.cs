@@ -25,6 +25,13 @@ public sealed class BaiduPanClient
     private readonly HttpClient _http;
     private readonly BaiduPanTokenStore _tokens;
 
+    /// <summary>列目录 / create 时记下 路径 → fs_id，供下载走 filemetas 兜底，避免重复列目录。</summary>
+    private readonly object _cacheLock = new();
+    private readonly Dictionary<string, long> _fsIdCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>百度对部分应用禁止 method=download&amp;path（errno 20020）。命中一次后本进程直接走 filemetas。</summary>
+    private bool _downloadByPathBlocked;
+
     public BaiduPanClient(string root, HttpClient? http = null)
     {
         _tokens = new BaiduPanTokenStore(root);
@@ -211,7 +218,10 @@ public sealed class BaiduPanClient
                 foreach (var item in list.EnumerateArray())
                 {
                     var parsed = JsonSerializer.Deserialize<BaiduPanListEntry>(item.GetRawText(), PlainOptions);
-                    if (parsed != null) page.Add(parsed);
+                    if (parsed == null) continue;
+                    page.Add(parsed);
+                    if (parsed.FsId.HasValue && !string.IsNullOrWhiteSpace(parsed.Path))
+                        CacheFsId(parsed.FsId.Value, parsed.Path!);
                 }
             }
             all.AddRange(page);
@@ -267,110 +277,54 @@ public sealed class BaiduPanClient
     // MARK: - 下载
 
     /// <summary>
-    /// 下载远端文件。先按 Mac 版语义走 xpan method=download 取 dlink；
-    /// 但百度开放平台对第三方应用目录（含 /apps/tong_log 生产根）统一返回
-    /// errno 20020「该路径不在允许的访问范围内」，此时降级为
-    /// list 取 fs_id → filemetas?dlink=1 取直链。远端确实不存在时抛
-    /// <see cref="BaiduPanNotFoundException"/>；直链瞬时失效会先重取一次直链重试，
-    /// 避免把云端实际存在的文件误判成不存在。
+    /// 下载远端文件。取直链顺序：先试 method=download&amp;path，被 errno 20020 拒绝后改走
+    /// filemetas&amp;fsids&amp;dlink=1（先列父目录拿 fs_id）。三次重试 + 300ms×attempt 退避，
+    /// 每次重新取链；直链 GET 偶发 404 也在重试范围内。
+    /// 本方法只抛临时错误（<see cref="BaiduPanTransientException"/>），绝不抛 notFound——
+    /// 文件是否存在由调用方依据「目录列表 + 是否同步过」判定，避免网络抖动 / 风控被当成
+    /// 「云端无文件」而用本地旧版反向覆盖。
     /// </summary>
-    public Task<byte[]> DownloadDataAsync(string remotePath, string accessToken,
+    public async Task<byte[]> DownloadDataAsync(string remotePath, string accessToken,
         CancellationToken cancellationToken = default)
-        => DownloadDataAsync(remotePath, accessToken, 0, cancellationToken);
-
-    private async Task<byte[]> DownloadDataAsync(string remotePath, string accessToken,
-        int attempt, CancellationToken cancellationToken)
     {
-        var metaUrl = XpanFile(new Dictionary<string, string>
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 3; attempt++)
         {
-            ["method"] = "download",
-            ["access_token"] = accessToken,
-            ["path"] = remotePath,
-            ["threshold"] = "0",
-        });
-        using var metaResponse = await GetAsync(metaUrl, cancellationToken).ConfigureAwait(false);
-        var metaBody = await ReadTextAsync(metaResponse.Content, cancellationToken).ConfigureAwait(false);
-        if (!TryParseJson(metaBody, out var metaDoc))
-            throw new BaiduPanException("查询云端文件失败" + Snippet(metaBody));
-
-        string? dlink;
-        using (metaDoc)
-        {
-            var root = metaDoc.RootElement;
-            var errno = Int64Or(root, "errno") ?? -1;
-            dlink = null;
-            if (errno == 0 && root.TryGetProperty("list", out var list)
-                           && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0)
-                dlink = StringOr(list[0], "dlink");
-        }
-
-        if (string.IsNullOrWhiteSpace(dlink))
-            dlink = await DlinkFromFilemetasAsync(remotePath, accessToken, cancellationToken)
+            if (attempt > 0)
+                await Task.Delay(attempt * 300, cancellationToken).ConfigureAwait(false);
+            var link = await ResolveDlinkAsync(remotePath, accessToken, attempt > 0, cancellationToken)
                 .ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(dlink))
-            throw new BaiduPanNotFoundException(remotePath);
-
-        var separator = dlink.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-        var downloadUrl = dlink + separator + "access_token=" + Uri.EscapeDataString(accessToken);
-        try
-        {
-            using var response = await GetAsync(downloadUrl, cancellationToken, withUserAgent: true)
-                .ConfigureAwait(false);
-            var data = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new BaiduPanException(
-                    $"下载文件失败（HTTP {(int)response.StatusCode}）{Snippet(Encoding.UTF8.GetString(data))}");
-            return data;
-        }
-        catch (BaiduPanException ex) when (IsRemoteFileGone(ex))
-        {
-            // 直链偶发返回 404 + errno 31066（dlink 失效或文件已被别的端删除）。
-            // 先重取一次直链再试：否则「同步层把 NotFound 当作云端没有这篇」会把
-            // 实际存在的笔记误判成缺失，进而走新增/覆盖分支。两次都 404 才判 NotFound。
-            if (attempt == 0)
+            if (link == null)
             {
-                await Task.Delay(400, cancellationToken).ConfigureAwait(false);
-                return await DownloadDataAsync(remotePath, accessToken, 1, cancellationToken)
+                lastError = new BaiduPanTransientException("获取下载直链失败：" + remotePath);
+                continue;
+            }
+
+            try
+            {
+                return await FetchDlinkAsync(link, accessToken, remotePath, cancellationToken)
                     .ConfigureAwait(false);
             }
-            throw new BaiduPanNotFoundException(remotePath);
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
         }
-        catch (Exception ex) when (attempt == 0
-                                   && !cancellationToken.IsCancellationRequested
-                                   && IsTransientDownload(ex))
-        {
-            // 真实网盘直链偶发连接重置 / 超时（每次命中的文件还不一样）。
-            // 单篇下载失败会让整轮同步记失败或漏数据，所以重取一次直链再试；
-            // 与上面 404 分支共用 attempt 上限，不会形成无限重试。
-            await Task.Delay(400, cancellationToken).ConfigureAwait(false);
-            return await DownloadDataAsync(remotePath, accessToken, 1, cancellationToken)
-                .ConfigureAwait(false);
-        }
+
+        throw lastError ?? new BaiduPanTransientException("下载失败：" + remotePath);
     }
 
-    private static bool IsTransientDownload(Exception ex)
-        => ex is HttpRequestException or TaskCanceledException or TimeoutException
-           || (ex is BaiduPanException and not BaiduPanNotFoundException
-               && (ex.Message.Contains("502", StringComparison.Ordinal)
-                   || ex.Message.Contains("503", StringComparison.Ordinal)
-                   || ex.Message.Contains("504", StringComparison.Ordinal)));
-
-    private static bool IsRemoteFileGone(BaiduPanException ex)
-        => ex is not BaiduPanNotFoundException
-           && ex.Message.Contains("HTTP 404", StringComparison.Ordinal)
-           && (ex.Message.Contains("31066", StringComparison.Ordinal)
-               || ex.Message.Contains("file does not exist", StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>errno 20020 降级：按文件名在父目录找 fs_id，再用 filemetas 换 dlink。</summary>
-    private async Task<string?> DlinkFromFilemetasAsync(string remotePath, string accessToken,
-        CancellationToken cancellationToken)
+    /// <summary>远端文件是否存在。目录不存在或列表里没有该文件返回 false；
+    /// 列表失败（网络异常等）会抛错——绝不把「查不到」误判成「不存在」。</summary>
+    public async Task<bool> RemoteFileExistsAsync(string remotePath, string accessToken,
+        CancellationToken cancellationToken = default)
     {
         var slash = remotePath.LastIndexOf('/');
-        if (slash <= 0) return null;
-        var parent = remotePath[..slash];
-        var name = remotePath[(slash + 1)..];
-
+        var parent = slash <= 0 ? "/" : remotePath[..slash];
         List<BaiduPanListEntry> entries;
         try
         {
@@ -378,33 +332,191 @@ public sealed class BaiduPanClient
         }
         catch (BaiduPanNotFoundException)
         {
+            return false;
+        }
+
+        return entries.Any(entry =>
+            string.Equals(entry.Path ?? parent + "/" + entry.Name, remotePath,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>取下载直链。首试 method=download&amp;path，被拒后走 filemetas&amp;fsids&amp;dlink=1；
+    /// 拿不到时再稍候强刷父目录重拿 fs_id（列表有延迟、filemetas 偶发漏项）。返回 null 表示临时失败。</summary>
+    private async Task<string?> ResolveDlinkAsync(string remotePath, string accessToken, bool refresh,
+        CancellationToken cancellationToken)
+    {
+        if (!refresh && !_downloadByPathBlocked)
+        {
+            var direct = await DlinkByPathAsync(remotePath, accessToken, cancellationToken)
+                .ConfigureAwait(false);
+            if (direct.blocked) _downloadByPathBlocked = true;
+            if (direct.dlink != null) return direct.dlink;
+        }
+
+        long? fsId;
+        if (refresh)
+            fsId = await FindFsIdAsync(remotePath, accessToken, cancellationToken).ConfigureAwait(false);
+        else if (CachedFsId(remotePath) is { } cached)
+            fsId = cached;
+        else
+            fsId = await FindFsIdAsync(remotePath, accessToken, cancellationToken).ConfigureAwait(false);
+
+        if (fsId != null)
+        {
+            var d = await DlinkByFsIdAsync(fsId.Value, accessToken, cancellationToken)
+                .ConfigureAwait(false);
+            if (d != null) return d;
+        }
+
+        await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+        fsId = await FindFsIdAsync(remotePath, accessToken, cancellationToken).ConfigureAwait(false);
+        if (fsId != null)
+        {
+            var d = await DlinkByFsIdAsync(fsId.Value, accessToken, cancellationToken)
+                .ConfigureAwait(false);
+            if (d != null) return d;
+        }
+
+        return null;
+    }
+
+    /// <summary>method=download&amp;path 取直链。返回 (dlink, 是否被拒)。被 errno 20020 拒绝后本进程改走 filemetas。
+    /// 网络/解析失败一律吞掉返回 (null, false)，交给上层 3 次重试，绝不把抖动当业务失败。</summary>
+    private async Task<(string? dlink, bool blocked)> DlinkByPathAsync(string remotePath, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var url = XpanFile(new Dictionary<string, string>
+            {
+                ["method"] = "download",
+                ["access_token"] = accessToken,
+                ["path"] = remotePath,
+                ["threshold"] = "0",
+            });
+            using var response = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            var body = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            if (!TryParseJson(body, out var doc))
+                return (null, false);
+            using (doc)
+            {
+                var root = doc.RootElement;
+                var errno = Int64Or(root, "errno") ?? -1;
+                string? dlink = null;
+                if (errno == 0 && root.TryGetProperty("list", out var list)
+                               && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0)
+                    dlink = StringOr(list[0], "dlink");
+                if (!string.IsNullOrWhiteSpace(dlink))
+                    return (dlink, false);
+                return (null, errno != 0);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return (null, false);
+        }
+    }
+
+    /// <summary>列父目录，按 path 精确匹配拿 fs_id（filemetas 只认 fsids 不认 path）。拿不到 / 列表失败返回 null。</summary>
+    private async Task<long?> FindFsIdAsync(string remotePath, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        var slash = remotePath.LastIndexOf('/');
+        if (slash <= 0) return null;
+        var parent = remotePath[..slash];
+
+        List<BaiduPanListEntry> entries;
+        try
+        {
+            entries = await ListFilesAsync(parent, accessToken, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
             return null;
         }
 
-        var hit = entries.FirstOrDefault(item => item.IsDir == 0 && item.FsId.HasValue
-            && string.Equals(item.Name, name, StringComparison.Ordinal));
-        if (hit?.FsId == null) return null;
-
-        var fsids = JsonSerializer.Serialize(new[] { hit.FsId.Value }, PlainOptions);
-        var url = XpanFile(new Dictionary<string, string>
+        foreach (var item in entries)
         {
-            ["method"] = "filemetas",
-            ["access_token"] = accessToken,
-            ["fsids"] = fsids,
-            ["dlink"] = "1",
-        });
-        using var response = await GetAsync(url, cancellationToken, withUserAgent: true).ConfigureAwait(false);
-        var body = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
-        if (!TryParseJson(body, out var doc)) return null;
-        using (doc)
-        {
-            var root = doc.RootElement;
-            if ((Int64Or(root, "errno") ?? -1) != 0) return null;
-            if (!root.TryGetProperty("info", out var info) || info.ValueKind != JsonValueKind.Array
-                                                          || info.GetArrayLength() == 0)
-                return null;
-            return StringOr(info[0], "dlink");
+            var path = item.Path ?? parent + "/" + item.Name;
+            if (item.FsId.HasValue && !string.IsNullOrWhiteSpace(item.Path))
+                CacheFsId(item.FsId.Value, item.Path!);
+            if (string.Equals(path, remotePath, StringComparison.OrdinalIgnoreCase) && item.FsId.HasValue)
+                return item.FsId.Value;
         }
+
+        return null;
+    }
+
+    /// <summary>method=filemetas&amp;fsids=[id]&amp;dlink=1 → 下载直链。返回体是 { info: [ { dlink } ] }。
+    /// 网络/解析失败一律吞掉返回 null，交给上层 3 次重试。</summary>
+    private async Task<string?> DlinkByFsIdAsync(long fsId, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var fsids = JsonSerializer.Serialize(new[] { fsId }, PlainOptions);
+            var url = XpanFile(new Dictionary<string, string>
+            {
+                ["method"] = "filemetas",
+                ["access_token"] = accessToken,
+                ["fsids"] = fsids,
+                ["dlink"] = "1",
+            });
+            using var response = await GetAsync(url, cancellationToken, withUserAgent: true).ConfigureAwait(false);
+            var body = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            if (!TryParseJson(body, out var doc)) return null;
+            using (doc)
+            {
+                var root = doc.RootElement;
+                if ((Int64Or(root, "errno") ?? -1) != 0) return null;
+                if (!root.TryGetProperty("info", out var info) || info.ValueKind != JsonValueKind.Array
+                                                              || info.GetArrayLength() == 0)
+                    return null;
+                return StringOr(info[0], "dlink");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>从直链拉取文件体（附 access_token 与 User-Agent，否则会被 403 拒绝）。</summary>
+    private async Task<byte[]> FetchDlinkAsync(string link, string accessToken, string remotePath,
+        CancellationToken cancellationToken)
+    {
+        var separator = link.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+        var downloadUrl = link + separator + "access_token=" + Uri.EscapeDataString(accessToken);
+        using var response = await GetAsync(downloadUrl, cancellationToken, withUserAgent: true)
+            .ConfigureAwait(false);
+        var data = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        if (data.Length == 0)
+            throw new BaiduPanTransientException("下载内容为空：" + remotePath);
+        return data;
+    }
+
+    private long? CachedFsId(string path)
+    {
+        lock (_cacheLock)
+            return _fsIdCache.TryGetValue(path, out var value) ? value : null;
+    }
+
+    private void CacheFsId(long fsId, string path)
+    {
+        lock (_cacheLock)
+            _fsIdCache[path] = fsId;
     }
 
     // MARK: - 上传（precreate → superfile2 → create）
@@ -470,9 +582,14 @@ public sealed class BaiduPanClient
         }, cancellationToken, preEncodedKeys: ["block_list"]).ConfigureAwait(false);
 
         using var createDoc = ParseJson(createBody, "create 返回异常");
-        var createErrno = Int64Or(createDoc.RootElement, "errno") ?? 0;
+        var createRoot = createDoc.RootElement;
+        var createErrno = Int64Or(createRoot, "errno") ?? 0;
         if (createErrno != 0)
             throw new BaiduPanException($"create 失败（errno={createErrno}）{Snippet(createBody)}");
+        // create 返回 fs_id，缓存后 publish 的回读校验能立刻走 filemetas，不必等云端列表刷新
+        var createdFsId = Int64Or(createRoot, "fs_id");
+        if (createdFsId.HasValue && createdFsId.Value > 0)
+            CacheFsId(createdFsId.Value, remotePath);
     }
 
     private async Task UploadBlockAsync(byte[] data, string remotePath, string uploadId,
@@ -499,7 +616,7 @@ public sealed class BaiduPanClient
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var responseBody = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new BaiduPanException(
+            throw new BaiduPanTransientException(
                 $"上传分片失败（HTTP {(int)response.StatusCode}）{Snippet(responseBody)}");
         if (TryParseJson(responseBody, out var doc))
         {
@@ -507,7 +624,7 @@ public sealed class BaiduPanClient
             {
                 var errno = Int64Or(doc.RootElement, "errno");
                 if (errno != null && errno != 0)
-                    throw new BaiduPanException($"上传分片失败（errno={errno}）{Snippet(responseBody)}");
+                    throw new BaiduPanTransientException($"上传分片失败（errno={errno}）{Snippet(responseBody)}");
             }
         }
     }
@@ -538,7 +655,7 @@ public sealed class BaiduPanClient
         {
             var text = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
             response.Dispose();
-            throw new BaiduPanException($"请求失败（HTTP {(int)response.StatusCode}）{Snippet(text)}");
+            throw new BaiduPanTransientException($"请求失败（HTTP {(int)response.StatusCode}）{Snippet(text)}");
         }
         return response;
     }
@@ -561,7 +678,7 @@ public sealed class BaiduPanClient
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var body = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new BaiduPanException($"请求失败（HTTP {(int)response.StatusCode}）{Snippet(body)}");
+            throw new BaiduPanTransientException($"请求失败（HTTP {(int)response.StatusCode}）{Snippet(body)}");
         return body;
     }
 

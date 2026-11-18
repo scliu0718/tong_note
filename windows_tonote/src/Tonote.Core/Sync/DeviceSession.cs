@@ -199,15 +199,12 @@ public sealed class DeviceRegistry
         var sessionId = identity.SessionId ?? "";
 
         DeviceRecord? remote = null;
-        try
+        if (await _client.RemoteFileExistsAsync(FilePath(identity.DeviceId), accessToken,
+                cancellationToken).ConfigureAwait(false))
         {
             var data = await _client.DownloadDataAsync(FilePath(identity.DeviceId), accessToken,
                 cancellationToken).ConfigureAwait(false);
             remote = TonoteJson.Deserialize<DeviceRecord>(System.Text.Encoding.UTF8.GetString(data));
-        }
-        catch (BaiduPanNotFoundException)
-        {
-            remote = null;
         }
 
         switch (DeviceRecord.Decide(identity.DeviceId, sessionId, remote))
@@ -254,9 +251,9 @@ public sealed class DeviceRegistry
                     continue;
                 records.Add(record);
             }
-            catch (BaiduPanNotFoundException)
+            catch
             {
-                // 文件刚好被对方删掉，跳过
+                // 文件刚好被对方删掉或临时读不到，跳过
             }
         }
 

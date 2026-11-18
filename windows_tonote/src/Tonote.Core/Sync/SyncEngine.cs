@@ -249,22 +249,10 @@ public sealed class SyncEngine : IDisposable
         }
     }
 
-    /// <summary>网络类瞬态故障才自动重试；数据/契约错误立即暴露，不掩盖问题。</summary>
+    /// <summary>网络类瞬态故障才自动重试；数据/契约错误立即暴露，不掩盖问题。按异常类型判断，不靠文案子串。</summary>
     private static bool IsTransient(Exception error)
-    {
-        if (error is HttpRequestException or TaskCanceledException or TimeoutException)
-            return true;
-        if (error is not BaiduPanException)
-            return false;
-        var message = error.Message;
-        return message.Contains("请求失败", StringComparison.Ordinal)
-               || message.Contains("请求超时", StringComparison.Ordinal)
-               || message.Contains("proxy", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("timed out", StringComparison.OrdinalIgnoreCase)
-               || message.Contains("502", StringComparison.Ordinal)
-               || message.Contains("503", StringComparison.Ordinal)
-               || message.Contains("504", StringComparison.Ordinal);
-    }
+        => error is BaiduPanTransientException
+           or HttpRequestException or TaskCanceledException or TimeoutException;
 
     // MARK: - 笔记
 
@@ -340,7 +328,22 @@ public sealed class SyncEngine : IDisposable
             && SyncRules.ShouldSkipFetch(listing.ServerMtime, cursor))
             return false;
 
-        var remote = await DownloadNoteAsync(id, accessToken, cancellationToken).ConfigureAwait(false);
+        Note? remote;
+        if (listing == null)
+        {
+            // 目录里没有这个文件。若本篇曾经同步过（baseRev != 0），说明是列表抖动或刚被别端删除，
+            // 绝不能当成「云端无此文件」拿本地旧版覆盖，跳过等下一轮列表恢复。
+            if (cursor.BaseRev != 0)
+                return false;
+            remote = null;
+        }
+        else
+        {
+            // 目录里既然有这个 id，任何下载/解析失败都只是临时错误：一律上抛，
+            // 交给 SyncNotes 记失败、下一轮重试，绝不退化成用本地内容覆盖云端笔记。
+            remote = await DownloadNoteAsync(id, accessToken, cancellationToken).ConfigureAwait(false);
+        }
+
         var step = SyncRules.AfterFetch(cursor.Dirty, remote?.Rev, remote?.UpdatedAt,
             local?.UpdatedAt, cursor);
         switch (step.Kind)
@@ -382,7 +385,8 @@ public sealed class SyncEngine : IDisposable
         }
     }
 
-    /// <summary>发布一篇笔记，最多重试三次并回读校验，避免把「写成功但没落盘」当成成功。</summary>
+    /// <summary>发布一篇笔记。create errno=0 即代表已写入，回读只用于确认，最多 3 次、400ms×retry 退避；
+    /// 回读全失败不重传、不 rev+1，只记已发布状态留待下一轮校验。</summary>
     private async Task<bool> PublishNoteAsync(Note note, int rev, SyncCursor cursor,
         long? listingMtime, string accessToken, CancellationToken cancellationToken)
     {
@@ -401,54 +405,94 @@ public sealed class SyncEngine : IDisposable
             }
             await UploadNoteAsync(publishing, accessToken, cancellationToken).ConfigureAwait(false);
 
-            var check = await DownloadNoteAsync(publishing.Id, accessToken, cancellationToken)
+            var check = await ReadBackNoteAsync(publishing.Id, accessToken, cancellationToken)
                 .ConfigureAwait(false);
-            if (check?.Rev == publishing.Rev
+            if (check == null)
+            {
+                // 上传已成功但回读未确认：记下已发布状态，不重传、不 rev+1，留待下一轮校验
+                attempt.BaseRev = publishing.Rev;
+                attempt.BaseUpdatedAt = publishing.UpdatedAt;
+                attempt.Dirty = false;
+                attempt.ServerMtime = listingMtime;
+                await CleanupPurgedNoteAttachmentsAsync(publishing, accessToken, cancellationToken)
+                    .ConfigureAwait(false);
+                _notes.ApplySyncedNote(publishing, attempt);
+                CopyCursorFrom(cursor, attempt);
+                return true;
+            }
+
+            if (check.Rev == publishing.Rev
                 && SyncRules.SameTime(check.UpdatedAt, publishing.UpdatedAt))
             {
                 attempt.BaseRev = publishing.Rev;
                 attempt.BaseUpdatedAt = publishing.UpdatedAt;
                 attempt.Dirty = false;
                 attempt.ServerMtime = listingMtime;
-                if (publishing.Purged)
-                {
-                    var prefix = "attachments/" + publishing.Id.ToString("D").ToUpperInvariant() + "/";
-                    var stillUsed = _notes.Notes.Any(other => other.Id != publishing.Id
-                        && !other.Purged && other.Body.Contains(prefix, StringComparison.Ordinal));
-                    if (!stillUsed)
-                    {
-                        try
-                        {
-                            await _client.DeleteRemoteAsync(AttachmentDirectory(publishing.Id),
-                                accessToken, cancellationToken).ConfigureAwait(false);
-                        }
-                        catch { /* 附件目录清理失败不阻塞笔记同步 */ }
-                    }
-                }
+                await CleanupPurgedNoteAttachmentsAsync(publishing, accessToken, cancellationToken)
+                    .ConfigureAwait(false);
                 _notes.ApplySyncedNote(publishing, attempt);
                 CopyCursorFrom(cursor, attempt);
                 return true;
             }
 
-            if (check != null)
+            var again = SyncRules.AfterFetch(true, check.Rev, check.UpdatedAt,
+                publishing.UpdatedAt, attempt);
+            if (again.Kind == SyncStepKind.Upload)
             {
-                var again = SyncRules.AfterFetch(true, check.Rev, check.UpdatedAt,
-                    publishing.UpdatedAt, attempt);
-                if (again.Kind == SyncStepKind.Upload)
-                {
-                    nextRev = again.Rev;
-                    continue;
-                }
-                if (again.Kind == SyncStepKind.Conflict)
-                {
-                    var current = _notes.Find(publishing.Id) ?? publishing;
-                    await ResolveNoteConflictAsync(current, check, attempt, listingMtime,
-                        accessToken, cancellationToken).ConfigureAwait(false);
-                    return true;
-                }
+                nextRev = again.Rev;
+                continue;
+            }
+            if (again.Kind == SyncStepKind.Conflict)
+            {
+                var current = _notes.Find(publishing.Id) ?? publishing;
+                await ResolveNoteConflictAsync(current, check, attempt, listingMtime,
+                    accessToken, cancellationToken).ConfigureAwait(false);
+                return true;
             }
         }
         throw new BaiduPanException($"笔记「{publishing.Title}」连续三次没能写上云端");
+    }
+
+    /// <summary>回读最多 3 次、400ms×retry 退避，只做确认；全失败返回 null，不把抖动当业务失败。</summary>
+    private async Task<Note?> ReadBackNoteAsync(Guid id, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        for (var retry = 0; retry < 3; retry++)
+        {
+            if (retry > 0)
+                await Task.Delay(retry * 400, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await DownloadNoteAsync(id, accessToken, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // 回读失败只重试回读，不 rev+1 重传
+            }
+        }
+        return null;
+    }
+
+    /// <summary>墓碑笔记删除后，若没有其它笔记引用它的附件目录，就清理远端附件。</summary>
+    private async Task CleanupPurgedNoteAttachmentsAsync(Note publishing, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        if (!publishing.Purged) return;
+        var prefix = "attachments/" + publishing.Id.ToString("D").ToUpperInvariant() + "/";
+        var stillUsed = _notes.Notes.Any(other => other.Id != publishing.Id
+            && !other.Purged && other.Body.Contains(prefix, StringComparison.Ordinal));
+        if (stillUsed) return;
+        try
+        {
+            await _client.DeleteRemoteAsync(AttachmentDirectory(publishing.Id),
+                accessToken, cancellationToken).ConfigureAwait(false);
+        }
+        catch { /* 附件目录清理失败不阻塞笔记同步 */ }
     }
 
     private async Task ResolveNoteConflictAsync(Note local, Note remote, SyncCursor cursor,
@@ -555,7 +599,23 @@ public sealed class SyncEngine : IDisposable
         if (listing?.ServerMtime != null
             && SyncRules.ShouldSkipFetch(listing.ServerMtime, cursor))
             return false;
-        var remote = await DownloadTodoAsync(id, accessToken, cancellationToken).ConfigureAwait(false);
+
+        Todo? remote;
+        if (listing == null)
+        {
+            // 目录里没有这个文件。若本条曾经同步过（baseRev != 0），说明是列表抖动或刚被别端删除，
+            // 绝不能当成「云端无此文件」拿本地旧版覆盖，跳过等下一轮列表恢复。
+            if (cursor.BaseRev != 0)
+                return false;
+            remote = null;
+        }
+        else
+        {
+            // 目录里既然有这个 id，任何下载/解析失败都只是临时错误：一律上抛，
+            // 交给 SyncTodos 记失败、下一轮重试，绝不退化成用本地内容覆盖云端任务。
+            remote = await DownloadTodoAsync(id, accessToken, cancellationToken).ConfigureAwait(false);
+        }
+
         var step = SyncRules.AfterFetch(cursor.Dirty, remote?.Rev, remote?.UpdatedAt,
             local?.UpdatedAt, cursor);
         switch (step.Kind)
@@ -614,9 +674,22 @@ public sealed class SyncEngine : IDisposable
                     isTodo: true).ConfigureAwait(false);
             }
             await UploadTodoAsync(publishing, accessToken, cancellationToken).ConfigureAwait(false);
-            var check = await DownloadTodoAsync(publishing.Id, accessToken, cancellationToken)
+
+            var check = await ReadBackTodoAsync(publishing.Id, accessToken, cancellationToken)
                 .ConfigureAwait(false);
-            if (check?.Rev == publishing.Rev
+            if (check == null)
+            {
+                // 上传已成功但回读未确认：记下已发布状态，不重传、不 rev+1，留待下一轮校验
+                attempt.BaseRev = publishing.Rev;
+                attempt.BaseUpdatedAt = publishing.UpdatedAt;
+                attempt.Dirty = false;
+                attempt.ServerMtime = listingMtime;
+                _todos.ApplySyncedTodo(publishing, attempt);
+                CopyCursorFrom(cursor, attempt);
+                return true;
+            }
+
+            if (check.Rev == publishing.Rev
                 && SyncRules.SameTime(check.UpdatedAt, publishing.UpdatedAt))
             {
                 attempt.BaseRev = publishing.Rev;
@@ -627,25 +700,48 @@ public sealed class SyncEngine : IDisposable
                 CopyCursorFrom(cursor, attempt);
                 return true;
             }
-            if (check != null)
+
+            var again = SyncRules.AfterFetch(true, check.Rev, check.UpdatedAt,
+                publishing.UpdatedAt, attempt);
+            if (again.Kind == SyncStepKind.Upload)
             {
-                var again = SyncRules.AfterFetch(true, check.Rev, check.UpdatedAt,
-                    publishing.UpdatedAt, attempt);
-                if (again.Kind == SyncStepKind.Upload)
-                {
-                    nextRev = again.Rev;
-                    continue;
-                }
-                if (again.Kind == SyncStepKind.Conflict)
-                {
-                    var current = _todos.Find(publishing.Id) ?? publishing;
-                    await ResolveTodoConflictAsync(current, check, attempt, listingMtime,
-                        accessToken, cancellationToken).ConfigureAwait(false);
-                    return true;
-                }
+                nextRev = again.Rev;
+                continue;
+            }
+            if (again.Kind == SyncStepKind.Conflict)
+            {
+                var current = _todos.Find(publishing.Id) ?? publishing;
+                await ResolveTodoConflictAsync(current, check, attempt, listingMtime,
+                    accessToken, cancellationToken).ConfigureAwait(false);
+                return true;
             }
         }
         throw new BaiduPanException($"任务「{publishing.Title}」连续三次没能写上云端");
+    }
+
+    /// <summary>回读最多 3 次、400ms×retry 退避，只做确认；全失败返回 null，不把抖动当业务失败。</summary>
+    private async Task<Todo?> ReadBackTodoAsync(Guid id, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        for (var retry = 0; retry < 3; retry++)
+        {
+            if (retry > 0)
+                await Task.Delay(retry * 400, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await DownloadTodoAsync(id, accessToken, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // 回读失败只重试回读，不 rev+1 重传
+            }
+        }
+        return null;
     }
 
     private async Task ResolveTodoConflictAsync(Todo local, Todo remote, SyncCursor cursor,
@@ -767,7 +863,6 @@ public sealed class SyncEngine : IDisposable
                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                     await File.WriteAllBytesAsync(dest, data, cancellationToken).ConfigureAwait(false);
                 }
-                catch (BaiduPanNotFoundException) { continue; }
                 catch { complete = false; continue; }
             }
             if (!cursor.UploadedAttachments.Contains(path))
@@ -822,13 +917,10 @@ public sealed class SyncEngine : IDisposable
     private async Task<Note?> DownloadNoteAsync(Guid id, string accessToken,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var data = await _client.DownloadDataAsync(NotePath(id), accessToken, cancellationToken)
-                .ConfigureAwait(false);
-            return TonoteJson.Deserialize<Note>(Encoding.UTF8.GetString(data));
-        }
-        catch (BaiduPanNotFoundException) { return null; }
+        var data = await _client.DownloadDataAsync(NotePath(id), accessToken, cancellationToken)
+            .ConfigureAwait(false);
+        return TonoteJson.Deserialize<Note>(Encoding.UTF8.GetString(data))
+               ?? throw new BaiduPanException("云端笔记解析为空：" + id.ToString("D"));
     }
 
     private Task UploadNoteAsync(Note note, string accessToken, CancellationToken cancellationToken)
@@ -838,13 +930,10 @@ public sealed class SyncEngine : IDisposable
     private async Task<Todo?> DownloadTodoAsync(Guid id, string accessToken,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var data = await _client.DownloadDataAsync(TodoPath(id), accessToken, cancellationToken)
-                .ConfigureAwait(false);
-            return TonoteJson.Deserialize<Todo>(Encoding.UTF8.GetString(data));
-        }
-        catch (BaiduPanNotFoundException) { return null; }
+        var data = await _client.DownloadDataAsync(TodoPath(id), accessToken, cancellationToken)
+            .ConfigureAwait(false);
+        return TonoteJson.Deserialize<Todo>(Encoding.UTF8.GetString(data))
+               ?? throw new BaiduPanException("云端任务解析为空：" + id.ToString("D"));
     }
 
     private Task UploadTodoAsync(Todo todo, string accessToken, CancellationToken cancellationToken)
@@ -860,7 +949,11 @@ public sealed class SyncEngine : IDisposable
                 .ConfigureAwait(false);
             return TonoteJson.Deserialize<NotebookCloud>(Encoding.UTF8.GetString(data));
         }
-        catch (BaiduPanNotFoundException) { return null; }
+        catch
+        {
+            // 云端尚无笔记本清单或临时读取失败：按无远端处理，不阻塞整轮
+            return null;
+        }
     }
 
     private async Task<OldManifest?> PullManifestAsync(string accessToken,
@@ -872,7 +965,11 @@ public sealed class SyncEngine : IDisposable
                 .ConfigureAwait(false);
             return TonoteJson.Deserialize<OldManifest>(Encoding.UTF8.GetString(data));
         }
-        catch (BaiduPanNotFoundException) { return null; }
+        catch
+        {
+            // 云端尚无旧清单或临时读取失败：按无旧数据处理
+            return null;
+        }
     }
 
     private sealed class OldManifest
