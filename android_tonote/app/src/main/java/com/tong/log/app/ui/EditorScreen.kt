@@ -165,6 +165,58 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         captureBody(js)
     }
 
+    /**
+     * 列表按钮循环切换层级，与 Mac 的扁平 `<li data-level="n">` 结构对齐（缩进用 data-level，不嵌套 <ul>）：
+     *   无序：正文 → 一级(•) → 二级(○) → 正文
+     *   有序：正文 → 一级(1.) → 二级(a.) → 三级(i.) → 正文
+     */
+    fun execListCycle(tag: String) {
+        if (note.contentFormat != NoteContentFormat.RICH_TEXT) return
+        val wv = webView ?: return
+        val tagUpper = tag.uppercase()
+        val cmd = if (tag == "ol") "insertOrderedList" else "insertUnorderedList"
+        val maxLevel = if (tag == "ol") 2 else 1
+        val js = """
+            (function(){
+              function findLi(n){
+                while(n && n.nodeType !== 9){
+                  if(n.nodeType === 1 && n.tagName === 'LI') return n;
+                  n = n.parentNode;
+                }
+                return null;
+              }
+              var sel = window.getSelection();
+              if(!sel || sel.rangeCount === 0) return document.body.innerHTML;
+              var node = sel.anchorNode;
+              if(node && node.nodeType === 3) node = node.parentNode;
+              var li = findLi(node);
+              if(!li){
+                document.execCommand('$cmd');
+              } else {
+                var list = li.parentNode;
+                var same = list && list.tagName === '$tagUpper';
+                if(!same){
+                  document.execCommand('$cmd');
+                } else {
+                  var level = parseInt(li.getAttribute('data-level') || '0', 10);
+                  if(level < $maxLevel){
+                    li.setAttribute('data-level', String(level + 1));
+                  } else {
+                    li.removeAttribute('data-level');
+                    document.execCommand('$cmd');
+                  }
+                }
+              }
+              return document.body.innerHTML;
+            })()
+        """.trimIndent()
+        wv.evaluateJavascript(js) { v ->
+            val html = jsString(v).replace(BASE_URL, "")
+            if (html.isBlank()) return@evaluateJavascript
+            NoteStore.updateContent(noteId, html, NoteContentFormat.RICH_TEXT)
+        }
+    }
+
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             val rel = AttachmentStore.importImage(it, noteId)
@@ -303,8 +355,8 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
             FmtSep()
             FmtIconButton(Icons.Default.FormatQuote, "引用") { exec("formatBlock", "blockquote") }
             FmtIconButton(Icons.Default.Code, "代码块") { exec("formatBlock", "pre") }
-            FmtIconButton(Icons.Default.FormatListBulleted, "无序列表") { exec("insertUnorderedList") }
-            FmtIconButton(Icons.Default.FormatListNumbered, "有序列表") { exec("insertOrderedList") }
+            FmtIconButton(Icons.Default.FormatListBulleted, "无序列表") { execListCycle("ul") }
+            FmtIconButton(Icons.Default.FormatListNumbered, "有序列表") { execListCycle("ol") }
             FmtSep()
             FmtIconButton(Icons.Default.FormatBold, "加粗") { exec("bold") }
             FmtIconButton(Icons.Default.FormatItalic, "斜体") { exec("italic") }
