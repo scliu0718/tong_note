@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -9,6 +11,8 @@ public partial class MainWindow : Window
 {
     private readonly AppSession _session;
     private readonly BaiduLogin _login;
+    private readonly SessionGuard _sessionGuard;
+    private ShellView? _shell;
 
     public MainWindow()
     {
@@ -29,14 +33,18 @@ public partial class MainWindow : Window
                 };
                 Root.Content = shell;
             }
-            _session.StartSync();
+            _shell = Root.Content as ShellView;
+            // W-21：未登录绝不启动同步（否则必然失败）
+            if (_session.IsSignedIn) _session.StartSync();
         }
 
         void ShowLogin()
         {
+            _shell?.Flush();
+            _shell = null;
             _login.SignedIn -= ShowShell;
             _login.SignedIn += ShowShell;
-            Root.Content = new LoginView(_login, ShowShell);
+            Root.Content = new LoginView(_login, () => Dialogs.ShowGuide(this));
         }
 
         _login.SignedIn += ShowShell;
@@ -45,7 +53,13 @@ public partial class MainWindow : Window
             _session.Logout();
             ShowLogin();
         });
-        AppInstance.Callback += _login.Accept;
+        // W-23：浏览器回调 / 再次双击 exe 都把已有窗口置前，不新开第二个
+        AppInstance.Callback += text => Dispatcher.UIThread.Post(() =>
+        {
+            BringToFront();
+            if (text == "tongnote://activate") return;
+            _login.Accept(text);
+        });
 
         if (_login.IsSignedIn)
             ShowShell();
@@ -54,10 +68,83 @@ public partial class MainWindow : Window
 
         if (AppInstance.StartupCallback != null)
             _login.Accept(AppInstance.StartupCallback);
+
+        _sessionGuard = SessionGuard.Start(FlushForShutdown);
+        // Avalonia Window 没有 OnActivated/OnDeactivated 覆写，走事件
+        Activated += (_, _) =>
+        {
+            if (_session.IsSignedIn) _ = _session.Sync.QuickSyncAsync();
+        };
+        Deactivated += (_, _) => FlushForShutdown();
+        Opened += (_, _) => RestoreGeometry();
+    }
+
+    private sealed class WindowStateData
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+        public bool Maximized { get; set; }
+    }
+
+    private static string GeometryPath => Path.Combine(AppPaths.DefaultRoot(), "window-state.json");
+
+    /// <summary>W-34 / PC-N-02：恢复窗口几何；显示器已拔出则回到屏幕中央。</summary>
+    private void RestoreGeometry()
+    {
+        try
+        {
+            if (!File.Exists(GeometryPath)) return;
+            var state = JsonSerializer.Deserialize<WindowStateData>(File.ReadAllText(GeometryPath));
+            if (state == null) return;
+            var point = new PixelPoint((int)state.X, (int)state.Y);
+            var visible = Screens?.All.Any(screen => screen.WorkingArea.Contains(point)) ?? false;
+            if (visible && state.Width >= MinWidth && state.Height >= MinHeight)
+            {
+                Position = point;
+                Width = state.Width;
+                Height = state.Height;
+            }
+            if (state.Maximized) WindowState = WindowState.Maximized;
+        }
+        catch (Exception error) { DiagnosticLog.Write("app", "恢复窗口位置失败：" + error.Message); }
+    }
+
+    private void SaveGeometry()
+    {
+        try
+        {
+            var state = new WindowStateData
+            {
+                X = Position.X, Y = Position.Y, Width = Width, Height = Height,
+                Maximized = WindowState == WindowState.Maximized,
+            };
+            File.WriteAllText(GeometryPath, JsonSerializer.Serialize(state));
+        }
+        catch (Exception error) { DiagnosticLog.Write("app", "保存窗口位置失败：" + error.Message); }
+    }
+
+    /// <summary>W-22：关窗 / 失活 / 关机前把编辑器内容落盘（最多丢 1 秒输入）。</summary>
+    public void FlushForShutdown()
+    {
+        try { _shell?.Flush(); }
+        catch (Exception error) { DiagnosticLog.Write("app", "关窗 flush 失败：" + error.Message); }
+    }
+
+    private void BringToFront()
+    {
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        FlushForShutdown();
+        SaveGeometry();
+        _sessionGuard.Dispose();
         _session.StopPolling();
         _session.Sync.Dispose();
         base.OnClosing(e);

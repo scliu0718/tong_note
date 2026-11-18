@@ -154,16 +154,8 @@ public sealed class TodoStore
 
     private void Load()
     {
-        try
-        {
-            if (!File.Exists(_path))
-                return;
-            Todos = TonoteJson.Deserialize<List<Todo>>(File.ReadAllText(_path)) ?? [];
-        }
-        catch
-        {
-            Todos = [];
-        }
+        // W-38：损坏文件先备份再回退空列表
+        Todos = TonoteJson.TryDeserializeFile<List<Todo>>(_path) ?? [];
     }
 
     private void Save() => TonoteJson.WriteAtomic(_path, TonoteJson.Serialize(Todos));

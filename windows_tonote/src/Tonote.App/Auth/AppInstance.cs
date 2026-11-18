@@ -23,8 +23,8 @@ internal static class AppInstance
         _mutex = new Mutex(true, MutexName, out var created);
         if (!created)
         {
-            if (callback != null)
-                Send(callback);
+            // 无回调的普通启动也要把已有窗口置前（W-23）
+            Send(callback ?? "tongnote://activate");
             return true;
         }
 

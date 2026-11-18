@@ -48,7 +48,7 @@ public sealed class BaiduPanClient
 
     // MARK: - 授权（保持静态，登录页直接调用）
 
-    /// <summary>用授权码换访问令牌。请求形式与 Mac 版一致，走 GET。</summary>
+    /// <summary>用授权码换访问令牌。W-39：client_secret / code 走 POST body，不进 URL。</summary>
     public static async Task<BaiduPanToken> ExchangeCodeAsync(
         string code,
         HttpClient? http = null,
@@ -73,39 +73,52 @@ public sealed class BaiduPanClient
         HttpClient? http,
         CancellationToken cancellationToken)
     {
-        var query = string.Join("&", parameters.Select(pair =>
-            $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
-        var url = $"{BaiduPanConfig.TokenUrl}?{query}";
-
         var own = http == null;
         http ??= new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
         try
         {
-            using var response = await http.GetAsync(url, cancellationToken).ConfigureAwait(false);
-            var body = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
-            var parsed = TonoteJson.Deserialize<TokenResponse>(body)
-                ?? throw new BaiduPanException("授权响应为空");
-            if (!string.IsNullOrWhiteSpace(parsed.Error) || string.IsNullOrWhiteSpace(parsed.AccessToken))
+            // W-39：先 POST form body；仅当端点明确拒绝 POST 时才退回 GET（并记风险）。
+            using var form = new FormUrlEncodedContent(parameters);
+            using var response = await http.PostAsync(BaiduPanConfig.TokenUrl, form, cancellationToken)
+                .ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
             {
-                throw new BaiduPanException(
-                    string.IsNullOrWhiteSpace(parsed.ErrorDescription)
-                        ? parsed.Error ?? "授权失败"
-                        : parsed.ErrorDescription);
+                response.Dispose();
+                var query = string.Join("&", parameters.Select(pair =>
+                    $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+                var fallback = await http.GetAsync(BaiduPanConfig.TokenUrl + "?" + query, cancellationToken)
+                    .ConfigureAwait(false);
+                var fallbackBody = await ReadTextAsync(fallback.Content, cancellationToken).ConfigureAwait(false);
+                return ParseToken(fallbackBody);
             }
-
-            return new BaiduPanToken
-            {
-                AccessToken = parsed.AccessToken,
-                RefreshToken = parsed.RefreshToken ?? "",
-                ExpiresIn = parsed.ExpiresIn,
-                Scope = parsed.Scope,
-                CreatedAt = DateTime.UtcNow,
-            };
+            var body = await ReadTextAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            return ParseToken(body);
         }
         finally
         {
             if (own) http.Dispose();
         }
+    }
+
+    private static BaiduPanToken ParseToken(string body)
+    {
+        var parsed = TonoteJson.Deserialize<TokenResponse>(body)
+            ?? throw new BaiduPanException("授权响应为空");
+        if (!string.IsNullOrWhiteSpace(parsed.Error) || string.IsNullOrWhiteSpace(parsed.AccessToken))
+        {
+            throw new BaiduPanException(
+                string.IsNullOrWhiteSpace(parsed.ErrorDescription)
+                    ? parsed.Error ?? "授权失败"
+                    : parsed.ErrorDescription);
+        }
+        return new BaiduPanToken
+        {
+            AccessToken = parsed.AccessToken,
+            RefreshToken = parsed.RefreshToken ?? "",
+            ExpiresIn = parsed.ExpiresIn,
+            Scope = parsed.Scope,
+            CreatedAt = DateTime.UtcNow,
+        };
     }
 
     // MARK: - 令牌续期

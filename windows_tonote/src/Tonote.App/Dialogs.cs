@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Tonote.Core;
+using System.Threading;
 
 namespace Tonote.App;
 
@@ -13,15 +15,45 @@ namespace Tonote.App;
 /// </summary>
 public static class Dialogs
 {
+    /// <summary>W-35：同一时刻只允许一个确认 / 失败对话框，避免连续触发叠窗。</summary>
+    private static readonly SemaphoreSlim DialogGate = new(1, 1);
+
     private static Window? Owner(Control anchor) => TopLevel.GetTopLevel(anchor) as Window;
+
+    /// <summary>
+    /// W-19「绝不静默失败」统一入口：可见对话框 + 脱敏诊断日志（不含 token / 正文）。
+    /// </summary>
+    public static async Task ReportFailure(Control anchor, string title, string reason, string category = "app")
+    {
+        DiagnosticLog.Write(category, title + " | " + reason);
+        var owner = Owner(anchor);
+        if (owner == null) return;
+        await DialogGate.WaitAsync();
+        try
+        {
+            await new NoticeDialog(title, reason).ShowDialog<bool>(owner);
+        }
+        finally
+        {
+            DialogGate.Release();
+        }
+    }
 
     public static async Task<bool> Confirm(Control anchor, string title, string message,
         string confirmText = "删除", string cancelText = "取消", bool danger = true)
     {
         var owner = Owner(anchor);
         if (owner == null) return false;
-        var dialog = new ConfirmDialog(title, message, confirmText, cancelText, danger);
-        return await dialog.ShowDialog<bool>(owner);
+        await DialogGate.WaitAsync();
+        try
+        {
+            var dialog = new ConfirmDialog(title, message, confirmText, cancelText, danger);
+            return await dialog.ShowDialog<bool>(owner);
+        }
+        finally
+        {
+            DialogGate.Release();
+        }
     }
 
     public static async Task<string?> Prompt(Control anchor, string title, string message,
@@ -54,10 +86,16 @@ public static class Dialogs
         await new AvatarPicker(session).ShowDialog(owner);
     }
 
+    private static GuideWindow? _guide;
+
     public static void ShowGuide(Control anchor)
     {
-        var owner = Owner(anchor);
+        // W-29：单例，重复点击不叠窗；登录页也能进入
+        if (_guide != null) { _guide.Activate(); return; }
         var window = new GuideWindow();
+        _guide = window;
+        window.Closed += (_, _) => _guide = null;
+        var owner = Owner(anchor);
         if (owner == null) window.Show();
         else window.Show(owner);
     }
@@ -134,6 +172,21 @@ public static class Dialogs
         }
     }
 
+    /// <summary>单按钮「操作失败」窗口（W-19）。</summary>
+    private sealed class NoticeDialog : Window
+    {
+        public NoticeDialog(string title, string message)
+        {
+            var frame = Configure(this, title, 380);
+            var body = DialogBody(title, message, out _);
+            var ok = Ui.DangerFill("知道了", () => Close(true));
+            ok.MinWidth = 96;
+            body.Children.Add(ButtonRow(ok));
+            frame.Child = body;
+            Content = frame;
+        }
+    }
+
     private sealed class PromptDialog : Window
     {
         private readonly TextBox _input;
@@ -203,7 +256,10 @@ public static class Dialogs
             Grid.SetColumn(next, 3);
             nav.Children.Add(prev); nav.Children.Add(_caption); nav.Children.Add(today); nav.Children.Add(next);
 
-            var stack = new StackPanel { Margin = new Thickness(12), Children = { nav, _days, Ui.Divider(marginV: 6) } };
+            var selectedLabel = Ui.Text("已选 " + _selected.ToString("yyyy年M月d日"),
+                11, null, Palette.TextTertiary);
+            selectedLabel.HorizontalAlignment = HorizontalAlignment.Center;
+            var stack = new StackPanel { Margin = new Thickness(12), Children = { nav, selectedLabel, _days, Ui.Divider(marginV: 6) } };
             var clear = Ui.Ghost("清除日期", () => Close(null));
             clear.HorizontalAlignment = HorizontalAlignment.Center;
             stack.Children.Add(clear);
@@ -270,36 +326,81 @@ public static class Dialogs
     /// <summary>244 宽头像选择器：8 个预设渐变 + 当前选中态。</summary>
     private sealed class AvatarPicker : Window
     {
+        private static string CloudStatus(AppSession session) => session.Avatar.CloudState switch
+        {
+            "uploading" => "正在上传…",
+            "synced" => "已同步",
+            "failed" => "上传失败（已保存到本地）",
+            _ => "更换后自动上传",
+        };
+
+        private static async Task RefreshCloudStatus(AppSession session, TextBlock label)
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                await Task.Delay(500);
+                if (session.Avatar.CloudState is "synced" or "failed") break;
+            }
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => label.Text = CloudStatus(session));
+        }
+
         public AvatarPicker(AppSession session)
         {
             var frame = Configure(this, "选择头像", Metrics.PopAvatar);
             var stack = new StackPanel { Margin = new Thickness(16, 14), Spacing = 10 };
             stack.Children.Add(Ui.Text("选择头像", 13, FontWeight.SemiBold));
-            var wrap = new WrapPanel { Orientation = Orientation.Horizontal };
-            foreach (var preset in AvatarStore.Presets)
+            // W-33：244 宽严格 4 列网格，选中打勾而非蓝框
+            var grid = new Grid();
+            for (var c = 0; c < 4; c++) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            var status = Ui.Text(CloudStatus(session), 11, null, Palette.TextTertiary);
+            status.TextWrapping = TextWrapping.Wrap;
+            for (var i = 0; i < AvatarStore.Presets.Count; i++)
             {
-                var choice = preset;
-                var button = new Button
+                var choice = AvatarStore.Presets[i];
+                var cell = new Grid { Width = 44, Height = 44, Margin = new Thickness(2, 3) };
+                var selected = session.Avatar.Current.Id == choice.Id;
+                cell.Children.Add(new Border
                 {
-                    Content = choice.Glyph,
-                    Width = 44, Height = 44,
-                    Margin = new Thickness(0, 0, 8, 8),
                     CornerRadius = new CornerRadius(22),
                     Background = Palette.Brush(choice.Color1),
-                    Foreground = Palette.White,
-                    FontWeight = FontWeight.Bold,
-                    BorderBrush = session.Avatar.Current.Id == choice.Id ? Palette.TableAccent : Brushes.Transparent,
-                    BorderThickness = new Thickness(session.Avatar.Current.Id == choice.Id ? 2 : 0),
+                    Child = Ui.Text(choice.Glyph, 16, FontWeight.Bold, Palette.White),
+                });
+                if (selected)
+                    cell.Children.Add(new Border
+                    {
+                        Width = 18, Height = 18,
+                        CornerRadius = new CornerRadius(9),
+                        Background = Palette.Accent,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        VerticalAlignment = VerticalAlignment.Bottom,
+                        Child = Ui.Icon(Glyphs.Check, 10, Palette.White),
+                    });
+                var hit = new Button
+                {
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    Cursor = new Cursor(StandardCursorType.Hand),
                 };
-                button.Click += (_, _) => { session.Avatar.Select(choice.Id); Close(); };
-                wrap.Children.Add(button);
+                hit.Click += (_, _) =>
+                {
+                    session.Avatar.Select(choice.Id);
+                    status.Text = CloudStatus(session);
+                    _ = RefreshCloudStatus(session, status);
+                };
+                cell.Children.Add(hit);
+                Grid.SetRow(cell, i / 4);
+                Grid.SetColumn(cell, i % 4);
+                while (grid.RowDefinitions.Count <= i / 4) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                grid.Children.Add(cell);
             }
-            stack.Children.Add(wrap);
+            stack.Children.Add(grid);
+            stack.Children.Add(status);
             var close = Ui.Ghost("取消", Close);
             close.HorizontalAlignment = HorizontalAlignment.Center;
             stack.Children.Add(close);
             frame.Child = stack;
             Content = frame;
+            _ = RefreshCloudStatus(session, status);
         }
     }
 
@@ -344,7 +445,7 @@ public static class Dialogs
             Grid.SetColumn(close, 1);
 
             var left = new StackPanel { Spacing = 14, Children = { SyncCard(), DirectoryCard(), AccountCard(), DeviceCard() } };
-            var right = new StackPanel { Spacing = 14, Children = { QuotaCard(), DataCard(), GuideCard() } };
+            var right = new StackPanel { Spacing = 14, Children = { QuotaCard(), DataCard(), GuideCard(), LocalCard() } };
 
             var body = new Grid
             {
@@ -371,9 +472,11 @@ public static class Dialogs
             _ = LoadAsync();
         }
 
+        private Button? _syncNow;
+
         private Control SyncCard()
         {
-            var syncNow = Ui.Primary("立即同步", () => _ = _session.Sync.QuickSyncAsync());
+            _syncNow = Ui.Primary("立即同步", () => _ = _session.Sync.QuickSyncAsync());
             RefreshSyncText();
             _syncBadge.Child = _syncBadgeText;
             return Ui.Card(new StackPanel
@@ -384,7 +487,9 @@ public static class Dialogs
                     Ui.Text("同步状态", Metrics.FontGroup, FontWeight.SemiBold),
                     _syncBadge,
                     _sync,
-                    new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { syncNow } },
+                    Ui.Text("同步范围：笔记 · 任务", 11, null, Palette.TextTertiary),
+                    Ui.Text("按篇存在 /apps/tong_log/notes/", 11, null, Palette.TextQuaternary),
+                    new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _syncNow } },
                 },
             });
         }
@@ -414,6 +519,14 @@ public static class Dialogs
             _syncBadgeText.Text = "● " + label;
             _syncBadgeText.Foreground = foreground;
             _syncBadge.Background = background;
+            if (_syncNow != null)
+                _syncNow.Content = status.Kind switch
+                {
+                    SyncStatusKind.Syncing => "同步中…",
+                    SyncStatusKind.Success => "再次同步",
+                    SyncStatusKind.Failed => "重试同步",
+                    _ => "同步全部",
+                };
         }
 
         private static Control DirectoryCard()
@@ -425,7 +538,16 @@ public static class Dialogs
                 Foreground = Palette.TextSecondary,
                 Text = "/apps/tong_log/\n ├─ notes/<UUID>.json\n ├─ todos/<UUID>.json\n ├─ attachments/<UUID>/…\n ├─ notebooks.json\n ├─ devices/<device_id>.json\n ├─ avatar.json\n └─ manifest.json（旧版迁移）",
             };
-            return Ui.Card(new StackPanel { Spacing = 8, Children = { Ui.Text("云端目录结构", Metrics.FontGroup, FontWeight.SemiBold), tree } });
+            return Ui.Card(new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    Ui.Text("云端目录结构", Metrics.FontGroup, FontWeight.SemiBold),
+                    Ui.Text("笔记数据存放于你自己的百度网盘，同笔记仅做读写，不另建服务器。", 11, null, Palette.TextTertiary),
+                    tree,
+                },
+            });
         }
 
         private Control AccountCard()
@@ -447,10 +569,23 @@ public static class Dialogs
                 button.Click += (_, _) => _session.Avatar.Select(choice.Id);
                 avatars.Children.Add(button);
             }
+            var reauthorize = Ui.Small("重新授权", () =>
+            {
+                _session.Logout();
+                _onLogout();
+                Close();
+            }, null, 11);
             return Ui.Card(new StackPanel
             {
                 Spacing = 8,
-                Children = { Ui.Text("账号与安全", Metrics.FontGroup, FontWeight.SemiBold), _account, Ui.Text("头像（8 个预设）", 11, null, Palette.TextTertiary), avatars },
+                Children =
+                {
+                    Ui.Text("账号与安全", Metrics.FontGroup, FontWeight.SemiBold),
+                    _account,
+                    Ui.Text("授权方式：百度网盘开放平台 OAuth 2.0", 11, null, Palette.TextTertiary),
+                    reauthorize,
+                    Ui.Text("头像（8 个预设）", 11, null, Palette.TextTertiary), avatars,
+                },
             });
         }
 
@@ -460,13 +595,18 @@ public static class Dialogs
             return Ui.Card(new StackPanel
             {
                 Spacing = 8,
-                Children = { Ui.Text("登录设备", Metrics.FontGroup, FontWeight.SemiBold), _devices, refresh },
+                Children =
+                {
+                    Ui.Text("登录设备", Metrics.FontGroup, FontWeight.SemiBold),
+                    Ui.Text("已授权的设备可随时下线；本机被下线后需重新登录。", 11, null, Palette.TextTertiary),
+                    _devices, refresh,
+                },
             });
         }
 
         private Control QuotaCard()
         {
-            _quota.Text = "—";
+            _quota.Text = "— / —";
             return Ui.Card(new StackPanel
             {
                 Spacing = 8,
@@ -475,7 +615,8 @@ public static class Dialogs
                     Ui.Text("存储空间", 13, FontWeight.SemiBold),
                     _quota,
                     _usage,
-                    Ui.Text("百度网盘配额", 11, null, Palette.TextTertiary),
+                    Ui.Text("已用空间 · 以百度网盘为准", 11, null, Palette.TextTertiary),
+                    Ui.Text("数据完全归你所有，可随时导出迁移。", 11, null, Palette.TextQuaternary),
                 },
             }, background: Palette.Panel);
         }
@@ -489,10 +630,51 @@ public static class Dialogs
                 new TextBlock
                 {
                     FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Foreground = Palette.TextSecondary,
-                    Text = "笔记、任务、笔记本按篇存为独立 JSON，正文是三端共用的受控 HTML。删除使用 purged 墓碑，图片存 attachments/<笔记ID>/。",
+                    Text = "所有笔记为开放格式，数据完全归你所有，可随时导出迁移。正文是三端共用的受控 HTML，删除使用 purged 墓碑。",
                 },
+                Ui.Text("同笔记 · 数据属于你自己 / 无需订阅 · 无服务器存储", 10.5, null, Palette.TextQuaternary),
             },
         });
+
+        /// <summary>PC-SE-07：本机数据目录、版本号与一键复制诊断信息（严格不含凭证 / 正文）。</summary>
+        private Control LocalCard()
+        {
+            var version = typeof(AppSession).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+            var open = Ui.Ghost("在资源管理器中打开", () =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", _session.Root)
+                    {
+                        UseShellExecute = true,
+                    });
+                }
+                catch (Exception error) { DiagnosticLog.Write("app", "打开数据目录失败：" + error.Message); }
+            }, 11);
+            var copy = Ui.Ghost("复制诊断信息", () =>
+            {
+                var status = _session.Sync.Status;
+                var text = string.Join("\n",
+                    "同笔记 " + version,
+                    "数据目录：" + _session.Root,
+                    "笔记：" + _session.Notes.ActiveNotes.Count + " 篇 · 任务：" + _session.Todos.Todos.Count(todo => !todo.Purged) + " 条",
+                    "同步状态：" + status.Kind + " · 上次同步：" + (_session.Sync.LastSyncDate?.ToString("yyyy-MM-dd HH:mm") ?? "无"),
+                    "最近错误：" + (status.Kind == SyncStatusKind.Failed ? status.Message : "无"));
+                _ = TopLevel.GetTopLevel(this)?.Clipboard?.SetTextAsync(text);
+                DiagnosticLog.Write("app", "已复制诊断信息（已脱敏）");
+            }, 11);
+            return Ui.Card(new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    Ui.Text("本机数据", 13, FontWeight.SemiBold),
+                    new TextBlock { Text = _session.Root, FontSize = 11, Foreground = Palette.TextSecondary, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = "版本 " + version, FontSize = 11, Foreground = Palette.TextTertiary },
+                    new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { open, copy } },
+                },
+            });
+        }
 
         private Control GuideCard()
         {
@@ -526,20 +708,29 @@ public static class Dialogs
                 var quota = await _session.Pan.QuotaAsync(token.AccessToken).ConfigureAwait(false);
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    _account.Text = info.DisplayName + " · 百度网盘已连接";
+                    _account.Text = info.DisplayName + " · 已授权";
                     _quota.Text = quota.UsedText + " / " + quota.TotalText;
                     _usage.Value = Math.Min(100, quota.UsedRatio * 100);
                 });
             }
-            catch (Exception error)
+            catch
             {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => _account.Text = "读取网盘信息失败：" + error.Message);
+                // W-25：账号信息读取失败静默——显示「已授权」与 — / —，不出现错误文本
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    _account.Text = "已授权";
+                    _quota.Text = "— / —";
+                    _usage.Value = 0;
+                });
             }
 
             try
             {
-                var records = await _session.Devices.ListDevicesAsync().ConfigureAwait(false);
+                var records = (await _session.Devices.ListDevicesAsync().ConfigureAwait(false)).ToList();
                 var mine = _session.Devices.CurrentDeviceId;
+                // W-36：云端列表为空或漏掉本机时，用 LocalSnapshot 补一行，避免误显示「暂无设备记录」
+                if (!records.Any(record => record.DeviceId == mine))
+                    records.Add(_session.Devices.LocalSnapshot());
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     _devices.Children.Clear();
@@ -592,18 +783,33 @@ public static class Dialogs
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = Palette.Panel;
 
+            // W-29：随包 guide/index.html 优先；缺失时给出明确文案而不是空白窗
+            var guidePath = Path.Combine(AppContext.BaseDirectory, "guide", "index.html");
+            if (File.Exists(guidePath))
+            {
+                var host = new WebView2Host(Path.Combine(AppPaths.DefaultRoot(), "webview2-guide"))
+                {
+                    Margin = new Thickness(0),
+                };
+                host.Navigate(new Uri(guidePath).AbsoluteUri);
+                Content = host;
+                return;
+            }
+
             var sections = new (string Title, string[] Lines)[]
             {
                 ("开始使用", ["登录后笔记、任务、笔记本会按篇同步到百度网盘 /apps/tong_log/。", "左侧可切换笔记本与标签，中间是笔记列表，右侧是编辑器。"]),
                 ("笔记与富文本", ["标题直接点顶部输入框修改；正文支持正文/标题 1-4、加粗、斜体、下划线、删除线、字号、文字色、背景色、引用、代码块、列表、链接、图片与表格。", "插入表格后可在工具条里增删行列、设置单元格对齐与底色。"]),
                 ("快任务", ["四组：待完成 / 进行中 / 已完成 / 已终止。点击状态圈或右侧按钮流转。", "展开任务可写备注（支持图片）、设置计划日期；逾期任务会显示红框与角标。", "已完成与已终止的任务内容只读，但仍可流转状态或删除。"]),
-                ("同步", ["本地改动 1.5 秒防抖后自动上传；也可在设置里点「立即同步」。", "「快同步」是独立笔记，点「立即同步本篇」只推这一篇。", "冲突时保留双方，生成「（冲突副本）」笔记。"]),
+                ("同步", ["本地改动会自动上传；也可在设置或任务页点「同步」。", "「快同步」是独立笔记，点「立即同步本篇」只推这一篇。", "冲突时保留双方，生成「（冲突副本）」笔记。"]),
                 ("数据", ["笔记、任务、笔记本、附件三端共用同一套 JSON 与受控 HTML。", "删除使用 purged 墓碑，不会立刻抹掉云端文件。"]),
             };
 
             var stack = new StackPanel { Margin = new Thickness(32, 28), Spacing = 20 };
             stack.Children.Add(Ui.Title("同笔记 · 使用说明", 24));
             stack.Children.Add(Ui.Text("记录 · 同步 · 属于你", 13, null, Palette.TextTertiary));
+            stack.Children.Add(Ui.Text("没有找到使用说明。请完全退出后重新打开同笔记再试。",
+                12, null, Palette.TextQuaternary));
             foreach (var (title, lines) in sections)
             {
                 var card = new StackPanel { Spacing = 6 };

@@ -145,6 +145,65 @@ GUI 冒烟（TONOTE_DATA_ROOT 隔离目录，模拟登录态 + 4 篇笔记 + 4 �
 
   <div class="warn"><strong>注意：</strong>本轮改动未提交、未推送。工作区里另有 <code>docs/windows_tonote-生产网盘数据打通验证.html</code> 的 11-16 遗留文档补充，与本次改动无关，提交时请按需分别 <code>git add</code>。编译期间已关闭占用 DLL 的旧 <code>Tonote.exe</code>（PID 16436，16:39 启动），<strong>查看新界面请重新启动应用</strong>；之后每次重新编译／部署前仍需先关闭，否则 <code>Tonote.Core.dll</code> 被占用。</div>
 
+  <h2>七、PC 差异批次 3～6 对齐（2026-11-18 追加）</h2>
+  <p class="sub">依据 <code>docs/PC版差异梳理与待执行列表.md</code>，按 W-18 → W-43 顺序推进。批次 2（W-12~W-17）尚未执行，凡依赖它的项均以现有等价能力落地，并在下方如实标注。</p>
+
+  <div class="lead">
+    <strong>结论：</strong>批次 3～6 共 26 个执行单元已逐项处理并编译通过。安全与平台项（链接白名单、登录 state 无条件校验、DPAPI 加密、外链系统浏览器）按需求落地；功能与文案项按附录 A 逐条对齐。应用已用正式数据目录启动（PID 5084）。唯一单测失败是批次 0 既有问题，与本次改动无关。
+  </div>
+
+  <h3>批次 3 · 安全与平台（W-18~W-23）</h3>
+  <table>
+    <tr><th style="width:110px">单元</th><th>落地内容</th><th style="width:90px">状态</th></tr>
+    <tr><td>W-18</td><td>链接仅放行 http/https/mailto；URL 用 DOM API 写入不再拼 HTML；编辑器内点链接与 NavigationStarting 双重拦截，改系统浏览器打开</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-19</td><td>新增 <code>DiagnosticLog</code>（2MB×3 滚动、脱敏）与 <code>Dialogs.ReportFailure</code>；链接/色值/图片/表格删行列的静默 return 全部改为可见错误 + paste/table 诊断日志；对话框串行化</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-20</td><td>Ctrl+N/F/W/K/S、Ctrl+Shift+V、F5、Delete、Esc 与编辑器内 Ctrl+B/I/U/S；工具栏高亮随光标状态；列表 Tab/Shift+Tab 与退格退出</td><td><span class="tag part">部分</span></td></tr>
+    <tr><td>W-21</td><td>state 无条件校验（空值拒绝）+「（state 不匹配）」文案；登录中禁用按钮与不覆盖 pending state；凭证缺失禁用并统一文案；移除「先使用本机笔记」</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-22</td><td>关窗/失活/回前台 flush；<code>SessionGuard</code> 以隐藏 Win32 消息窗口接 WM_QUERYENDSESSION，关机注销前落盘</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-23</td><td>再次双击 exe 或浏览器回调都把已有窗口置前；Per-Monitor V2 DPI manifest；Inno Setup 安装包脚本（协议注册、快捷方式、WebView2 静默安装、卸载保留数据）</td><td><span class="tag part">部分</span></td></tr>
+  </table>
+
+  <h3>批次 4 · 功能补齐（W-24~W-36）</h3>
+  <table>
+    <tr><th style="width:110px">单元</th><th>落地内容</th><th style="width:90px">状态</th></tr>
+    <tr><td>W-24/26</td><td>回收站搜索生效并支持标签命中、× 清空按钮；彻底删除后回退选中下一条；<code>PermanentlyDelete</code> 增加附件引用检查，两篇共用附件目录不再误删</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-25</td><td>宽档账号区头像 + 真实百度昵称 + 绿点 + 齿轮；取不到昵称显示「同笔记」；设置面板读取失败静默显示「已授权」与 — / —</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-27</td><td>任务行「文字[图片]」预览与最近修改时间；备注未修改不写盘、双态编辑与「保存并收起」；展开期间冻结顺序；年步进 2000–2100 钳制；日历已选文案</td><td><span class="tag part">部分</span></td></tr>
+    <tr><td>W-28/36</td><td>设置面板补同步范围/授权方式/设备说明/配额文案/本机数据目录/版本与脱敏诊断复制；轮询失败 9 秒补一次；设备列表用 <code>LocalSnapshot()</code> 补本机行；回前台补同步</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-29/30</td><td>使用说明改单例、未登录可达、随包 <code>guide/index.html</code> 优先、缺文件有明确文案；登录页补品牌小标与 /apps/tong_log 页脚、340×48 主按钮</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-31/32</td><td>工具条收敛为 16 项、字号勾选读实际值、9 色板、单元格对齐仅在表格内启用、字数实时刷新；增删行列沿用相邻样式、100×32 上限反馈、列数变化清 <code>data-widths</code></td><td><span class="tag part">部分</span></td></tr>
+    <tr><td>W-33/34/35</td><td>头像选择改 4 列网格与打勾、消费 CloudState 四段状态；窗口几何持久化 + 多显示器边界校验；确认/失败对话框单一 gate</td><td><span class="tag part">部分</span></td></tr>
+  </table>
+
+  <h3>批次 5 · 可靠性与安全（W-37~W-40）</h3>
+  <table>
+    <tr><th style="width:110px">单元</th><th>落地内容</th><th style="width:90px">状态</th></tr>
+    <tr><td>W-37</td><td>令牌 Windows 上 DPAPI（CurrentUser）加密落盘，兼容旧明文并自动升级；诊断串过滤 token / secret / 长 base64 / 正文</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-38</td><td><code>TonoteJson.TryDeserializeFile</code> 损坏先备份 <code>*.corrupt-时间戳</code> 再回退；原子写失败重试 3 次；诊断日志 2MB×3 滚动</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-39</td><td>令牌 exchange / refresh 改 POST form body，<code>client_secret</code> 不再进 URL；端点拒绝 POST 时才退回 GET；新增单测断言</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-40</td><td><code>TonoteJson</code> 用 TypeInfoResolver 按属性名排序，本机 JSON 重复写盘 diff 为空；Note/Todo 属性本就字母序，云端字节不变</td><td><span class="tag">完成</span></td></tr>
+  </table>
+
+  <h3>批次 6 · 文案与视觉统一（W-41~W-43）</h3>
+  <table>
+    <tr><th style="width:110px">单元</th><th>落地内容</th><th style="width:90px">状态</th></tr>
+    <tr><td>W-41</td><td>按附录 A 对齐快同步/列表/右键/删除确认/任务删除/按钮文案；删除类确认统一 danger；右键菜单补分隔线与红字</td><td><span class="tag">完成</span></td></tr>
+    <tr><td>W-42</td><td><code>&amp;amp;</code> 最先解码；引用 6px / 代码块 4px 段距；JS 白名单移除 Core 不认的 hr；左对齐不写属性、清除底色移除 data-bg；回收站按删除时间排序</td><td><span class="tag part">部分</span></td></tr>
+    <tr><td>W-43</td><td>P2 增强（自动更新、ARM64、深色模式、8 小时挂机、LiveTests 扩充等）按需求 14.3 排期确认，不纳入 M1~M4 退出标准</td><td><span class="tag part">按排期</span></td></tr>
+  </table>
+
+  <h3>验证与本轮状态</h3>
+  <pre>dotnet build Tonote.sln --disable-parallel
+  → 0 错误；1 警告来自远端批次 0 的 FaultInjectionTests.FakePan.FailDownload（与本次无关）
+
+dotnet test tests/Tonote.Core.Tests
+  → 47 / 48 通过
+  → 唯一失败 RateLimit_DoesNotRepeatedlyUpload 在干净 HEAD 上同样失败，
+    属批次 0 既有问题（W-05 范畴），不是本轮回归
+
+GUI：正式数据目录启动，PID 5084，窗口标题「同笔记」，响应正常</pre>
+  <div class="warn"><strong>未完全 1:1 的项：</strong>批次 2 的 <code>SyncScope</code> 分范围队列 / 30s·15s 节流尚未做，故 W-13/W-22/W-27/W-36 的「任务保存即传单条、离开页 flush 队列」用全量快同步与现有落盘路径等价替代；W-15 的完整图片粘贴五分支（DIB/RTF/HTML 内联图）暂以「可见错误 + 引导用插入图片按钮」替代，不静默丢图；W-27 任务备注仍是纯文本双态而非原生富文本；W-32 表格边沿常驻灰圆手柄未做（工具栏浮层兜底已可用）；W-34 侧栏 hover 仍为整条手柄、极窄档仍用系统 ToolTip。安装包脚本已产出，但干净机器实装与 100/150/200% 缩放走查需在有 Inno Setup 的机器上人工验收。</div>
+
   <h2>六、本地运行</h2>
   <pre>export APPDATA="C:/Users/Administrator/AppData/Roaming" \
        ProgramData="C:/ProgramData" ALLUSERSPROFILE="C:/ProgramData" \

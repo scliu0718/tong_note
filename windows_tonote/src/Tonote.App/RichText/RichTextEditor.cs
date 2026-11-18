@@ -36,14 +36,16 @@ public sealed class RichTextEditor : UserControl
 
     private static readonly (string Name, string Hex)[] TextColors =
     [
-        ("黑", "#1D1D1F"), ("红", "#E5484D"), ("橙", "#F59E42"), ("金", "#E8A317"),
+        ("默认", "#1D1D1F"), ("红", "#E5484D"), ("橙", "#F59E42"), ("金", "#E8A317"),
         ("绿", "#35A45A"), ("蓝", "#2E7CF6"), ("紫", "#7A5AF8"), ("粉", "#C86DD7"),
+        ("灰", "#86868B"),
     ];
 
     private static readonly (string Name, string Hex)[] BackgroundColors =
     [
         ("无", "#FFFFFF"), ("淡灰", "#F2F2F4"), ("淡黄", "#FFF3D6"), ("淡绿", "#E6F4EC"),
         ("淡蓝", "#E5F5FF"), ("淡红", "#FCEBEB"), ("淡紫", "#F0EAFE"), ("淡橙", "#FBE4D6"),
+        ("浅棕", "#F5E6D3"),
     ];
 
     private readonly AppSession _session;
@@ -67,7 +69,8 @@ public sealed class RichTextEditor : UserControl
         VerticalAlignment = VerticalAlignment.Center,
         Margin = new Thickness(8, 0, 0, 0),
     };
-    private readonly TextBox _linkInput = new() { Watermark = "https://…", Width = 150, FontSize = 12 };
+    private readonly TextBox _linkInput = new() { Text = "https://", Watermark = "https://…", Width = 170, FontSize = 12 };
+    private readonly TextBox _linkText = new() { Watermark = "显示文字（可留空）", Width = 170, FontSize = 12 };
 
     private Guid _currentId;
     private string _currentBody = "";
@@ -81,11 +84,17 @@ public sealed class RichTextEditor : UserControl
     private bool _webFailed;
     private bool _loadingFallback;
     private string _openPopover = "";
+    /// <summary>W-31：光标处真实字号（默认 14），不再硬编码勾选 15。</summary>
+    private string _currentFontSize = "14";
     private Control? _trailing;
     private CancellationTokenSource? _saveDelay;
 
     public event Action<string>? StatusChanged;
     public event Action? DeleteRequested;
+    /// <summary>W-20：编辑器内 F5 触发的同步请求。</summary>
+    public event Action? SyncRequested;
+    /// <summary>W-31：编辑器内字数实时回传，供列表页顶栏显示。</summary>
+    public event Action<int>? WordCountChanged;
 
     /// <summary>工具条右侧附加控件（字数统计由 ShellView 注入）。</summary>
     public Control? ToolbarTrailing
@@ -163,8 +172,7 @@ public sealed class RichTextEditor : UserControl
 
         Add(Glyphs.Quote, "引用", () => Run("block", "blockquote"));
         Add(Glyphs.Code, "代码块", () => Run("block", "pre"));
-        Add("1.", "有序列表", () => Run("exec", "insertOrderedList"));
-        Add("•", "无序列表", () => Run("exec", "insertUnorderedList"));
+        // W-31：列表入口只保留在「文本样式」浮层，避免与独立按钮重复（工具栏收敛为 16 项）
         _toolbar.Children.Add(Ui.VDivider());
 
         Add(Glyphs.Link, "插入链接", () => TogglePopover("link", LinkPopover()));
@@ -173,12 +181,18 @@ public sealed class RichTextEditor : UserControl
         Add(Glyphs.Align, "单元格对齐", () => TogglePopover("align", AlignPopover()));
         _toolbar.Children.Add(Ui.VDivider());
 
-        Add(Glyphs.Trash, "移入回收站", () => DeleteRequested?.Invoke(), wide: true);
+        Add(Glyphs.Trash, "删除笔记（移入回收站）", () => DeleteRequested?.Invoke(), wide: true);
         _toolbar.Children.Add(_status);
     }
 
+    private readonly Dictionary<string, Button> _toolButtons = new();
+
     private void Add(string glyph, string tip, Action click, bool wide = false)
-        => _toolbar.Children.Add(Ui.Tool(glyph, tip, click, wide));
+    {
+        var button = Ui.Tool(glyph, tip, click, wide);
+        _toolButtons[tip] = button;
+        _toolbar.Children.Add(button);
+    }
 
     private void TogglePopover(string key, Control content)
     {
@@ -258,8 +272,8 @@ public sealed class RichTextEditor : UserControl
             var value = size;
             var button = new Button
             {
-                Content = Ui.Text(value, 12, value == "15" ? FontWeight.Bold : null,
-                    value == "15" ? Palette.TableAccent : Palette.TextPrimary),
+                Content = Ui.Text(value, 12, value == _currentFontSize ? FontWeight.Bold : null,
+                    value == _currentFontSize ? Palette.TableAccent : Palette.TextPrimary),
                 Width = 44, Height = 30,
                 Background = Brushes.Transparent,
                 CornerRadius = new CornerRadius(5),
@@ -305,7 +319,11 @@ public sealed class RichTextEditor : UserControl
         {
             var value = (custom.Text ?? "").Trim();
             if (!value.StartsWith('#')) value = "#" + value;
-            if (value.Length != 7) return;
+            if (!System.Text.RegularExpressions.Regex.IsMatch(value, @"^#[0-9A-Fa-f]{6}$"))
+            {
+                _ = Dialogs.ReportFailure(this, "无法应用颜色", "请输入 #RRGGBB 格式的色值，例如 #1A9E5C。", "editor");
+                return;
+            }
             Run("exec", background ? "hiliteColor" : "foreColor", value);
             ClosePopover();
         }, 11);
@@ -335,6 +353,15 @@ public sealed class RichTextEditor : UserControl
         return Convert.ToUInt32(value, 16);
     }
 
+    /// <summary>W-18：只放行 http / https / mailto，拒绝 javascript: 等协议。</summary>
+    internal static bool IsSafeUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+            return false;
+        var scheme = uri.Scheme.ToLowerInvariant();
+        return scheme is "http" or "https" or "mailto";
+    }
+
     private Control LinkPopover()
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
@@ -342,15 +369,26 @@ public sealed class RichTextEditor : UserControl
         row.Children.Add(Ui.Primary("插入", () =>
         {
             var url = (_linkInput.Text ?? "").Trim();
-            if (url.Length == 0) return;
-            Run("insertLink", url, "");
-            _linkInput.Text = "";
+            if (!IsSafeUrl(url))
+            {
+                _ = Dialogs.ReportFailure(this, "无法插入链接",
+                    "仅支持 http、https、mailto 协议，请输入有效的链接地址。", "editor");
+                return;
+            }
+            Run("insertLink", url, (_linkText.Text ?? "").Trim());
+            _linkInput.Text = "https://";
+            _linkText.Text = "";
             ClosePopover();
         }, 11));
         return new StackPanel
         {
             Spacing = 6,
-            Children = { Ui.Text("链接地址（预填 https://）", 11, null, Palette.TextTertiary), row },
+            Children =
+            {
+                Ui.Text("链接地址", 11, null, Palette.TextTertiary),
+                row,
+                _linkText,
+            },
         };
     }
 
@@ -515,6 +553,60 @@ public sealed class RichTextEditor : UserControl
             var root = doc.RootElement;
             var type = root.GetProperty("type").GetString();
             if (type == "ready") { PushContent(); return; }
+            if (type == "openExternal")
+            {
+                var url = Field(root, "url");
+                if (IsSafeUrl(url))
+                {
+                    try { BrowserLauncher.Open(url!); }
+                    catch (Exception error)
+                    {
+                        _ = Dialogs.ReportFailure(this, "打开链接失败", error.Message, "editor");
+                    }
+                }
+                return;
+            }
+            if (type == "failure")
+            {
+                _ = Dialogs.ReportFailure(this, Field(root, "title") ?? "操作失败",
+                    Field(root, "reason") ?? "未知原因", Field(root, "category") ?? "editor");
+                return;
+            }
+            if (type == "log")
+            {
+                DiagnosticLog.Write(Field(root, "category") ?? "editor", Field(root, "message") ?? "");
+                return;
+            }
+            if (type == "toolbarState" && root.TryGetProperty("state", out var state))
+            {
+                MarkActive("加粗", state, "bold");
+                MarkActive("斜体", state, "italic");
+                MarkActive("下划线", state, "underline");
+                MarkActive("删除线", state, "strikeThrough");
+                var size = Field(state, "fontSize");
+                if (!string.IsNullOrEmpty(size)) _currentFontSize = size!;
+                if (state.TryGetProperty("inTable", out var inTable)
+                    && _toolButtons.TryGetValue("单元格对齐", out var alignButton))
+                    alignButton.IsEnabled = inTable.ValueKind == JsonValueKind.True;
+                return;
+            }
+            if (type == "wordCount" && root.TryGetProperty("count", out var countElement))
+            {
+                WordCountChanged?.Invoke(countElement.GetInt32());
+                return;
+            }
+            if (type == "command")
+            {
+                switch (Field(root, "name"))
+                {
+                    case "insertLink": TogglePopover("link", LinkPopover()); break;
+                    case "save": Flush(); break;
+                    case "escape": ClosePopover(); break;
+                    case "sync": SyncRequested?.Invoke(); break;
+                    case "pastePlain": _ = PastePlainAsync(); break;
+                }
+                return;
+            }
             if (type != "changed" || !root.TryGetProperty("html", out var htmlElement)) return;
             var html = htmlElement.GetString() ?? "";
             if (_readOnly) return;
@@ -537,6 +629,32 @@ public sealed class RichTextEditor : UserControl
         catch (JsonException) { }
     }
 
+    private static string? Field(JsonElement root, string name)
+        => root.TryGetProperty(name, out var value) ? value.GetString() : null;
+
+    private void MarkActive(string tip, JsonElement state, string command)
+    {
+        if (!_toolButtons.TryGetValue(tip, out var button)) return;
+        var active = state.TryGetProperty(command, out var value) && value.ValueKind == JsonValueKind.True;
+        button.Background = active ? Palette.AccentTint : Brushes.Transparent;
+        button.Foreground = active ? Palette.AccentHover : Palette.TextSecondary;
+    }
+
+    /// <summary>W-20：Ctrl+Shift+V 纯文本粘贴，由 C# 剪贴板取文本再交给编辑器。</summary>
+    private async Task PastePlainAsync()
+    {
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            var text = clipboard == null ? null : await clipboard.GetTextAsync();
+            if (!string.IsNullOrEmpty(text)) Run("exec", "insertText", text);
+        }
+        catch (Exception error)
+        {
+            _ = Dialogs.ReportFailure(this, "操作失败", "读取剪贴板失败：" + error.Message, "editor");
+        }
+    }
+
     private void SaveHtml(string html)
     {
         if (_readOnly || _currentId == Guid.Empty) return;
@@ -554,6 +672,8 @@ public sealed class RichTextEditor : UserControl
             if (result.Kind == InlineImageImport.Outcome.Failed)
             {
                 StatusChanged?.Invoke("图片无法保存，笔记未修改：" + result.Error);
+                _ = Dialogs.ReportFailure(this, "操作失败",
+                    "图片无法保存，笔记未修改：" + result.Error, "editor");
                 return;
             }
             if (result.Kind == InlineImageImport.Outcome.Imported)
@@ -586,7 +706,12 @@ public sealed class RichTextEditor : UserControl
 
     private void Run(string method, params string[] arguments)
     {
-        if (_readOnly || !_host.IsReady || _webFailed) return;
+        if (_readOnly) return;
+        if (!_host.IsReady || _webFailed)
+        {
+            _ = Dialogs.ReportFailure(this, "操作失败", "编辑器尚未就绪，请稍后再试。", "editor");
+            return;
+        }
         var args = string.Join(",", arguments.Select(value => JsonSerializer.Serialize(value)));
         _ = _host.ExecuteScriptAsync("window.tn && window.tn." + method + "(" + args + ");");
     }
@@ -595,7 +720,11 @@ public sealed class RichTextEditor : UserControl
     {
         if (_readOnly || _currentId == Guid.Empty) return;
         var topLevel = TopLevel.GetTopLevel(this);
-        if (topLevel?.StorageProvider == null) return;
+        if (topLevel?.StorageProvider == null)
+        {
+            _ = Dialogs.ReportFailure(this, "操作失败", "当前窗口不支持选择本地文件。", "editor");
+            return;
+        }
         try
         {
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -605,7 +734,11 @@ public sealed class RichTextEditor : UserControl
                 FileTypeFilter = [FilePickerFileTypes.ImageAll],
             });
             var source = files.FirstOrDefault()?.TryGetLocalPath();
-            if (string.IsNullOrWhiteSpace(source)) return;
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                _ = Dialogs.ReportFailure(this, "操作失败", "没有选择图片文件。", "editor");
+                return;
+            }
             var relative = _session.Notes.Attachments.ImportImage(source, _currentId);
             if (!_host.IsReady)
             {
@@ -618,6 +751,7 @@ public sealed class RichTextEditor : UserControl
         catch (Exception error)
         {
             StatusChanged?.Invoke("插入图片失败：" + error.Message);
+            _ = Dialogs.ReportFailure(this, "操作失败", "插入图片失败：" + error.Message, "editor");
         }
     }
 

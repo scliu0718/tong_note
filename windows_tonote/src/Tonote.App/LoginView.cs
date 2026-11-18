@@ -3,12 +3,13 @@ using Tonote.Core;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace Tonote.App;
 
 public sealed class LoginView : UserControl
 {
-    public LoginView(BaiduLogin login, Action enterLocal)
+    public LoginView(BaiduLogin login, Action showGuide)
     {
         var banner = new TextBlock
         {
@@ -26,7 +27,7 @@ public sealed class LoginView : UserControl
             banner.IsVisible = true;
         };
 
-        var form = Login(banner, () => login.Start("popup"), () => login.Start("page"), enterLocal);
+        var form = Login(banner, login, showGuide);
         var layout = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,*"),
@@ -69,6 +70,13 @@ public sealed class LoginView : UserControl
             {
                 new TextBlock
                 {
+                    Text = "记录 · 同步 · 属于你",
+                    Foreground = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255)),
+                    FontSize = 13,
+                    FontWeight = FontWeight.SemiBold,
+                },
+                new TextBlock
+                {
                     Text = "你的每一份记录，\n都交给你自己保管。",
                     Foreground = Palette.White,
                     FontSize = 32,
@@ -77,7 +85,7 @@ public sealed class LoginView : UserControl
                 },
                 new TextBlock
                 {
-                    Text = "不用订阅、不锁数据。笔记直接写入你自己的百度网盘，随时可导出、可迁移。",
+                    Text = "从此告别笔记锁在别人服务器里的焦虑。不用订阅、不锁数据。笔记直接写入你自己的百度网盘，随时可导出、可迁移。",
                     Foreground = new SolidColorBrush(Color.FromArgb(230, 255, 255, 255)),
                     FontSize = 14,
                     TextWrapping = TextWrapping.Wrap,
@@ -134,8 +142,23 @@ public sealed class LoginView : UserControl
         };
     }
 
-    private static Control Login(TextBlock banner, Action accountLogin, Action scanLogin, Action enterLocal)
+    private static Control Login(TextBlock banner, BaiduLogin login, Action showGuide)
     {
+        // W-21：凭证缺失或正在授权时，两个登录按钮都禁用；登录中显示「正在授权…」
+        var primary = PrimaryButton("使用百度网盘账号登录", () => login.Start("popup"));
+        var secondary = SecondaryButton("浏览器扫码登录", () => login.Start("page"));
+        var guide = SecondaryButton("查看使用说明", showGuide, Palette.TextSecondary);
+        void RefreshBusy()
+        {
+            var enabled = BaiduPanConfig.IsConfigured && !login.IsBusy;
+            primary.IsEnabled = enabled;
+            secondary.IsEnabled = enabled;
+            primary.Content = login.IsBusy ? "正在授权…" : "使用百度网盘账号登录";
+            secondary.Content = login.IsBusy ? "正在授权…" : "浏览器扫码登录";
+        }
+        login.BusyChanged += () => Dispatcher.UIThread.Post(RefreshBusy);
+        RefreshBusy();
+
         var panel = new StackPanel
         {
             Spacing = 16,
@@ -166,24 +189,26 @@ public sealed class LoginView : UserControl
                 {
                     Text = BaiduPanConfig.IsConfigured
                         ? "已读取 baidupan.secret.json"
-                        : "还没有读到 baidupan.secret.json",
+                        : "尚未配置 AppKey / AppSecret，请先在 baidupan.secret.json 中填写",
                     FontSize = 12,
                     Foreground = BaiduPanConfig.IsConfigured ? Palette.Accent : Palette.Red,
                     HorizontalAlignment = HorizontalAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = TextAlignment.Center,
                 },
-                PrimaryButton("使用百度网盘账号登录", accountLogin),
+                primary,
                 banner,
                 OrDivider(),
-                SecondaryButton("浏览器扫码登录", scanLogin),
+                secondary,
                 new TextBlock
                 {
-                    Text = "登录即代表你授权同笔记通过百度网盘开放平台读写 /apps/tong_log 目录。授权信息只保存在本机。",
+                    Text = "登录即代表你授权同笔记通过百度网盘开放平台读写 /apps/tong_log 目录。\n授权信息只保存在本机；笔记、任务与附件都存放在你自己的网盘。",
                     FontSize = 11,
                     Foreground = Palette.TextQuaternary,
                     TextWrapping = TextWrapping.Wrap,
                     TextAlignment = TextAlignment.Center,
                 },
-                SecondaryButton("先使用本机笔记", enterLocal, Palette.Accent),
+                guide,
             },
         };
         return panel;
@@ -196,8 +221,9 @@ public sealed class LoginView : UserControl
             Content = text,
             Background = Palette.Baidu,
             Foreground = Palette.White,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center,
+            Width = 340,
             Height = 48,
             FontSize = 15,
             CornerRadius = new CornerRadius(10),
@@ -213,8 +239,9 @@ public sealed class LoginView : UserControl
             Content = text,
             Background = Palette.Panel,
             Foreground = foreground ?? Palette.Baidu,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center,
+            Width = 340,
             Height = 40,
             FontSize = 13,
             CornerRadius = new CornerRadius(8),

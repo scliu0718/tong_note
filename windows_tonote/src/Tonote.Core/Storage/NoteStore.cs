@@ -195,7 +195,12 @@ public sealed class NoteStore
         note.Purged = true;
         note.UpdatedAt = DateTime.UtcNow;
         note.Pinned = false;
-        Attachments.RemoveAttachments(id);
+        // W-26：两篇笔记共用 attachments/<id>/ 时，删其中一篇不能误删另一篇的图。
+        // 与 ApplySyncedNote 的引用检查保持同一规则。
+        var prefix = "attachments/" + id.ToString("D").ToUpperInvariant() + "/";
+        if (!Notes.Any(other => other.Id != id && !other.Purged
+                                && other.Body.Contains(prefix, StringComparison.Ordinal)))
+            Attachments.RemoveAttachments(id);
         Save();
         Touch(id);
     }
@@ -258,16 +263,8 @@ public sealed class NoteStore
 
     private void Load()
     {
-        try
-        {
-            if (!File.Exists(_path))
-                return;
-            Notes = TonoteJson.Deserialize<List<Note>>(File.ReadAllText(_path)) ?? [];
-        }
-        catch
-        {
-            Notes = [];
-        }
+        // W-38：损坏文件先备份再回退空列表，绝不静默覆盖
+        Notes = TonoteJson.TryDeserializeFile<List<Note>>(_path) ?? [];
     }
 
     private void Save() => TonoteJson.WriteAtomic(_path, TonoteJson.Serialize(Notes));

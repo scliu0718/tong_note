@@ -61,12 +61,12 @@ public static class EditorHtml
     letter-spacing: -.02em;
   }
   blockquote {
-    margin: 8px 0; padding: 6px 12px;
+    margin: 6px 0; padding: 6px 12px;
     border-left: 3px solid #1A9E5C; border-radius: 0 6px 6px 0;
     background: #F7FAF8; color: #86868B; font-size: 13.5px;
   }
   pre {
-    margin: 8px 0; padding: 10px 12px;
+    margin: 4px 0; padding: 10px 12px;
     background: #F5F5F7; border: 1px solid #ECECEF; border-radius: 6px;
     font-family: Consolas, "Courier New", monospace;
     white-space: pre-wrap; font-size: 12.5px; line-height: 1.7;
@@ -115,7 +115,8 @@ public static class EditorHtml
 
   var MAP = { div: 'p', b: 'strong', i: 'em', strike: 's', del: 's', article: 'p', section: 'p' };
   var UNWRAP = { tbody: 1, thead: 1, tfoot: 1, colgroup: 1 };
-  var BLOCK = { p: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, blockquote: 1, pre: 1, ul: 1, ol: 1, table: 1, hr: 1 };
+  // W-42：Core 解码不认 hr，JS 白名单也不保留，避免保存后静默丢块
+  var BLOCK = { p: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, blockquote: 1, pre: 1, ul: 1, ol: 1, table: 1 };
   var ATTRS = {
     img: ['src', 'width', 'height'], a: ['href'], span: ['style'],
     table: ['data-widths', 'data-fullwidth'],
@@ -127,6 +128,19 @@ public static class EditorHtml
 
   function post(payload) {
     if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(payload);
+  }
+  // W-19：任何失败都必须可见，绝不静默 return
+  function fail(title, reason, category) {
+    post({ type: 'failure', title: title || '操作失败', reason: reason || '未知原因', category: category || 'editor' });
+  }
+  function diag(category, message) {
+    post({ type: 'log', category: category || 'editor', message: message || '' });
+  }
+  function safeUrl(url) {
+    try {
+      var u = new URL(url, location.href);
+      return u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'mailto:';
+    } catch (e) { return false; }
   }
 
   function cleanStyle(raw) {
@@ -270,13 +284,91 @@ public static class EditorHtml
   });
   editor.addEventListener('paste', function (event) {
     event.preventDefault();
-    var text = (event.clipboardData || window.clipboardData).getData('text/plain');
+    var data = event.clipboardData || window.clipboardData;
+    // W-19：图片粘贴链路（W-15）未接通前，至少不能静默丢图——给出可见错误并记格式清单。
+    var formats = [];
+    if (data && data.types) {
+      for (var i = 0; i < data.types.length; i++) formats.push(data.types[i]);
+      var hasImage = false;
+      if (data.items) {
+        for (var j = 0; j < data.items.length; j++) {
+          if ((data.items[j].type || '').indexOf('image/') === 0) hasImage = true;
+        }
+      }
+      if (hasImage) {
+        diag('paste', '图片粘贴被拦截，剪贴板格式：' + formats.join(', '));
+        fail('操作失败', '暂不支持直接粘贴图片，请使用工具条的「插入图片」按钮选择文件。', 'paste');
+        return;
+      }
+    }
+    var text = data ? data.getData('text/plain') : '';
     document.execCommand('insertText', false, text);
     changed();
   });
+  editor.addEventListener('click', function (event) {
+    // W-18：链接不在编辑器内导航，改由系统浏览器打开（协议白名单由 C# 侧再验一次）
+    var node = event.target;
+    while (node && node !== editor && (!node.tagName || node.tagName.toLowerCase() !== 'a')) node = node.parentNode;
+    if (!node || node === editor) return;
+    var href = node.getAttribute('href');
+    if (!href) return;
+    event.preventDefault();
+    post({ type: 'openExternal', url: href });
+  });
+  function currentItem() {
+    var selection = window.getSelection();
+    var node = selection && selection.anchorNode;
+    while (node && node.nodeType !== 1) node = node.parentNode;
+    return node && node.closest ? node.closest('li') : null;
+  }
+  var KNOWN_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32, 40];
+  function reportState() {
+    try {
+      var selection = window.getSelection();
+      var node = selection && selection.anchorNode
+        ? (selection.anchorNode.nodeType === 1 ? selection.anchorNode : selection.anchorNode.parentNode)
+        : editor;
+      var px = node ? parseInt(window.getComputedStyle(node).fontSize, 10) : 14;
+      if (KNOWN_SIZES.indexOf(px) < 0) px = 14;
+      post({ type: 'toolbarState', state: {
+        bold: document.queryCommandState('bold'),
+        italic: document.queryCommandState('italic'),
+        underline: document.queryCommandState('underline'),
+        strikeThrough: document.queryCommandState('strikeThrough'),
+        fontSize: String(px),
+        inTable: !!currentCell()
+      }});
+      post({ type: 'wordCount', count: (editor.innerText || '').replace(/\s/g, '').length });
+    } catch (ignored) {}
+  }
+  editor.addEventListener('keyup', reportState);
+  editor.addEventListener('mouseup', reportState);
+
   editor.addEventListener('keydown', function (event) {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
-      event.preventDefault(); document.execCommand('bold'); changed();
+    var key = (event.key || '').toLowerCase();
+    var mod = event.ctrlKey || event.metaKey;
+    if (mod && !event.altKey && (key === 'b' || key === 'i' || key === 'u' || key === 's')) {
+      event.preventDefault();
+      var cmd = key === 'b' ? 'bold' : key === 'i' ? 'italic' : key === 'u' ? 'underline' : 'strikeThrough';
+      document.execCommand(cmd);
+      changed();
+      reportState();
+      return;
+    }
+    if (mod && !event.altKey && key === 'k') {
+      event.preventDefault(); post({ type: 'command', name: 'insertLink' }); return;
+    }
+    if (mod && !event.altKey && key === 's') {
+      event.preventDefault(); post({ type: 'command', name: 'save' }); return;
+    }
+    if (mod && event.shiftKey && key === 'v') {
+      event.preventDefault(); post({ type: 'command', name: 'pastePlain' }); return;
+    }
+    if (event.key === 'F5') {
+      event.preventDefault(); post({ type: 'command', name: 'sync' }); return;
+    }
+    if (event.key === 'Escape') {
+      post({ type: 'command', name: 'escape' }); return;
     }
     if (event.key === 'Tab') {
       var cell = currentCell();
@@ -287,6 +379,23 @@ public static class EditorHtml
         var next = cells[index + (event.shiftKey ? -1 : 1)];
         if (next) { next.focus(); placeCaret(next); }
         else { window.tn.insertRow(); }
+        return;
+      }
+      var item = currentItem();
+      if (item) {
+        event.preventDefault();
+        var level = parseInt(item.getAttribute('data-level') || '0', 10) + (event.shiftKey ? -1 : 1);
+        item.setAttribute('data-level', Math.max(0, Math.min(3, level)));
+        changed();
+      }
+      return;
+    }
+    if (event.key === 'Backspace') {
+      var li = currentItem();
+      if (li && window.getSelection().isCollapsed && li.textContent.trim() === '') {
+        event.preventDefault();
+        document.execCommand('outdent');
+        changed();
       }
     }
   });
@@ -353,9 +462,27 @@ public static class EditorHtml
       changed();
     },
     insertLink: function (url, text) {
+      // W-18：白名单 + DOM API（不拼 HTML 字符串），避免 javascript: 注入与引号截断
+      if (!safeUrl(url)) {
+        fail('无法插入链接', '仅支持 http、https、mailto 协议，请输入有效的链接地址。', 'editor');
+        return;
+      }
       editor.focus();
-      var label = text || url;
-      document.execCommand('insertHTML', false, '<a href="' + url + '">' + label + '</a>');
+      var anchor = document.createElement('a');
+      anchor.setAttribute('href', url);
+      anchor.textContent = text || url;
+      var selection = window.getSelection();
+      var range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      if (range && editor.contains(range.commonAncestorContainer)) {
+        range.deleteContents();
+        range.insertNode(anchor);
+        range.setStartAfter(anchor);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        editor.appendChild(anchor);
+      }
       changed();
     },
     insertTable: function (rows, cols) {
@@ -374,54 +501,96 @@ public static class EditorHtml
     },
     insertRow: function () {
       var row = currentRow();
-      if (!row) return;
-      var cells = row.querySelectorAll('td, th').length || 1;
+      if (!row) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
+      var table = row.closest('table');
+      if (table.querySelectorAll('tr').length >= 32) {
+        fail('操作失败', '表格最多 32 行。', 'table');
+        diag('table', '撞到 32 行上限');
+        return;
+      }
+      var source = Array.prototype.slice.call(row.querySelectorAll('td, th'));
       var fresh = document.createElement('tr');
-      for (var i = 0; i < cells; i++) {
+      for (var i = 0; i < source.length; i++) {
         var cell = document.createElement('td');
         cell.innerHTML = '<p><br></p>';
+        // W-32：沿用相邻行的对齐与底色
+        var align = source[i].getAttribute('data-align');
+        var bg = source[i].getAttribute('data-bg');
+        if (align) cell.setAttribute('data-align', align);
+        if (bg) cell.setAttribute('data-bg', bg);
         fresh.appendChild(cell);
       }
-      row.parentNode.insertBefore(fresh, row.nextSibling);
+      table.insertBefore(fresh, row.nextSibling);
+      applyCellStyles();
       changed();
     },
     insertColumn: function () {
       var cell = currentCell();
-      if (!cell) return;
+      if (!cell) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
       var table = cell.closest('table');
       if (!table) return;
       var rows = table.querySelectorAll('tr');
+      if (rows.length && rows[0].children.length >= 100) {
+        fail('操作失败', '表格最多 100 列。', 'table');
+        diag('table', '撞到 100 列上限');
+        return;
+      }
+      var index = Array.prototype.indexOf.call(cell.parentNode.children, cell);
       for (var i = 0; i < rows.length; i++) {
         var fresh = document.createElement('td');
         fresh.innerHTML = '<p><br></p>';
-        rows[i].appendChild(fresh);
+        var adjacent = rows[i].children[Math.max(0, index - 1)];
+        if (adjacent && adjacent !== cell) {
+          var align = adjacent.getAttribute('data-align');
+          var bg = adjacent.getAttribute('data-bg');
+          if (align) fresh.setAttribute('data-align', align);
+          if (bg) fresh.setAttribute('data-bg', bg);
+        }
+        rows[i].insertBefore(fresh, rows[i].children[index + 1] || null);
       }
+      // W-32：列数变化后旧权重失效，交回 Core 重新等分
+      table.removeAttribute('data-widths');
+      applyCellStyles();
       changed();
     },
     removeRow: function () {
       var row = currentRow();
-      if (row && row.parentNode.querySelectorAll('tr').length > 1) {
-        row.parentNode.removeChild(row);
-        changed();
+      if (!row) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
+      if (row.parentNode.querySelectorAll('tr').length <= 1) {
+        fail('操作失败', '表格至少需要保留一行。', 'table');
+        return;
       }
+      row.parentNode.removeChild(row);
+      diag('table', '删除一行');
+      changed();
     },
     removeColumn: function () {
       var cell = currentCell();
-      if (!cell) return;
+      if (!cell) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
       var index = Array.prototype.indexOf.call(cell.parentNode.children, cell);
       var table = cell.closest('table');
       var rows = table.querySelectorAll('tr');
-      if (rows[0].children.length <= 1) return;
+      if (rows[0].children.length <= 1) {
+        fail('操作失败', '表格至少需要保留一列。', 'table');
+        return;
+      }
       for (var i = 0; i < rows.length; i++) {
         if (rows[i].children[index]) rows[i].removeChild(rows[i].children[index]);
       }
+      table.removeAttribute('data-widths');
+      applyCellStyles();
+      diag('table', '删除一列');
       changed();
     },
     removeTable: function () {
       var cell = currentCell();
-      if (!cell) return;
+      if (!cell) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
       var table = cell.closest('table');
-      if (table && table.parentNode) { table.parentNode.removeChild(table); changed(); }
+      if (table && table.parentNode) {
+        table.parentNode.removeChild(table);
+        diag('table', '删除整表');
+        changed();
+      }
     },
     setFullWidth: function (value) {
       var cell = currentCell();
@@ -435,16 +604,20 @@ public static class EditorHtml
     },
     setCellAlign: function (value) {
       var cell = currentCell();
-      if (!cell) return;
-      cell.setAttribute('data-align', value);
-      cell.style.textAlign = value;
+      if (!cell) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
+      // W-42：契约规定「左对齐＝不写属性」
+      if (value === 'left' || !value) cell.removeAttribute('data-align');
+      else cell.setAttribute('data-align', value);
+      cell.style.textAlign = value === 'left' ? '' : value;
       changed();
     },
     setCellBackground: function (value) {
       var cell = currentCell();
-      if (!cell) return;
-      cell.setAttribute('data-bg', value);
-      cell.style.backgroundColor = value;
+      if (!cell) { fail('操作失败', '请先把光标放到表格单元格内。', 'table'); return; }
+      // W-42：清除底色＝移除属性，不写 data-bg="#FFFFFF"
+      if (!value || value === '#FFFFFF') cell.removeAttribute('data-bg');
+      else cell.setAttribute('data-bg', value);
+      cell.style.backgroundColor = !value || value === '#FFFFFF' ? '' : value;
       changed();
     }
   };

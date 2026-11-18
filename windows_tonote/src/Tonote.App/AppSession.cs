@@ -9,6 +9,7 @@ namespace Tonote.App;
 public sealed class AppSession
 {
     private bool _syncStarted;
+    private bool _retryScheduled;
     private CancellationTokenSource? _pollCancellation;
 
     public AppSession(string? root = null)
@@ -60,7 +61,26 @@ public sealed class AppSession
                 while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
                 {
                     try { await Sync.QuickSyncAsync().ConfigureAwait(false); }
-                    catch { /* 网络瞬态由下一轮重试 */ }
+                    catch
+                    {
+                        // W-36 / PC-SY-04：失败后 10 秒内补一次，不等下一个 45 秒周期
+                        if (_retryScheduled) continue;
+                        _retryScheduled = true;
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(9000, token).ConfigureAwait(false);
+                                await Sync.QuickSyncAsync().ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) { }
+                            catch (Exception error)
+                            {
+                                DiagnosticLog.Write("sync", "重试同步失败：" + error.Message);
+                            }
+                            finally { _retryScheduled = false; }
+                        }, token);
+                    }
                 }
             }
             catch (OperationCanceledException) { }

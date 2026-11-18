@@ -16,18 +16,26 @@ public sealed class BaiduLogin
 
     public bool IsSignedIn => _store.Load() != null;
 
+    /// <summary>W-21：授权进行中，用于禁用登录按钮并拒绝并发点击。</summary>
+    public bool IsBusy { get; private set; }
+
     public event Action? SignedIn;
+
+    public event Action? BusyChanged;
 
     public event Action<string, bool>? Notice;
 
     public void Start(string display)
     {
+        if (IsBusy) return; // 并发点击 / 重复回调直接拒绝，不覆盖已有 pending state
         if (!BaiduPanConfig.IsConfigured)
         {
-            Notify("尚未配置 AppKey / AppSecret。请把 baidupan.secret.json 放在 windows_tonote 目录后重新打开。", true);
+            Notify("尚未配置 AppKey / AppSecret，请先在 baidupan.secret.json 中填写。", true);
             return;
         }
 
+        IsBusy = true;
+        BusyChanged?.Invoke();
         PendingState = Guid.NewGuid().ToString("D").ToUpperInvariant();
         var url = BaiduPanAuth.AuthorizeUrl(PendingState, display);
         try
@@ -37,6 +45,7 @@ public sealed class BaiduLogin
         catch
         {
             PendingState = null;
+            EndBusy();
             Notify("无法打开浏览器。", true);
             return;
         }
@@ -46,6 +55,12 @@ public sealed class BaiduLogin
                 ? "已打开浏览器。请在授权页使用扫码登录，用百度 App 或百度网盘 App 扫一扫，完成后会回到同笔记。"
                 : "已打开浏览器。请在页面登录百度账号并同意授权，完成后会回到同笔记。",
             false);
+    }
+
+    private void EndBusy()
+    {
+        IsBusy = false;
+        BusyChanged?.Invoke();
     }
 
     public void Accept(string raw)
@@ -62,20 +77,26 @@ public sealed class BaiduLogin
         if (!string.IsNullOrEmpty(callback.Error))
         {
             PendingState = null;
+            EndBusy();
             Notify(callback.Error == "access_denied" ? "已取消登录。" : $"授权被拒绝：{callback.Error}", true);
             return;
         }
 
         if (string.IsNullOrEmpty(callback.Code))
         {
+            EndBusy();
             Notify("授权没有返回授权码。", true);
             return;
         }
 
-        if (PendingState != null && !string.Equals(callback.State, PendingState, StringComparison.Ordinal))
+        // W-21：state 无条件校验——空值、重复回调、并发回调一律拒绝
+        if (string.IsNullOrEmpty(callback.State)
+            || string.IsNullOrEmpty(PendingState)
+            || !string.Equals(callback.State, PendingState, StringComparison.Ordinal))
         {
             PendingState = null;
-            Notify("登录回调校验失败，请重试。", true);
+            EndBusy();
+            Notify("登录回调校验失败（state 不匹配），请重试。", true);
             return;
         }
 
@@ -84,10 +105,12 @@ public sealed class BaiduLogin
         {
             var token = await BaiduPanClient.ExchangeCodeAsync(callback.Code);
             _store.Save(token);
+            EndBusy();
             SignedIn?.Invoke();
         }
         catch (Exception ex)
         {
+            EndBusy();
             Notify(string.IsNullOrWhiteSpace(ex.Message) ? "登录失败。" : ex.Message, true);
         }
     }

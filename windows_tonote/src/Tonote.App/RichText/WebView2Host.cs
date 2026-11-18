@@ -99,6 +99,24 @@ public sealed class WebView2Host : NativeControlHost
             _webView.Settings.IsWebMessageEnabled = true;
             _webView.Settings.IsStatusBarEnabled = false;
             _webView.Settings.AreDefaultContextMenusEnabled = true;
+            // W-18：编辑器内的外链绝不在 WebView 里导航，改成系统浏览器打开。
+            // 编辑器自身用 file:///…/editor.html 加载，这部分放行。
+            _webView.NavigationStarting += (_, args) =>
+            {
+                var uri = args.Uri ?? "";
+                if (uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+                    || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                    || uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+                    return;
+                args.Cancel = true;
+                if (!RichTextEditor.IsSafeUrl(uri))
+                {
+                    DiagnosticLog.Write("editor", "已拦截编辑器内不安全导航：" + uri);
+                    return;
+                }
+                try { BrowserLauncher.Open(uri); }
+                catch (Exception error) { DiagnosticLog.Write("editor", "打开外链失败：" + error.Message); }
+            };
             _webView.WebMessageReceived += (_, args) =>
                 Avalonia.Threading.Dispatcher.UIThread.Post(
                     () => WebMessageReceived?.Invoke(args.WebMessageAsJson));

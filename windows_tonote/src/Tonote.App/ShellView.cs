@@ -35,9 +35,10 @@ public sealed class ShellView : UserControl
     private readonly ContentControl _right = new();
     private readonly TextBox _search = new()
     {
-        Watermark = "搜索标题或正文",
+        Watermark = "搜索笔记、标签…",
         FontSize = 13,
     };
+    private readonly Button _clearSearch = Ui.Small("×", () => { }, null, 12);
     private readonly TextBox _title = new()
     {
         FontSize = Metrics.FontTitle,
@@ -55,6 +56,14 @@ public sealed class ShellView : UserControl
         FontSize = 11,
         TextWrapping = TextWrapping.Wrap,
         VerticalAlignment = VerticalAlignment.Center,
+    };
+    private readonly TextBlock _accountName = new()
+    {
+        Text = "同笔记",
+        FontSize = 12,
+        FontWeight = FontWeight.SemiBold,
+        Foreground = Palette.TextPrimary,
+        TextTrimming = TextTrimming.CharacterEllipsis,
     };
     private readonly TextBlock _sidebarSync = new()
     {
@@ -96,6 +105,8 @@ public sealed class ShellView : UserControl
     private readonly HashSet<TodoStatus> _collapsedGroups = [];
     private Guid? _expandedTodo;
     private Guid? _editingNotesTodo;
+    /// <summary>W-27：展开任务期间冻结列表顺序，避免状态 / 时间变化导致跳动。</summary>
+    private readonly Dictionary<Guid, int> _frozenOrder = new();
     private Control? _editorCached;
 
     public event Action? LogoutRequested;
@@ -104,7 +115,7 @@ public sealed class ShellView : UserControl
     {
         _session = session;
         _pinButton = Ui.Small("置顶", TogglePin);
-        _trashButton = Ui.Small("移入回收站", MoveCurrentToTrash);
+        _trashButton = Ui.Small("删除笔记", MoveCurrentToTrash);
         _restoreButton = Ui.Primary("恢复笔记", RestoreCurrent);
         _purgeButton = Ui.Danger("彻底删除", PurgeCurrent);
         _syncOneButton = Ui.Small("同步本篇", async () =>
@@ -116,8 +127,21 @@ public sealed class ShellView : UserControl
         _richEditor = new RichTextEditor(session) { Margin = new Thickness(0) };
         _richEditor.StatusChanged += message => OnUi(() => _banner.Text = message);
         _richEditor.DeleteRequested += MoveCurrentToTrash;
+        _richEditor.SyncRequested += () => _ = _session.Sync.QuickSyncAsync();
+        _richEditor.WordCountChanged += count => OnUi(() => _count.Text = count + " 字");
         _richEditor.ToolbarTrailing = _count;
-        _search.TextChanged += (_, _) => RebuildCards();
+        KeyDown += OnShellKeyDown;
+        _search.TextChanged += (_, _) =>
+        {
+            _clearSearch.IsVisible = !string.IsNullOrEmpty(_search.Text);
+            RebuildCards();
+        };
+        _clearSearch.Click += (_, _) => { _search.Text = ""; _search.Focus(); };
+        _clearSearch.IsVisible = false;
+        _clearSearch.Width = 26;
+        _clearSearch.Height = 26;
+        _clearSearch.Padding = new Thickness(0);
+        _clearSearch.Background = Brushes.Transparent;
         _title.TextChanged += (_, _) => SaveTitle();
         _notebook.SelectionChanged += (_, _) => SaveNotebook();
         _tagInput.KeyDown += (_, e) =>
@@ -128,6 +152,12 @@ public sealed class ShellView : UserControl
         // 搜索框套一层自绘外壳：灰底 8px 圆角 + 聚焦淡绿细环，
         // 避免 Avalonia Fluent 默认的蓝色 focus 边框。
         var searchField = Ui.Field(_search);
+        var searchGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        searchField.Child = null;
+        searchGrid.Children.Add(_search);
+        searchGrid.Children.Add(_clearSearch);
+        Grid.SetColumn(_clearSearch, 1);
+        searchField.Child = searchGrid;
         searchField.Margin = new Thickness(12, 10, 12, 0);
         var cardsScroll = new ScrollViewer { Content = _cards };
         var list = new Grid
@@ -267,6 +297,24 @@ public sealed class ShellView : UserControl
         _handleGlyph.Text = _sidebarWidth == Metrics.SidebarExpanded ? "<" : ">";
     }
 
+    /// <summary>W-25：取真实百度昵称；失败静默，保留「同笔记」。</summary>
+    private async Task LoadAccountName()
+    {
+        try
+        {
+            var token = _session.Pan.CurrentToken;
+            if (token == null) return;
+            var info = await _session.Pan.UserInfoAsync(token.AccessToken).ConfigureAwait(false);
+            var name = info.DisplayName;
+            if (string.IsNullOrWhiteSpace(name) || name == "百度网盘用户") name = "同笔记";
+            OnUi(() => _accountName.Text = name);
+        }
+        catch
+        {
+            // 失败静默，不弹错误、不写 diagnostics（纯展示信息）
+        }
+    }
+
     // ── 编辑器容器（Mac EditorView.swift：标题区 → 元数据 → 1pt 线 → 工具条 → 正文） ──
     private Control Editor()
     {
@@ -342,7 +390,7 @@ public sealed class ShellView : UserControl
             Margin = new Thickness(22, 18, 22, 12),
         };
         var headLeft = new StackPanel { Spacing = 4 };
-        headLeft.Children.Add(Ui.Title("快任务", Metrics.FontHeader));
+        headLeft.Children.Add(Ui.Title("任务", Metrics.FontHeader));
         headLeft.Children.Add(Ui.Text(_session.Todos.SummaryText, 12, null, Palette.TextTertiary));
         header.Children.Add(headLeft);
 
@@ -367,6 +415,8 @@ public sealed class ShellView : UserControl
         {
             if (!_todoShowAll && status is TodoStatus.done or TodoStatus.terminated) continue;
             var items = _session.Todos.InStatus(status);
+            if (_expandedTodo != null && _frozenOrder.Count > 0)
+                items = items.OrderBy(todo => _frozenOrder.TryGetValue(todo.Id, out var index) ? index : int.MaxValue).ToList();
             groups.Children.Add(GroupHeader(status, items.Count));
             if (_collapsedGroups.Contains(status)) continue;
             if (items.Count == 0)
@@ -382,7 +432,7 @@ public sealed class ShellView : UserControl
 
         var input = new TextBox
         {
-            Watermark = "添加一条快任务，回车即可创建",
+            Watermark = "添加任务，回车即可创建…",
             FontSize = 13,
             Padding = new Thickness(12, 9),
             CornerRadius = new CornerRadius(9),
@@ -502,8 +552,15 @@ public sealed class ShellView : UserControl
         title.PointerPressed += (_, e) =>
         {
             _expandedTodo = expanded ? null : todo.Id;
-            if (!expanded && !readOnly && string.IsNullOrWhiteSpace(VisibleText.From(todo.Notes)))
-                _editingNotesTodo = todo.Id;
+            if (expanded) _frozenOrder.Clear();
+            else
+            {
+                var index = 0;
+                foreach (var state in new[] { TodoStatus.todo, TodoStatus.doing, TodoStatus.done, TodoStatus.terminated })
+                foreach (var item in _session.Todos.InStatus(state)) _frozenOrder[item.Id] = index++;
+                if (!readOnly && string.IsNullOrWhiteSpace(VisibleText.From(todo.Notes)))
+                    _editingNotesTodo = todo.Id;
+            }
             ShowTodos();
             e.Handled = true;
         };
@@ -525,15 +582,30 @@ public sealed class ShellView : UserControl
         actions.Children.Add(Ui.Small(Glyphs.Trash, async () =>
         {
             var yes = await Dialogs.Confirm(this, "删除任务？",
-                "「" + todo.Title + "」将被永久删除，并会从其它设备的任务列表里移除。", "删除");
+                "「" + todo.Title + "」将被永久删除，其他已同步设备上也会一并移除，此操作不可恢复。", "永久删除");
             if (yes) _session.Todos.Remove(todo.Id);
         }, Palette.Red, 11));
 
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
         head.Children.Add(ringButton);
-        Grid.SetColumn(title, 1);
-        title.Margin = new Thickness(9, 0, 0, 0);
-        head.Children.Add(title);
+        // W-27：任务行显示「文字[图片]」摘要与最近修改时间
+        var titleStack = new StackPanel
+        {
+            Spacing = 2,
+            Margin = new Thickness(9, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        titleStack.Children.Add(title);
+        var plainNotes = VisibleText.From(todo.Notes).Trim();
+        var imageCount = Regex.Matches(todo.Notes ?? "", "<img[^>]+").Count;
+        var preview = plainNotes.Length > 42 ? plainNotes[..42] + "…" : plainNotes;
+        if (imageCount > 0) preview += (preview.Length > 0 ? " " : "") + "[图片]";
+        if (preview.Length > 0)
+            titleStack.Children.Add(Ui.Text(preview, 10.5, null, Palette.TextQuaternary));
+        titleStack.Children.Add(Ui.Text("最近修改 " + todo.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            10, null, Palette.TextQuaternary));
+        Grid.SetColumn(titleStack, 1);
+        head.Children.Add(titleStack);
         if (todo.PlannedAt != null)
         {
             var local = todo.PlannedAt.Value.ToLocalTime();
@@ -578,27 +650,33 @@ public sealed class ShellView : UserControl
 
         if (editing)
         {
+            var originalPlain = VisibleText.From(todo.Notes);
             var notes = new TextBox
             {
-                Text = VisibleText.From(todo.Notes),
+                Text = originalPlain,
                 Watermark = "写点备注…",
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
-                MinHeight = 80,
+                MinHeight = 90,
                 FontSize = 12.5,
                 Padding = new Thickness(10),
                 CornerRadius = new CornerRadius(6),
                 BorderBrush = Palette.Line,
             };
             var noteText = notes;
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            row.Children.Add(Ui.Primary("保存", () =>
+            void SaveNotes(bool collapse)
             {
-                var html = RebuildTodoNotes(todo.Notes, noteText.Text ?? "");
-                _session.Todos.UpdateNotes(todo.Id, html);
+                var edited = noteText.Text ?? "";
+                // W-27：内容没变就不写盘，避免展开 / 失焦把 updatedAt 推到今天
+                if (edited.Trim() != originalPlain.Trim())
+                    _session.Todos.UpdateNotes(todo.Id, RebuildTodoNotes(todo.Notes, edited));
                 _editingNotesTodo = null;
+                if (collapse) { _expandedTodo = null; _frozenOrder.Clear(); }
                 ShowTodos();
-            }, 11));
+            }
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            row.Children.Add(Ui.Primary("保存", () => SaveNotes(false), 11));
+            row.Children.Add(Ui.Ghost("保存并收起", () => SaveNotes(true), 11));
             row.Children.Add(Ui.Ghost("插入图片", () => InsertTodoImage(todo.Id), 11));
             row.Children.Add(Ui.Ghost("取消", () => { _editingNotesTodo = null; ShowTodos(); }, 11));
             body.Children.Add(notes);
@@ -669,8 +747,10 @@ public sealed class ShellView : UserControl
 
     private void ChangeDate(Guid id, DateTime value)
     {
-        var date = value.Date.AddHours(12);
-        _session.Todos.SetPlannedAt(id, DateTime.SpecifyKind(date, DateTimeKind.Local).ToUniversalTime());
+        // W-27：年步进钳制在 2000–2100
+        var year = Math.Clamp(value.Year, 2000, 2100);
+        var date = new DateTime(year, value.Month, value.Day, 12, 0, 0, DateTimeKind.Local);
+        _session.Todos.SetPlannedAt(id, date.ToUniversalTime());
     }
 
     private async void InsertTodoImage(Guid id)
@@ -761,7 +841,47 @@ public sealed class ShellView : UserControl
             e.Handled = true;
         };
         ToolTip.SetTip(avatar, "点击更换头像 · " + _session.Avatar.Current.Glyph);
-        _sidebar.Children.Add(avatar);
+
+        if (_sidebarWidth == Metrics.SidebarExpanded)
+        {
+            // PC-B-04：宽档账号区 = 头像 + 真实昵称 + 绿点 + 齿轮（取不到昵称显示「同笔记」）
+            var account = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+                Margin = new Thickness(0, 4, 0, 8),
+            };
+            account.Children.Add(avatar);
+            var details = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 6, 0),
+                Spacing = 2,
+                Children =
+                {
+                    _accountName,
+                    Ui.Text("● 已保存到本地", 10, null, Palette.Accent),
+                },
+            };
+            account.Children.Add(details);
+            Grid.SetColumn(details, 1);
+            var gear = Ui.Icon(Glyphs.Gear, 15, Palette.TextSecondary);
+            var gearButton = new Button
+            {
+                Content = gear,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Width = 28, Height = 28,
+                Padding = new Thickness(0),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            gearButton.Click += (_, _) => OpenSettings();
+            account.Children.Add(gearButton);
+            Grid.SetColumn(gearButton, 2);
+            _sidebar.Children.Add(account);
+            _ = LoadAccountName();
+        }
+        else _sidebar.Children.Add(avatar);
         _sidebarSync.Margin = new Thickness(4, 0, 0, 8);
         _sidebarSync.IsVisible = _sidebarWidth > Metrics.SidebarTiny;
         UpdateSyncLabels();
@@ -871,7 +991,7 @@ public sealed class ShellView : UserControl
         _quick.IsVisible = _pane == Pane.Notes;
         if (_pane != Pane.Notes) return;
 
-        _quick.Children.Add(QuickCard("快同步", "打开这篇独立笔记", _selected == Note.QuickSyncNoteId,
+        _quick.Children.Add(QuickCard("快同步", "多设备共享 · 一处编辑处处可见", _selected == Note.QuickSyncNoteId,
             () => { _pane = Pane.Notes; Select(Note.QuickSyncNoteId); }, 0, 0));
         _quick.Children.Add(QuickCard("快任务",
             $"待完成 {_session.Todos.PendingCount} · 进行中 {_session.Todos.DoingCount}",
@@ -961,25 +1081,27 @@ public sealed class ShellView : UserControl
                 var restore = new MenuItem { Header = "恢复笔记" };
                 restore.Click += (_, _) => { _session.Notes.Restore(current.Id); _pane = Pane.Notes; Select(current.Id); };
                 menu.Items.Add(restore);
-                var purge = new MenuItem { Header = "彻底删除" };
+                menu.Items.Add(new Separator());
+                var purge = new MenuItem { Header = "彻底删除笔记", Foreground = Palette.Red };
                 purge.Click += async (_, _) =>
                 {
                     var yes = await Dialogs.Confirm(this, "彻底删除笔记？",
-                        "「" + current.Title + "」将被永久移除，并同步删除云端附件。", "彻底删除");
-                    if (yes) { _session.Notes.PermanentlyDelete(current.Id); Refresh(); }
+                        "此操作不可恢复，笔记将被永久移除。", "彻底删除");
+                    if (yes) { _session.Notes.PermanentlyDelete(current.Id); SelectFirstRemaining(); }
                 };
                 menu.Items.Add(purge);
             }
             else
             {
-                var pin = new MenuItem { Header = current.Pinned ? "取消置顶" : "置顶" };
+                var pin = new MenuItem { Header = current.Pinned ? "取消置顶笔记" : "置顶笔记" };
                 pin.Click += (_, _) => _session.Notes.TogglePin(current.Id);
                 menu.Items.Add(pin);
-                var trash = new MenuItem { Header = "移入回收站" };
+                menu.Items.Add(new Separator());
+                var trash = new MenuItem { Header = "删除笔记", Foreground = Palette.Red };
                 trash.Click += async (_, _) =>
                 {
-                    var yes = await Dialogs.Confirm(this, "移入回收站？",
-                        "「" + current.Title + "」将从列表移到回收站，可随时恢复。", "移入回收站", "取消", false);
+                    var yes = await Dialogs.Confirm(this, "删除笔记？",
+                        "「" + current.Title + "」将移入回收站，可随时在回收站中恢复。", "删除笔记", "取消", true);
                     if (yes) _session.Notes.MoveToTrash(current.Id);
                 };
                 menu.Items.Add(trash);
@@ -998,18 +1120,23 @@ public sealed class ShellView : UserControl
             source = source.Where(note => note.Notebook == _notebookFilter);
         if (_pane != Pane.Trash && _tagFilter != null)
             source = source.Where(note => note.Tags.Contains(_tagFilter));
-        if (_pane != Pane.Trash && !string.IsNullOrWhiteSpace(_search.Text))
+        // W-24：回收站内搜索同样生效（PC 修正 Mac 缺陷），并支持按标签命中
+        if (!string.IsNullOrWhiteSpace(_search.Text))
         {
             var query = _search.Text.Trim();
             source = source.Where(note =>
                 note.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || note.VisibleBody.Contains(query, StringComparison.CurrentCultureIgnoreCase));
+                || note.VisibleBody.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                || note.Tags.Any(tag => tag.Contains(query, StringComparison.CurrentCultureIgnoreCase)));
         }
         return _sort switch
         {
             SortMode.Created => source.OrderByDescending(note => note.CreatedAt),
             SortMode.Title => source.OrderBy(note => note.Title, StringComparer.CurrentCulture),
-            _ => source.OrderByDescending(note => note.UpdatedAt),
+            // W-42：回收站按删除时间排序，不是更新时间
+            _ => _pane == Pane.Trash
+                ? source.OrderByDescending(note => note.DeletedAt ?? note.UpdatedAt)
+                : source.OrderByDescending(note => note.UpdatedAt),
         };
     }
 
@@ -1071,8 +1198,8 @@ public sealed class ShellView : UserControl
         if (_selected == null) return;
         var note = Current();
         if (note == null) return;
-        var yes = await Dialogs.Confirm(this, "移入回收站？",
-            "「" + note.Title + "」将从列表移到回收站，可随时恢复。", "移入回收站", "取消", false);
+        var yes = await Dialogs.Confirm(this, "删除笔记？",
+            "「" + note.Title + "」将移入回收站，可随时在回收站中恢复。", "删除笔记", "取消", true);
         if (!yes) return;
         var id = note.Id;
         _session.Notes.MoveToTrash(id);
@@ -1101,13 +1228,66 @@ public sealed class ShellView : UserControl
         var note = Current();
         if (note == null) return;
         var yes = await Dialogs.Confirm(this, "彻底删除笔记？",
-            "「" + note.Title + "」将被永久移除，并同步删除云端附件。", "彻底删除");
+            "此操作不可恢复，笔记将被永久移除。", "彻底删除");
         if (!yes) return;
         _session.Notes.PermanentlyDelete(note.Id);
-        _selected = null;
-        _right.Content = Ui.EmptyState("笔记已移除。删除会以 purged 墓碑同步到其它设备。");
-        Refresh();
+        SelectFirstRemaining();
     }
+
+    /// <summary>W-26：删除 / 彻底删除后统一回退选中下一条，避免空白编辑器。</summary>
+    private void SelectFirstRemaining()
+    {
+        var next = _pane == Pane.Trash
+            ? _session.Notes.TrashNotes.FirstOrDefault()
+            : _session.Notes.ActiveNotes.FirstOrDefault(item => !item.IsQuickSync);
+        if (next == null)
+        {
+            _selected = null;
+            _right.Content = Ui.EmptyState(_pane == Pane.Trash ? "回收站是空的" : "选择或新建一篇笔记");
+            Refresh();
+        }
+        else Select(next.Id);
+    }
+
+    /// <summary>W-20：App 级快捷键。WebView2 内的键位由 EditorHtml 的 JS 处理。</summary>
+    private void OnShellKeyDown(object? sender, KeyEventArgs e)
+    {
+        var mod = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (mod && e.Key == Key.N)
+        {
+            NewNote();
+            e.Handled = true;
+        }
+        else if (mod && e.Key == Key.F)
+        {
+            _search.Focus();
+            _search.SelectAll();
+            e.Handled = true;
+        }
+        else if (mod && e.Key == Key.W)
+        {
+            (TopLevel.GetTopLevel(this) as Window)?.Close();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F5)
+        {
+            _ = _session.Sync.QuickSyncAsync();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && _pane == Pane.Trash)
+        {
+            PurgeCurrent();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            if (!string.IsNullOrEmpty(_search.Text)) _search.Text = "";
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>W-22：关窗 / 失活前把编辑器里最后一次内容立刻落盘。</summary>
+    public void Flush() => _richEditor.Flush();
 
     private void NewNote()
     {

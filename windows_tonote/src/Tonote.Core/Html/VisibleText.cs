@@ -35,12 +35,13 @@ public static class VisibleText
     public static string DecodeEntities(string text)
     {
         return text
+            // W-42：&amp; 必须最先解码，否则 &amp;lt; 会二次变成 "<"，与 Mac/Android 不一致
+            .Replace("&amp;", "&", StringComparison.Ordinal)
             .Replace("&nbsp;", " ", StringComparison.Ordinal)
             .Replace("&quot;", "\"", StringComparison.Ordinal)
             .Replace("&#39;", "'", StringComparison.Ordinal)
             .Replace("&apos;", "'", StringComparison.Ordinal)
             .Replace("&lt;", "<", StringComparison.Ordinal)
-            .Replace("&gt;", ">", StringComparison.Ordinal)
-            .Replace("&amp;", "&", StringComparison.Ordinal);
+            .Replace("&gt;", ">", StringComparison.Ordinal);
     }
 }

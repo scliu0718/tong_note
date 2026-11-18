@@ -221,18 +221,21 @@ public class CoreTests
         Assert.Equal("token-1", token.AccessToken);
         Assert.Equal("refresh-1", token.RefreshToken);
         Assert.Equal(2592000, token.ExpiresIn);
-        Assert.Contains("grant_type=authorization_code", handler.RequestUrl, StringComparison.Ordinal);
-        Assert.Contains("code=the-code", handler.RequestUrl, StringComparison.Ordinal);
-        Assert.Contains("client_id=app-key", handler.RequestUrl, StringComparison.Ordinal);
+        // W-39：client_secret / code 走 POST body，不再出现在 URL
+        Assert.DoesNotContain("client_secret", handler.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("grant_type=authorization_code", handler.RequestBody, StringComparison.Ordinal);
+        Assert.Contains("code=the-code", handler.RequestBody, StringComparison.Ordinal);
+        Assert.Contains("client_id=app-key", handler.RequestBody, StringComparison.Ordinal);
 
+        // W-37：Windows 上令牌 DPAPI 加密落盘，往返可读但文件不含明文
         var dir = Temp();
-        new BaiduPanTokenStore(dir).Save(token);
-        var json = File.ReadAllText(Path.Combine(dir, "baidupan-token.json"));
-        Assert.Contains("\"accessToken\": \"token-1\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"refreshToken\": \"refresh-1\"", json, StringComparison.Ordinal);
-        Assert.Matches("""
-            "createdAt": "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
-            """, json);
+        var store = new BaiduPanTokenStore(dir);
+        store.Save(token);
+        var raw = File.ReadAllText(Path.Combine(dir, "baidupan-token.json"));
+        if (OperatingSystem.IsWindows())
+            Assert.DoesNotContain("token-1", raw, StringComparison.Ordinal);
+        Assert.Equal("token-1", store.Load()?.AccessToken);
+        Assert.Equal("refresh-1", store.Load()?.RefreshToken);
 
         var loaded = new BaiduPanTokenStore(dir).Load();
         Assert.Equal("token-1", loaded!.AccessToken);
@@ -247,14 +250,41 @@ public class CoreTests
 
         public string RequestUrl { get; private set; } = "";
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public string RequestBody { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestUrl = request.RequestUri?.ToString() ?? "";
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            RequestBody = request.Content == null
+                ? ""
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = new StringContent(_body),
-            });
+            };
         }
+    }
+
+    [Fact]
+    public void CorruptFileIsBackedUpBeforeFallback()
+    {
+        var dir = Temp();
+        var path = Path.Combine(dir, "notes.json");
+        File.WriteAllText(path, "{ broken");
+        var notes = TonoteJson.TryDeserializeFile<List<Note>>(path);
+        Assert.Empty(notes ?? []);
+        Assert.Contains(Directory.GetFiles(dir), file =>
+            file.StartsWith(path + ".corrupt-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void JsonKeysAreSorted()
+    {
+        var json = TonoteJson.Serialize(new { Z = 1, A = 2, M = 3 });
+        var a = json.IndexOf("\"A\"", StringComparison.Ordinal);
+        var m = json.IndexOf("\"M\"", StringComparison.Ordinal);
+        var z = json.IndexOf("\"Z\"", StringComparison.Ordinal);
+        Assert.True(a > 0 && a < m && m < z);
     }
 
     private static string Temp() => Directory.CreateTempSubdirectory("tonote-win-").FullName;
