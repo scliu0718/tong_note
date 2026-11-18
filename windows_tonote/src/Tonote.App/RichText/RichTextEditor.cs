@@ -74,6 +74,9 @@ public sealed class RichTextEditor : UserControl
     private NoteContentFormat _currentFormat = NoteContentFormat.markdown;
     private string? _pendingHtml;
     private string? _lastHtml;
+    // W-09：打开 markdown 笔记时记下「由原稿转出的 HTML」基线。
+    // 只有内容真的偏离基线（用户真实输入）才允许升级 contentFormat 并改写原稿。
+    private string? _markdownBaseline;
     private bool _readOnly;
     private bool _webFailed;
     private bool _loadingFallback;
@@ -383,8 +386,9 @@ public sealed class RichTextEditor : UserControl
             ("删除当前行", () => Run("removeRow")),
             ("删除当前列", () => Run("removeColumn")),
             ("删除整个表格", () => Run("removeTable")),
+            // W-08：满宽 = 移除 data-fullwidth 属性（契约默认）；固定宽 = 写 "0"
             ("匹配笔记宽度", () => Run("setFullWidth", "1")),
-            ("取消满宽", () => Run("setFullWidth", "0")),
+            ("固定列宽（每列 100px）", () => Run("setFullWidth", "0")),
         })
         {
             var run = action;
@@ -453,6 +457,10 @@ public sealed class RichTextEditor : UserControl
         _pendingHtml = note.ContentFormat == NoteContentFormat.richText
             ? note.Body
             : RichTextHtmlCodec.Encode(MarkdownConverter.ToDocument(note.Body));
+        // W-09：markdown 基线取「解码→再编码」的规范化结果，与 JS clean() 后的形态一致
+        _markdownBaseline = note.ContentFormat == NoteContentFormat.markdown
+            ? RichTextHtmlCodec.Encode(RichTextHtmlCodec.Decode(_pendingHtml))
+            : null;
         ClosePopover();
 
         _loadingFallback = true;
@@ -536,10 +544,34 @@ public sealed class RichTextEditor : UserControl
         if (note == null || note.IsTrashed) return;
 
         var parsed = RichTextHtmlCodec.Decode(html);
+
+        // W-10 ③：写盘前把所有内联 / 本地图片转存为 attachments 相对路径；
+        // 任一图片无法转存就整篇拒写并报错，绝不把 blob:/data:/file:/// 写进云端 JSON。
+        foreach (var run in parsed.AllRuns())
+        {
+            if (run.Image == null) continue;
+            var result = InlineImageImport.Import(run.Image.Path, _currentId, _session.Notes.Attachments);
+            if (result.Kind == InlineImageImport.Outcome.Failed)
+            {
+                StatusChanged?.Invoke("图片无法保存，笔记未修改：" + result.Error);
+                return;
+            }
+            if (result.Kind == InlineImageImport.Outcome.Imported)
+                run.Image.Path = result.Path;
+        }
+
         var onlyEmpty = parsed.PlainText.Trim().Length == 0
                         && parsed.Blocks.All(block => block.Runs.All(run => run.Image == null));
         var normalized = onlyEmpty ? "" : RichTextHtmlCodec.Encode(parsed);
         if (note.ContentFormat == NoteContentFormat.richText && note.Body == normalized) return;
+
+        // W-09：旧 Markdown 笔记仅打开（切换 / 失焦）不得改写原稿、升级格式或动 updatedAt。
+        // 内容未偏离加载基线就只更新内存，绝不落盘。
+        if (note.ContentFormat == NoteContentFormat.markdown)
+        {
+            var current = RichTextHtmlCodec.Encode(RichTextHtmlCodec.Decode(html));
+            if (current == _markdownBaseline) return;
+        }
 
         _currentBody = normalized;
         _currentFormat = NoteContentFormat.richText;

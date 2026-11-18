@@ -74,10 +74,14 @@ public static class EditorHtml
   ul, ol { margin: 6px 0; padding-left: 26px; }
   li { line-height: 1.3; padding-left: 2px; }
   li::marker { color: #2E7CF6; }
+  /* W-08：三端契约是「满宽为默认、不写属性；data-fullwidth="0" 才是固定宽」 */
   table {
     border-collapse: collapse; table-layout: fixed;
+    width: 100%;
     margin: 20px 0 10px; margin-left: 16px;
   }
+  table[data-fullwidth="0"] { width: auto; }
+  table[data-fullwidth="0"] td, table[data-fullwidth="0"] th { width: 100px; min-width: 100px; }
   td, th {
     border: 1px solid #D8D9DE; padding: 6px 10px;
     min-width: 40px; vertical-align: top;
@@ -88,7 +92,6 @@ public static class EditorHtml
   td[data-align="center"], th[data-align="center"] { text-align: center; }
   td[data-align="right"], th[data-align="right"] { text-align: right; }
   td[data-align="justify"], th[data-align="justify"] { text-align: justify; }
-  table[data-fullwidth="1"] { width: 100%; }
   img {
     max-width: 480px; height: auto; border-radius: 6px;
     box-shadow: 0 1px 3px rgba(20,20,22,.10);
@@ -106,6 +109,9 @@ public static class EditorHtml
 (function () {
   var editor = document.getElementById('editor');
   var timer = null;
+  // W-09：加载基线。只有内容真的变了才 post changed，
+  // 否则打开旧 Markdown 笔记仅失焦 / 切换也会被 C# 升级为 richText 并改写原稿。
+  var baseline = '';
 
   var MAP = { div: 'p', b: 'strong', i: 'em', strike: 's', del: 's', article: 'p', section: 'p' };
   var UNWRAP = { tbody: 1, thead: 1, tfoot: 1, colgroup: 1 };
@@ -113,7 +119,9 @@ public static class EditorHtml
   var ATTRS = {
     img: ['src', 'width', 'height'], a: ['href'], span: ['style'],
     table: ['data-widths', 'data-fullwidth'],
-    td: ['data-align', 'data-bg'], th: ['data-align', 'data-bg'], li: ['data-level']
+    // W-10：td/th 的 style 必须保留，否则 Mac 老笔记的 style="background-color:#…" 一编辑就丢底色。
+    // Core 的 RichTextTableCodec.BackgroundHex 已兼容 style，清洗时把 background-color 归一化为 data-bg。
+    td: ['data-align', 'data-bg', 'style'], th: ['data-align', 'data-bg', 'style'], li: ['data-level']
   };
   var SIZES = { '1': 11, '2': 12, '3': 13, '4': 14, '5': 16, '6': 18, '7': 40 };
 
@@ -135,18 +143,44 @@ public static class EditorHtml
     return keep.join(';');
   }
 
+  // W-10：把单元格 style 里的 background-color 归一化为 data-bg 契约属性，
+  // 其余颜色 / 字号声明不写盘（默认色与引用灰由 Core 的 Encode 再兜一层）。
+  function cellBackground(styleText) {
+    if (!styleText) return null;
+    var match = /(?:^|;)\s*background-color\s*:\s*([^;]+)/i.exec(styleText);
+    if (!match) return null;
+    var value = match[1].trim();
+    if (!value || value === 'transparent') return null;
+    var m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i.exec(value);
+    if (m) {
+      if (m[4] !== undefined && parseFloat(m[4]) <= 0.01) return null;
+      return '#' + [m[1], m[2], m[3]].map(function (n) {
+        return ('0' + parseInt(n, 10).toString(16)).slice(-2);
+      }).join('').toUpperCase();
+    }
+    return value.toUpperCase();
+  }
+
   function copyAttrs(source, target) {
-    var allowed = ATTRS[target.tagName.toLowerCase()] || [];
+    var tag = target.tagName.toLowerCase();
+    var allowed = ATTRS[tag] || [];
     allowed.forEach(function (name) {
       var value = source.getAttribute(name);
       if (value === null) return;
       if (name === 'style') {
+        if (tag === 'td' || tag === 'th') {
+          var bg = cellBackground(value);
+          if (bg) target.setAttribute('data-bg', bg);
+          return; // 单元格 style 不原样写出，只留 data-bg / data-align
+        }
         value = cleanStyle(value);
         if (!value) return;
       }
       if (name === 'src') {
         var at = value.indexOf('attachments/');
         if (at >= 0) value = value.substring(at).replace(/\\/g, '/');
+        // W-10：非 attachments/ 的 src（blob:/data:/file:///绝对路径）原样保留，
+        // 交给 C# SaveHtml 在写盘前转存为附件；无法转存则整篇拒写并报错。
       }
       target.setAttribute(name, value);
     });
@@ -210,7 +244,11 @@ public static class EditorHtml
 
   function changed() {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(function () { post({ type: 'changed', html: clean() }); }, 350);
+    timer = setTimeout(function () {
+      var html = clean();
+      if (html === baseline) return; // 没有真实内容变化，不触发保存
+      post({ type: 'changed', html: html });
+    }, 350);
   }
 
   function applyCellStyles() {
@@ -226,7 +264,9 @@ public static class EditorHtml
   editor.addEventListener('input', changed);
   editor.addEventListener('blur', function () {
     if (timer) clearTimeout(timer);
-    post({ type: 'changed', html: clean() });
+    var html = clean();
+    if (html === baseline) return; // W-09：仅失焦不算编辑，不写盘
+    post({ type: 'changed', html: html });
   });
   editor.addEventListener('paste', function (event) {
     event.preventDefault();
@@ -284,7 +324,8 @@ public static class EditorHtml
     setContent: function (html) {
       editor.innerHTML = html || '<p><br></p>';
       applyCellStyles();
-      post({ type: 'loaded', html: clean() });
+      baseline = clean(); // W-09：此后仅有真实内容差异才 post changed
+      post({ type: 'loaded', html: baseline });
     },
     getHTML: clean,
     focus: function () { editor.focus(); },
@@ -318,10 +359,11 @@ public static class EditorHtml
       changed();
     },
     insertTable: function (rows, cols) {
-      var html = '<table data-fullwidth="1">';
+      // W-08：新建表默认固定宽（data-fullwidth="0"），每列 100px，不铺满笔记
+      var html = '<table data-fullwidth="0">';
       for (var r = 0; r < rows; r++) {
         html += '<tr>';
-        for (var c = 0; c < cols; c++) html += '<td><p><br></p></td>';
+        for (var c = 0; c < cols; c++) html += '<td style="width:100px"><p><br></p></td>';
         html += '</tr>';
       }
       html += '</table><p><br></p>';
@@ -386,7 +428,9 @@ public static class EditorHtml
       if (!cell) return;
       var table = cell.closest('table');
       if (!table) return;
-      table.setAttribute('data-fullwidth', value);
+      // W-08：满宽=移除属性（契约默认），固定宽=写 "0"；"1" 是非法值
+      if (value === '1' || value === 'full' || value === true) table.removeAttribute('data-fullwidth');
+      else table.setAttribute('data-fullwidth', '0');
       changed();
     },
     setCellAlign: function (value) {

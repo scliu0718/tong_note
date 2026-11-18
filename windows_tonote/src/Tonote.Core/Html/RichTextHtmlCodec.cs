@@ -97,10 +97,13 @@ public static class RichTextHtmlCodec
             inner = $"<a href=\"{EscapeAttribute(run.Link)}\">{inner}</a>";
         if (run.FontSize != null)
             inner = $"<span style=\"font-size:{FormatNumber(run.FontSize.Value)}px\">{inner}</span>";
-        if (run.ColorHex != null)
-            inner = $"<span style=\"color:{EscapeAttribute(run.ColorHex)}\">{inner}</span>";
-        if (run.BackgroundHex != null)
-            inner = $"<span style=\"background-color:{EscapeAttribute(run.BackgroundHex)}\">{inner}</span>";
+        // PC-F-06 / PC-F-09（W-10）：默认正文色与引用样式色是视图层装饰，
+        // 写进 HTML 会被 Mac / Android 当成显式颜色固化下来，必须省略。
+        if (!IsDecorativeColor(run.ColorHex))
+            inner = $"<span style=\"color:{EscapeAttribute(run.ColorHex!)}\">{inner}</span>";
+        // 背景 alpha ≤ 0.01 视为无背景，不写 HTML
+        if (!IsTransparentBackground(run.BackgroundHex))
+            inner = $"<span style=\"background-color:{EscapeAttribute(run.BackgroundHex!)}\">{inner}</span>";
         if (run.IsStrike)
             inner = $"<s>{inner}</s>";
         if (run.IsUnderline)
@@ -116,6 +119,64 @@ public static class RichTextHtmlCodec
         => Math.Abs(value - Math.Round(value)) < 0.0000001
             ? ((long)Math.Round(value)).ToString(CultureInfo.InvariantCulture)
             : value.ToString("0.0", CultureInfo.InvariantCulture);
+
+    private const string DefaultTextColor = "#1D1D1F";
+    private const string QuoteTextColor = "#86868B";
+
+    /// <summary>默认色 / 引用灰属于视图装饰，不得固化进 HTML（对齐 Mac RichTextBridge:751-761）。</summary>
+    private static bool IsDecorativeColor(string? hex)
+    {
+        if (hex == null) return true;
+        var normalized = NormalizeHex(hex);
+        return normalized == null || normalized == DefaultTextColor || normalized == QuoteTextColor;
+    }
+
+    /// <summary>rgba(... , α≤0.01) / transparent / 空值都视为无背景。</summary>
+    private static bool IsTransparentBackground(string? hex)
+    {
+        if (hex == null || hex.Length == 0) return true;
+        var value = hex.Trim();
+        if (value.Equals("transparent", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return true;
+        // rgba(0,0,0,0) / rgba(...,0.00)
+        var comma = value.LastIndexOf(',');
+        if (value.StartsWith("rgba(", StringComparison.OrdinalIgnoreCase) && comma >= 0)
+        {
+            var alphaPart = value[(comma + 1)..].Trim().TrimEnd(')').Trim();
+            if (double.TryParse(alphaPart, NumberStyles.Float, CultureInfo.InvariantCulture, out var alpha)
+                && alpha <= 0.01)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>把 #rgb / #rrggbb / rgb(r,g,b) 归一化为 #RRGGBB；无法识别返回 null。</summary>
+    private static string? NormalizeHex(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith('#'))
+        {
+            var digits = trimmed[1..];
+            if (digits.Length == 6 && digits.All(Uri.IsHexDigit))
+                return "#" + digits.ToUpperInvariant();
+            if (digits.Length == 3 && digits.All(Uri.IsHexDigit))
+                return "#" + string.Concat(digits.Select(c => char.ToUpperInvariant(c))).ToUpperInvariant();
+            return null;
+        }
+        if (trimmed.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = System.Text.RegularExpressions.Regex.Split(trimmed, "[^0-9.]+")
+                .Where(piece => piece.Length > 0)
+                .Take(3)
+                .Select(piece => double.TryParse(piece, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var n) ? (int)Math.Clamp(n, 0, 255) : -1)
+                .ToList();
+            if (parts.Count == 3 && parts.All(part => part >= 0))
+                return $"#{parts[0]:X2}{parts[1]:X2}{parts[2]:X2}";
+        }
+        return null;
+    }
 
     // 用 \u0026 拼出 & 前缀，避免源码文件在写入链路里被当成 HTML 实体解码。
     private const string Amp = "\u0026amp;";
@@ -190,6 +251,11 @@ public static class RichTextHtmlCodec
                         return ListBlocks(element.Children, RichTextBlockStyle.orderedItem);
                     case "br":
                         return [];
+                    case "img":
+                        // W-07：块级位置的裸 <img>（Android 会产出 <p>文字</p><img …>）不能丢，
+                        // 单独成段显示，复用 InlineRuns 的 img 属性解析，与 Mac 端一致。
+                        return [new RichTextBlock(RichTextBlockStyle.paragraph,
+                            InlineRuns([node], new InlineContext()))];
                     default:
                     {
                         var result = new List<RichTextBlock>();

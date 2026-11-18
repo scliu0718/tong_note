@@ -59,6 +59,34 @@ public sealed class AttachmentStore
         return RelativePath(target);
     }
 
+    /// <summary>
+    /// 从内存字节导入一张图片（data: URI 解码后的粘贴图走这里），返回相对路径。
+    /// 与 ImportImage 共用同一目录约定，保证三端同步路径一致。
+    /// </summary>
+    public string ImportImageBytes(byte[] bytes, string ext, Guid noteId)
+    {
+        if (bytes == null || bytes.Length == 0)
+            throw new AttachmentException("图片内容为空");
+        var normalized = (ext ?? "").TrimStart('.').ToLowerInvariant();
+        if (!AllowedExtensions.Contains(normalized))
+            throw new AttachmentException($"不支持的图片格式：{(normalized.Length == 0 ? "未知" : normalized)}");
+
+        var targetDirectory = DirectoryFor(noteId);
+        Directory.CreateDirectory(targetDirectory);
+        var fileName = Guid.NewGuid().ToString("D").ToUpperInvariant() + "." + normalized;
+        var target = Path.Combine(targetDirectory, fileName);
+        try
+        {
+            File.WriteAllBytes(target, bytes);
+        }
+        catch (Exception ex)
+        {
+            throw new AttachmentException("图片写入失败：" + ex.Message);
+        }
+
+        return RelativePath(target);
+    }
+
     /// <summary>由绝对路径推出相对路径。目标不在 root 下时退化为文件名。</summary>
     public string RelativePath(string absolutePath)
     {

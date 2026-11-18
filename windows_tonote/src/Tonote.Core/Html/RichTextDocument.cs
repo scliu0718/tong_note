@@ -120,6 +120,27 @@ public sealed class RichTextDocument
 
     public string PlainText => string.Join("\n", Blocks.Select(block => block.PlainText));
 
+    /// <summary>遍历全文（含表格单元格）的 run，供图片转存 / 字数统计等复用。</summary>
+    public IEnumerable<RichTextRun> AllRuns()
+    {
+        foreach (var block in Blocks)
+        {
+            if (block.Style == RichTextBlockStyle.table && block.Table != null)
+            {
+                foreach (var row in block.Table.Rows)
+                foreach (var cell in row)
+                foreach (var cellBlock in cell.Blocks)
+                foreach (var run in cellBlock.Runs)
+                    yield return run;
+            }
+            else
+            {
+                foreach (var run in block.Runs)
+                    yield return run;
+            }
+        }
+    }
+
     public static RichTextDocument Empty()
         => new([new RichTextBlock(RichTextBlockStyle.paragraph)]);
 }
