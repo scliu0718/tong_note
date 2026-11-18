@@ -239,11 +239,12 @@ fun NotesScreen(
 
             FloatingActionButton(
                 onClick = { onNewNote(selectedNotebook) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).size(48.dp),
+                shape = CircleShape,
                 containerColor = Green,
                 contentColor = Color.White
             ) {
-                Icon(Icons.Default.Add, contentDescription = "新建笔记")
+                Icon(Icons.Default.Add, contentDescription = "新建笔记", modifier = Modifier.size(22.dp))
             }
         }
     }
