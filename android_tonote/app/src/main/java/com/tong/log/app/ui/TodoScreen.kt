@@ -334,9 +334,10 @@ private fun LazyListScope.todoGroup(
             Box(
                 Modifier
                     .size(17.dp)
-                    .clickable { TodoStore.toggleDone(t.id) }
+                    // 去掉点击涟漪：默认 indication 会按方形 bounds 画阴影，圆圈上很突兀
+                    .clickable(interactionSource = null, indication = null) { TodoStore.toggleDone(t.id) }
                     .background(if (filled) ringColor else Color.Transparent, CircleShape)
-                    .border(2.dp, ringColor, CircleShape)
+                    .border(1.dp, ringColor, CircleShape)
                     .padding(3.dp)
             ) {
                 if (t.status == TodoStatus.DONE) {
