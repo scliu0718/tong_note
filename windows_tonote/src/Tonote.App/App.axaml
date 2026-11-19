@@ -139,6 +139,22 @@
       <Setter Property="Padding" Value="7,4" />
     </Style>
 
+    <!-- 所有窗口（主窗口、各类对话框、设置、使用说明）与弹出层（右键菜单 / 下拉 / 气泡）
+         统一：微软雅黑 UI 字体 + 子像素抗锯齿 + 整像素对齐，避免文字出现锯齿或回退成宋体 -->
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="TextOptions.TextRenderingMode" Value="SubpixelAntialias" />
+      <Setter Property="UseLayoutRounding" Value="True" />
+    </Style>
+    <Style Selector="PopupRoot">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="TextOptions.TextRenderingMode" Value="SubpixelAntialias" />
+      <Setter Property="UseLayoutRounding" Value="True" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+    </Style>
+
     <!-- 右键菜单也用同一套字体 -->
     <Style Selector="MenuItem">
       <Setter Property="FontFamily" Value="{StaticResource TnFont}" />

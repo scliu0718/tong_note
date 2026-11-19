@@ -1580,16 +1580,23 @@ public sealed class ShellView : UserControl
             // 标准/宽档：图标 + 名称居左，数量居右，撑满整行
             labelBlock = Ui.Text(text, 12, selected ? FontWeight.SemiBold : null, fg);
             labelBlock.TextTrimming = TextTrimming.CharacterEllipsis;
+            labelBlock.VerticalAlignment = VerticalAlignment.Center;
+            icon!.VerticalAlignment = VerticalAlignment.Center;
             var left = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 9,
                 HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
                 Children = { icon, labelBlock },
             };
             var countBlock = Ui.Text(count.Value.ToString(), 11, null, Palette.TextQuaternary);
             countBlock.VerticalAlignment = VerticalAlignment.Center;
-            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            var grid = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
             grid.Children.Add(left);
             Grid.SetColumn(countBlock, 1);
             grid.Children.Add(countBlock);
@@ -1664,16 +1671,23 @@ public sealed class ShellView : UserControl
         }
         else if (wide)
         {
+            nameBlock.VerticalAlignment = VerticalAlignment.Center;
+            icon.VerticalAlignment = VerticalAlignment.Center;
             var left = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 9,
                 HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
                 Children = { icon, nameBlock },
             };
             var countBlock = Ui.Text(count.ToString(), 11, null, Palette.TextQuaternary);
             countBlock.VerticalAlignment = VerticalAlignment.Center;
-            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            var grid = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
             grid.Children.Add(left);
             Grid.SetColumn(countBlock, 1);
             grid.Children.Add(countBlock);
