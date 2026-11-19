@@ -143,12 +143,10 @@
          统一：微软雅黑 UI 字体 + 子像素抗锯齿 + 整像素对齐，避免文字出现锯齿或回退成宋体 -->
     <Style Selector="Window">
       <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
-      <Setter Property="TextOptions.TextRenderingMode" Value="SubpixelAntialias" />
       <Setter Property="UseLayoutRounding" Value="True" />
     </Style>
     <Style Selector="PopupRoot">
       <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
-      <Setter Property="TextOptions.TextRenderingMode" Value="SubpixelAntialias" />
       <Setter Property="UseLayoutRounding" Value="True" />
     </Style>
     <Style Selector="TextBox">

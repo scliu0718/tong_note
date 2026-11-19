@@ -7,7 +7,6 @@
         Height="700"
         MinWidth="960"
         MinHeight="620"
-        TextOptions.TextRenderingMode="SubpixelAntialias"
         UseLayoutRounding="True"
         WindowStartupLocation="CenterScreen"
         Background="#F5F5F7">
