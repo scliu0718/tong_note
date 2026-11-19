@@ -359,12 +359,7 @@ public static class Dialogs
                 var choice = AvatarStore.Presets[i];
                 var cell = new Grid { Width = 44, Height = 44, Margin = new Thickness(2, 3) };
                 var selected = session.Avatar.Current.Id == choice.Id;
-                cell.Children.Add(new Border
-                {
-                    CornerRadius = new CornerRadius(22),
-                    Background = Palette.Brush(choice.Color1),
-                    Child = Ui.Text(choice.Glyph, 16, FontWeight.Bold, Palette.White),
-                });
+                cell.Children.Add(Ui.AvatarBadge(choice, 42));
                 if (selected)
                     cell.Children.Add(new Border
                     {
@@ -558,13 +553,13 @@ public static class Dialogs
                 var choice = preset;
                 var button = new Button
                 {
-                    Content = choice.Glyph,
+                    Content = Ui.AvatarBadge(choice, 32),
                     Width = 32, Height = 32,
                     Margin = new Thickness(0, 0, 6, 6),
                     CornerRadius = new CornerRadius(16),
-                    Background = Palette.Brush(choice.Color1),
-                    Foreground = Palette.White,
-                    FontWeight = FontWeight.Bold,
+                    Padding = new Thickness(0),
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
                 };
                 button.Click += (_, _) => _session.Avatar.Select(choice.Id);
                 avatars.Children.Add(button);

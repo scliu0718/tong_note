@@ -24,11 +24,11 @@ public sealed class ShellView : UserControl
 
     private readonly AppSession _session;
     private readonly StackPanel _sidebar = new() { Spacing = 4 };
-    private readonly StackPanel _quick = new() { Spacing = 8, Margin = new Thickness(12, 12, 12, 0) };
-    private readonly StackPanel _sortRow = new()
+    private readonly StackPanel _sidebarBottom = new() { Spacing = 4, Margin = new Thickness(10, 4, 10, 8) };
+    private readonly StackPanel _quick = new() { Spacing = 8, Margin = new Thickness(12, 8, 12, 0) };
+    private readonly Grid _sortRow = new()
     {
-        Orientation = Orientation.Horizontal,
-        Spacing = 12,
+        ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"),
         Margin = new Thickness(12, 8, 12, 4),
     };
     private readonly StackPanel _cards = new();
@@ -57,19 +57,14 @@ public sealed class ShellView : UserControl
         TextWrapping = TextWrapping.Wrap,
         VerticalAlignment = VerticalAlignment.Center,
     };
-    private readonly TextBlock _accountName = new()
+    private string _accountName = "同笔记";
+    private bool _accountNameLoaded;
+    private bool _quickExpanded = true;
+    private bool _showingTodos;
+    private readonly ContentControl _syncSlot = new()
     {
-        Text = "同笔记",
-        FontSize = 12,
-        FontWeight = FontWeight.SemiBold,
-        Foreground = Palette.TextPrimary,
-        TextTrimming = TextTrimming.CharacterEllipsis,
-    };
-    private readonly TextBlock _sidebarSync = new()
-    {
-        FontSize = 11,
-        Foreground = Palette.Accent,
-        TextWrapping = TextWrapping.Wrap,
+        VerticalAlignment = VerticalAlignment.Center,
+        HorizontalAlignment = HorizontalAlignment.Right,
     };
     private readonly TextBlock _count = new() { Foreground = Palette.TextTertiary, FontSize = 11.5 };
     private readonly ComboBox _notebook = new() { MinWidth = 120, FontSize = 12 };
@@ -117,7 +112,7 @@ public sealed class ShellView : UserControl
         _pinButton = Ui.Small("置顶", TogglePin);
         _trashButton = Ui.Small("删除笔记", MoveCurrentToTrash);
         _restoreButton = Ui.Primary("恢复笔记", RestoreCurrent);
-        _purgeButton = Ui.Danger("彻底删除", PurgeCurrent);
+        _purgeButton = Ui.Danger("彻底删除", PurgeCurrent, icon: Glyphs.Trash);
         _syncOneButton = Ui.Small("同步本篇", async () =>
         {
             if (_selected == null) return;
@@ -150,13 +145,20 @@ public sealed class ShellView : UserControl
         };
 
         // 搜索框套一层自绘外壳：灰底 8px 圆角 + 聚焦淡绿细环，
-        // 避免 Avalonia Fluent 默认的蓝色 focus 边框。
+        // 左侧放大镜图标 + 输入 + 右侧清除按钮（对齐 Mac searchBar：⌕ + 搜索笔记、标签… + ✕）。
         var searchField = Ui.Field(_search);
-        var searchGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        var searchGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
         searchField.Child = null;
+        var magnifier = Ui.Icon(Glyphs.Search, 13, Palette.TextQuaternary);
+        magnifier.VerticalAlignment = VerticalAlignment.Center;
+        magnifier.Margin = new Thickness(10, 0, 8, 0);
+        searchGrid.Children.Add(magnifier);
+        _search.Padding = new Thickness(0, 7, 0, 7);
         searchGrid.Children.Add(_search);
+        Grid.SetColumn(_search, 1);
         searchGrid.Children.Add(_clearSearch);
-        Grid.SetColumn(_clearSearch, 1);
+        Grid.SetColumn(_clearSearch, 2);
+        _clearSearch.Margin = new Thickness(0, 0, 4, 0);
         searchField.Child = searchGrid;
         searchField.Margin = new Thickness(12, 10, 12, 0);
         var cardsScroll = new ScrollViewer { Content = _cards };
@@ -164,11 +166,21 @@ public sealed class ShellView : UserControl
         {
             RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*"),
             Background = Palette.Panel,
-            Children = { _quick, searchField, _sortRow, cardsScroll },
+            Children = { searchField, _sortRow, _quick, cardsScroll },
         };
-        Grid.SetRow(searchField, 1);
-        Grid.SetRow(_sortRow, 2);
+        Grid.SetRow(_sortRow, 1);
+        Grid.SetRow(_quick, 2);
         Grid.SetRow(cardsScroll, 3);
+
+        var sidebarScroll = new ScrollViewer { Content = _sidebar };
+        var sidebarPanel = new Grid
+        {
+            RowDefinitions = new RowDefinitions("*,Auto"),
+            Background = Palette.SidebarBg,
+            Children = { sidebarScroll, _sidebarBottom },
+        };
+        Grid.SetRow(sidebarScroll, 0);
+        Grid.SetRow(_sidebarBottom, 1);
 
         var grid = new Grid
         {
@@ -176,7 +188,7 @@ public sealed class ShellView : UserControl
             Background = Palette.WindowBg,
             Children =
             {
-                new ScrollViewer { Content = _sidebar, Background = Palette.SidebarBg },
+                sidebarPanel,
                 _handle,
                 list,
                 new Border { Background = Palette.Line },
@@ -194,7 +206,7 @@ public sealed class ShellView : UserControl
         _session.Notebooks.Changed += () => OnUi(Refresh);
         _session.Todos.Changed += () => OnUi(() =>
         {
-            if (_pane == Pane.Todos) ShowTodos();
+            if (_showingTodos) ShowTodos();
             RebuildSidebar();
             RebuildQuick();
         });
@@ -239,17 +251,43 @@ public sealed class ShellView : UserControl
             SyncStatusKind.Failed => "同步失败",
             _ => "等待同步",
         };
-        _sidebarSync.Text = _sidebarWidth > Metrics.SidebarTiny ? shortText : "●";
-        _sidebarSync.Foreground = status.Kind == SyncStatusKind.Failed ? Palette.Red : Palette.Accent;
+        _syncSlot.Content = BuildSyncControl(status, shortText);
         var note = Current();
         if (note?.IsQuickSync == true)
             _banner.Text = shortText + (string.IsNullOrWhiteSpace(status.Message) ? "" : " · " + status.Message);
+    }
+
+    /// <summary>排序栏右侧的同步组件：同步中＝文字；否则＝绿色「一键同步」按钮。</summary>
+    private Control BuildSyncControl(SyncStatus status, string shortText)
+    {
+        if (status.Kind == SyncStatusKind.Syncing)
+            return Ui.Text(shortText, 12, null, Palette.Accent);
+
+        if (status.Kind == SyncStatusKind.Failed)
+            return Ui.Text(shortText, 12, null, Palette.Red);
+
+        var button = new Button
+        {
+            Content = "一键同步",
+            Background = Palette.Accent,
+            Foreground = Palette.White,
+            FontSize = 11.5,
+            FontWeight = FontWeight.SemiBold,
+            CornerRadius = new CornerRadius(7),
+            Padding = new Thickness(11, 4),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        button.Click += (_, _) => _ = _session.Sync.QuickSyncAsync();
+        return button;
     }
 
     private void Select(Guid id)
     {
         _richEditor.Flush();
         _selected = id;
+        _showingTodos = false;
         if (_pane is Pane.Todos or Pane.Settings) _pane = Pane.Notes;
         LoadEditor();
         Refresh();
@@ -297,9 +335,11 @@ public sealed class ShellView : UserControl
         _handleGlyph.Text = _sidebarWidth == Metrics.SidebarExpanded ? "<" : ">";
     }
 
-    /// <summary>W-25：取真实百度昵称；失败静默，保留「同笔记」。</summary>
+    /// <summary>W-25：取真实百度昵称；失败静默，保留「同笔记」。仅加载一次。</summary>
     private async Task LoadAccountName()
     {
+        if (_accountNameLoaded) return;
+        _accountNameLoaded = true;
         try
         {
             var token = _session.Pan.CurrentToken;
@@ -307,7 +347,8 @@ public sealed class ShellView : UserControl
             var info = await _session.Pan.UserInfoAsync(token.AccessToken).ConfigureAwait(false);
             var name = info.DisplayName;
             if (string.IsNullOrWhiteSpace(name) || name == "百度网盘用户") name = "同笔记";
-            OnUi(() => _accountName.Text = name);
+            _accountName = name;
+            OnUi(RebuildSidebar);
         }
         catch
         {
@@ -378,9 +419,10 @@ public sealed class ShellView : UserControl
     // ── 任务面板（Mac TodoView.swift 的 1:1 结构） ──────────────────────
     private void ShowTodos()
     {
-        // Mac：只在「进入」任务页时插队拉一次，避免任务变更事件反过来触发无限同步轮次
-        var entered = _pane != Pane.Todos;
-        _pane = Pane.Todos;
+        // Mac：只在「进入」任务页时插队拉一次，避免任务变更事件反过来触发无限同步轮次。
+        // 用户要求：点「快任务」只在编辑窗口显示任务页，笔记列表保持不动（不切 _pane、不隐藏列表）。
+        var entered = !_showingTodos;
+        _showingTodos = true;
         _selected = null;
         if (entered) _ = _session.Sync.QuickSyncAsync();
 
@@ -468,7 +510,12 @@ public sealed class ShellView : UserControl
         Grid.SetRow((Control)page.Children[1], 1);
         Grid.SetRow((Control)page.Children[2], 2);
         _right.Content = page;
-        Refresh();
+        // 首次进入时刷新侧栏与快卡高亮（快任务选中态），笔记列表主体不动
+        if (entered)
+        {
+            RebuildSidebar();
+            RebuildQuick();
+        }
     }
 
     private Control FilterButton(string text, bool all)
@@ -823,18 +870,11 @@ public sealed class ShellView : UserControl
     {
         _sidebar.Children.Clear();
         _sidebar.Margin = new Thickness(_sidebarWidth <= Metrics.SidebarTiny ? 6 : 10, 12, 6, 12);
+        _sidebarBottom.Margin = new Thickness(_sidebarWidth <= Metrics.SidebarTiny ? 6 : 10, 4, _sidebarWidth <= Metrics.SidebarTiny ? 6 : 10, 8);
 
-        _sidebar.Children.Add(Ui.Title(_sidebarWidth <= Metrics.SidebarTiny ? "同" : "同笔记",
-            _sidebarWidth <= Metrics.SidebarTiny ? 14 : 16));
-        var avatar = new Border
-        {
-            Width = 32, Height = 32,
-            CornerRadius = new CornerRadius(16),
-            Background = Palette.Brush(_session.Avatar.Current.Color1),
-            Margin = new Thickness(4, 4, 0, 6),
-            Cursor = new Cursor(StandardCursorType.Hand),
-            Child = Ui.Text(_session.Avatar.Current.Glyph, 14, FontWeight.Bold, Palette.White),
-        };
+        var avatar = Ui.AvatarBadge(_session.Avatar.Current, _sidebarWidth <= Metrics.SidebarTiny ? 24 : 36);
+        avatar.Margin = new Thickness(4, 4, 0, 6);
+        avatar.Cursor = new Cursor(StandardCursorType.Hand);
         avatar.PointerPressed += (_, e) =>
         {
             _ = Dialogs.PickAvatar(this, _session);
@@ -842,15 +882,38 @@ public sealed class ShellView : UserControl
         };
         ToolTip.SetTip(avatar, "点击更换头像 · " + _session.Avatar.Current.Glyph);
 
+        // 齿轮按钮：宽档在账号区右侧、窄/中档在头像下方（Mac accountHeader）
+        var gearIcon = Ui.Icon(Glyphs.Gear, _sidebarWidth == Metrics.SidebarExpanded ? 15 : 14, Palette.TextTertiary);
+        var gearButton = new Button
+        {
+            Content = gearIcon,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Width = 28, Height = 28,
+            Padding = new Thickness(0),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        gearButton.Click += (_, _) => OpenSettings();
+        ToolTip.SetTip(gearButton, "同步与存储设置");
+
         if (_sidebarWidth == Metrics.SidebarExpanded)
         {
-            // PC-B-04：宽档账号区 = 头像 + 真实昵称 + 绿点 + 齿轮（取不到昵称显示「同笔记」）
+            // 宽档账号区 = 头像 + 真实昵称 + 绿点 + 齿轮（取不到昵称显示「同笔记」）
             var account = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
                 Margin = new Thickness(0, 4, 0, 8),
             };
             account.Children.Add(avatar);
+            var accountNameBlock = new TextBlock
+            {
+                Text = _accountName,
+                FontSize = 12,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = Palette.TextPrimary,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
             var details = new StackPanel
             {
                 VerticalAlignment = VerticalAlignment.Center,
@@ -858,71 +921,51 @@ public sealed class ShellView : UserControl
                 Spacing = 2,
                 Children =
                 {
-                    _accountName,
+                    accountNameBlock,
                     Ui.Text("● 已保存到本地", 10, null, Palette.Accent),
                 },
             };
             account.Children.Add(details);
             Grid.SetColumn(details, 1);
-            var gear = Ui.Icon(Glyphs.Gear, 15, Palette.TextSecondary);
-            var gearButton = new Button
-            {
-                Content = gear,
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Width = 28, Height = 28,
-                Padding = new Thickness(0),
-                Cursor = new Cursor(StandardCursorType.Hand),
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            gearButton.Click += (_, _) => OpenSettings();
+            gearButton.VerticalAlignment = VerticalAlignment.Center;
             account.Children.Add(gearButton);
             Grid.SetColumn(gearButton, 2);
             _sidebar.Children.Add(account);
             _ = LoadAccountName();
         }
-        else _sidebar.Children.Add(avatar);
-        _sidebarSync.Margin = new Thickness(4, 0, 0, 8);
-        _sidebarSync.IsVisible = _sidebarWidth > Metrics.SidebarTiny;
-        UpdateSyncLabels();
-        _sidebar.Children.Add(_sidebarSync);
-
+        else
+        {
+            // 窄/中档：头像 + 齿轮（垂直，居中）
+            avatar.Margin = new Thickness(0);
+            var header = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Spacing = 4,
+                Margin = new Thickness(0, 4, 0, 8),
+                Children = { avatar, gearButton },
+            };
+            _sidebar.Children.Add(header);
+        }
         _sidebar.Children.Add(AccentButton(_sidebarWidth == Metrics.SidebarExpanded ? "新建笔记" : "＋", NewNote));
-        _sidebar.Children.Add(SideButton("设置", _pane == Pane.Settings, OpenSettings, glyph: Glyphs.Gear));
 
-        if (_sidebarWidth > Metrics.SidebarTiny) _sidebar.Children.Add(Ui.Section("笔记本"));
-        _sidebar.Children.Add(SideButton("全部笔记", _pane == Pane.Notes && _notebookFilter == null && _tagFilter == null,
+        // groupDivider：新建笔记与「全部笔记」之间的分割线（非宽档，Mac SidebarView groupDivider）
+        if (_sidebarWidth < Metrics.SidebarExpanded) _sidebar.Children.Add(Ui.Divider(marginV: 8));
+        _sidebar.Children.Add(NotebookButton(Notebooks.All,
+            _pane == Pane.Notes && _notebookFilter == null && _tagFilter == null,
             () => { _pane = Pane.Notes; _notebookFilter = null; _tagFilter = null; Refresh(); },
-            _session.Notes.CountInNotebook(Notebooks.All)));
+            _session.Notes.CountInNotebook(Notebooks.All), deletable: false));
 
         foreach (var name in _session.Notebooks.List)
         {
             var notebook = name;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-            var button = SideButton(notebook, _pane == Pane.Notes && _notebookFilter == notebook && _tagFilter == null,
+            _sidebar.Children.Add(NotebookButton(notebook,
+                _pane == Pane.Notes && _notebookFilter == notebook && _tagFilter == null,
                 () => { _pane = Pane.Notes; _notebookFilter = notebook; _tagFilter = null; Refresh(); },
-                _session.Notes.CountInNotebook(notebook));
-            row.Children.Add(button);
-            if (_sidebarWidth == Metrics.SidebarExpanded && _session.Notebooks.Custom.Contains(notebook))
-            {
-                var remove = Ui.Small(Glyphs.Close, async () =>
-                {
-                    var count = _session.Notes.CountInNotebook(notebook);
-                    var yes = await Dialogs.Confirm(this, "删除该笔记本？",
-                        "「" + notebook + "」下的 " + count + " 篇笔记会移动到「全部笔记」，笔记本身不会删除。", "删除笔记本");
-                    if (!yes) return;
-                    _session.Notes.MoveNotes(notebook, Notebooks.All);
-                    _session.Notebooks.Remove(notebook);
-                    if (_notebookFilter == notebook) _notebookFilter = null;
-                });
-                Grid.SetColumn(remove, 1);
-                row.Children.Add(remove);
-            }
-            _sidebar.Children.Add(row);
+                _session.Notes.CountInNotebook(notebook),
+                deletable: _session.Notebooks.Custom.Contains(notebook)));
         }
-
-        if (_sidebarWidth == Metrics.SidebarExpanded) _sidebar.Children.Add(NewNotebookBox());
-        if (_sidebarWidth > Metrics.SidebarTiny) _sidebar.Children.Add(Ui.Section("标签"));
+        // sectionDivider：笔记本与标签之间的分割线（三档，Mac SidebarView sectionDivider）
+        _sidebar.Children.Add(Ui.Divider(marginV: 8));
         var tags = _session.Notes.AllTags;
         if (tags.Count == 0)
         {
@@ -933,9 +976,9 @@ public sealed class ShellView : UserControl
             foreach (var tag in tags)
             {
                 var name = tag;
-                var button = SideButton("#" + name, _tagFilter == name,
+                var button = SideButton(name, _tagFilter == name,
                     () => { _pane = Pane.Notes; _tagFilter = name; _notebookFilter = null; Refresh(); },
-                    _session.Notes.CountWithTag(name));
+                    _session.Notes.CountWithTag(name), glyph: Glyphs.Tag);
                 var menu = new ContextMenu();
                 var remove = new MenuItem { Header = "删除标签" };
                 remove.Click += async (_, _) =>
@@ -950,39 +993,31 @@ public sealed class ShellView : UserControl
             }
         }
 
-        _sidebar.Children.Add(Ui.Divider());
-        _sidebar.Children.Add(SideButton("回收站", _pane == Pane.Trash,
+        // 回收站固定在侧栏底部（不随列表滚动），带图标；「快任务」从侧栏移除
+        _sidebarBottom.Children.Clear();
+        _sidebarBottom.Children.Add(Ui.Divider());
+        _sidebarBottom.Children.Add(SideButton("回收站", _pane == Pane.Trash,
             () => { _pane = Pane.Trash; _notebookFilter = null; _tagFilter = null; Refresh(); },
-            _session.Notes.TrashNotes.Count));
-        _sidebar.Children.Add(SideButton("快任务", _pane == Pane.Todos, ShowTodos,
-            _session.Todos.ActiveCount, _session.Todos.OverdueCount));
+            _session.Notes.TrashNotes.Count, glyph: Glyphs.Trash, ghost: true));
     }
 
-    private Control NewNotebookBox()
+    /// <summary>右键菜单「新建笔记本」：弹出输入框，成功后切到该笔记本。</summary>
+    private async void PromptNewNotebook()
     {
-        var input = new TextBox { Watermark = "新笔记本（≤12 字）", Margin = new Thickness(0, 4, 0, 0), FontSize = 12 };
-        var error = Ui.Text("", 11, null, Palette.Red);
-        error.IsVisible = false;
-        var button = Ui.Small("新建笔记本", () =>
+        var name = await Dialogs.Prompt(this, "新建笔记本", "输入笔记本名称（≤12 字）", "新笔记本（≤12 字）");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var message = _session.Notebooks.Add(name);
+        if (message == null)
         {
-            var name = input.Text ?? "";
-            var message = _session.Notebooks.Add(name);
-            if (message == null)
-            {
-                input.Text = "";
-                error.IsVisible = false;
-                _pane = Pane.Notes;
-                _notebookFilter = name.Trim();
-                _tagFilter = null;
-                Refresh();
-            }
-            else
-            {
-                error.Text = message;
-                error.IsVisible = true;
-            }
-        });
-        return new StackPanel { Spacing = 4, Children = { input, button, error } };
+            _pane = Pane.Notes;
+            _notebookFilter = name.Trim();
+            _tagFilter = null;
+            Refresh();
+        }
+        else
+        {
+            await Dialogs.Confirm(this, "无法新建笔记本", message, "知道了", "取消", danger: false);
+        }
     }
 
     private void RebuildQuick()
@@ -991,23 +1026,64 @@ public sealed class ShellView : UserControl
         _quick.IsVisible = _pane == Pane.Notes;
         if (_pane != Pane.Notes) return;
 
+        _quick.Children.Add(QuickToggle());
+        if (!_quickExpanded) return;
+
         _quick.Children.Add(QuickCard("快同步", "多设备共享 · 一处编辑处处可见", _selected == Note.QuickSyncNoteId,
-            () => { _pane = Pane.Notes; Select(Note.QuickSyncNoteId); }, 0, 0));
+            () => { _pane = Pane.Notes; Select(Note.QuickSyncNoteId); }, 0, 0, Glyphs.Cloud));
         _quick.Children.Add(QuickCard("快任务",
             $"待完成 {_session.Todos.PendingCount} · 进行中 {_session.Todos.DoingCount}",
-            _pane == Pane.Todos, ShowTodos, _session.Todos.ActiveCount, _session.Todos.OverdueCount));
+            _showingTodos, ShowTodos, _session.Todos.ActiveCount, _session.Todos.OverdueCount, Glyphs.Check));
+        // 快任务与第一篇笔记之间的分割线（_quick 已含 12px 左右边距，这里不再重复）
+        var divider = Ui.Hairline();
+        _quick.Children.Add(divider);
+    }
+
+    /// <summary>「线 - 收起/展开图标 - 线」分组头（Mac quickEntriesToggle）。</summary>
+    private Control QuickToggle()
+    {
+        var chevron = Ui.Icon(_quickExpanded ? Glyphs.ChevronUp : Glyphs.ChevronDown, 9, Palette.TextQuaternary);
+        var button = new Button
+        {
+            Content = chevron,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(5, 0),
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        button.Click += (_, _) =>
+        {
+            _quickExpanded = !_quickExpanded;
+            RebuildQuick();
+        };
+        ToolTip.SetTip(button, _quickExpanded ? "收起快同步与快任务" : "展开快同步与快任务");
+
+        var left = Ui.Hairline();
+        left.VerticalAlignment = VerticalAlignment.Center;
+        var right = Ui.Hairline();
+        right.VerticalAlignment = VerticalAlignment.Center;
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,*") };
+        row.Children.Add(left);
+        Grid.SetColumn(button, 1);
+        row.Children.Add(button);
+        Grid.SetColumn(right, 2);
+        row.Children.Add(right);
+        return row;
     }
 
     private void RebuildSort()
     {
         _sortRow.Children.Clear();
         _sortRow.IsVisible = _pane is Pane.Notes or Pane.Trash;
-        AddSort("最近更新", SortMode.Updated);
-        AddSort("按创建", SortMode.Created);
-        AddSort("按标题", SortMode.Title);
+        AddSort("最近更新", SortMode.Updated, 0);
+        AddSort("按创建", SortMode.Created, 1);
+        AddSort("按标题", SortMode.Title, 2);
+        // 同步进度移到排序条件之后（最右，Mac filterBar 的 syncButton 位置）
+        Grid.SetColumn(_syncSlot, 4);
+        _sortRow.Children.Add(_syncSlot);
     }
 
-    private void AddSort(string label, SortMode mode)
+    private void AddSort(string label, SortMode mode, int column)
     {
         var active = _sort == mode;
         var text = Ui.Text(label, 12, active ? FontWeight.SemiBold : null,
@@ -1020,7 +1096,9 @@ public sealed class ShellView : UserControl
             BorderThickness = new Thickness(0, 0, 0, active ? 2 : 0),
             BorderBrush = Palette.Accent,
             Padding = new Thickness(0, 0, 0, 3),
+            Margin = new Thickness(0, 0, 14, 0),
         };
+        Grid.SetColumn(wrap, column);
         _sortRow.Children.Add(wrap);
     }
 
@@ -1063,7 +1141,7 @@ public sealed class ShellView : UserControl
                 BorderBrush = selected ? Palette.CardSelectedBorder : Palette.Transparent,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(Metrics.RadiusCard),
-                Margin = new Thickness(6, 2),
+                Margin = new Thickness(12, 4),
                 Padding = new Thickness(Metrics.CardPadding, 10),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 Child = new StackPanel { Spacing = 4, Children = { titleRow, snippet, metaRow } },
@@ -1108,6 +1186,10 @@ public sealed class ShellView : UserControl
             }
             card.ContextMenu = menu;
             _cards.Children.Add(card);
+            // 每条笔记下方 1pt 发丝线（Mac noteDivider：#EFEFF2，含最后一篇）
+            var divider = Ui.Hairline();
+            divider.Margin = new Thickness(12, 0, 12, 0);
+            _cards.Children.Add(divider);
         }
     }
 
@@ -1377,15 +1459,20 @@ public sealed class ShellView : UserControl
     // ── 通用控件 ───────────────────────────────────────────────────────
     private Button AccentButton(string text, Action click)
     {
+        var expanded = _sidebarWidth == Metrics.SidebarExpanded;
         var tiny = _sidebarWidth <= Metrics.SidebarTiny;
-        var plus = Ui.Icon(Glyphs.Plus, 16, Palette.White);
-        Control content = tiny ? plus : new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Children = { plus, Ui.Text(text, 13, FontWeight.SemiBold, Palette.White) },
-        };
+        // Mac newNoteButton：宽档＝全宽圆角条「＋ 新建笔记」；窄/中档＝圆形（44）
+        var plus = Ui.Icon(Glyphs.Plus, expanded ? 13 : tiny ? 12 : 18, Palette.White);
+        Control content = expanded
+            ? new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { plus, Ui.Text(text, 13, FontWeight.SemiBold, Palette.White) },
+            }
+            : plus;
+        var size = tiny ? 24 : 44;
         var button = new Button
         {
             Content = content,
@@ -1393,11 +1480,12 @@ public sealed class ShellView : UserControl
             Foreground = Palette.White,
             FontWeight = FontWeight.SemiBold,
             FontSize = 13,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = expanded ? HorizontalAlignment.Stretch : HorizontalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            CornerRadius = new CornerRadius(tiny ? 17 : Metrics.RadiusCard),
-            Width = tiny ? 34 : double.NaN,
-            Height = 34,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(expanded ? Metrics.RadiusCard : size / 2),
+            Width = expanded ? double.NaN : size,
+            Height = expanded ? 34 : size,
             Margin = new Thickness(0, 4, 0, 8),
             Cursor = new Cursor(StandardCursorType.Hand),
         };
@@ -1406,21 +1494,22 @@ public sealed class ShellView : UserControl
     }
 
     private Button SideButton(string text, bool selected, Action click, int? count = null,
-        int? badge = null, string? glyph = null)
+        int? badge = null, string? glyph = null, bool iconOnly = false, bool ghost = false)
     {
         var tiny = _sidebarWidth <= Metrics.SidebarTiny;
         var label = tiny && glyph == null ? text[..1].ToString()
             : count == null ? text : $"{text}  {count}";
         var fg = selected ? Palette.AccentHover : Palette.TextSecondary;
-        var icon = glyph == null ? null : Ui.Icon(glyph, tiny ? 18 : 15, fg);
+        var iconColor = selected ? Palette.Accent : Palette.TextTertiary;
+        var icon = glyph == null ? null : Ui.Icon(glyph, tiny ? 15 : 17, iconColor);
         var button = new Button
         {
-            Background = selected ? Palette.AccentTint : Brushes.Transparent,
+            Background = (selected && !ghost) ? Palette.AccentTint : Brushes.Transparent,
             Foreground = fg,
             BorderThickness = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = _sidebarWidth == Metrics.SidebarExpanded
-                ? HorizontalAlignment.Left : HorizontalAlignment.Center,
+            HorizontalContentAlignment = iconOnly || _sidebarWidth != Metrics.SidebarExpanded
+                ? HorizontalAlignment.Center : HorizontalAlignment.Left,
             CornerRadius = new CornerRadius(_sidebarWidth == Metrics.SidebarExpanded ? 7 : Metrics.RadiusCard),
             Padding = new Thickness(8, 7),
             FontSize = tiny ? Metrics.FontSidebarTiny
@@ -1435,7 +1524,12 @@ public sealed class ShellView : UserControl
             },
         };
 
-        if (badge is > 0 && !tiny)
+        TextBlock? labelBlock = null;
+        if (iconOnly)
+        {
+            button.Content = icon;
+        }
+        else if (badge is > 0 && !tiny)
         {
             var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             grid.Children.Add(Ui.Text(label, 12, selected ? FontWeight.SemiBold : null, fg));
@@ -1447,17 +1541,31 @@ public sealed class ShellView : UserControl
         }
         else if (icon != null && !tiny)
         {
+            labelBlock = Ui.Text(label, 12, selected ? FontWeight.SemiBold : null, fg);
             button.Content = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 9,
-                Children = { icon, Ui.Text(label, 12, selected ? FontWeight.SemiBold : null, fg) },
+                Children = { icon, labelBlock },
             };
         }
         else if (icon != null) button.Content = icon;
         else button.Content = Ui.Text(label, button.FontSize, selected ? FontWeight.SemiBold : null, fg);
 
-        if (!selected)
+        if (ghost)
+        {
+            // 无背景变体：hover / 选中只让文字与图标变绿，不给底色块
+            var ic = icon;
+            var lbl = labelBlock;
+            void TintGhost(IBrush brush)
+            {
+                if (ic != null) Icons.Tint(ic, brush);
+                if (lbl != null) lbl.Foreground = brush;
+            }
+            button.PointerEntered += (_, _) => TintGhost(Palette.AccentHover);
+            button.PointerExited += (_, _) => TintGhost(selected ? Palette.AccentHover : Palette.TextSecondary);
+        }
+        else if (!selected)
         {
             button.PointerEntered += (_, _) => button.Background = Palette.SidebarHover;
             button.PointerExited += (_, _) => button.Background = Brushes.Transparent;
@@ -1469,8 +1577,132 @@ public sealed class ShellView : UserControl
         return button;
     }
 
+    /// <summary>笔记本按名称映射专属图标（对应 Mac notebookIcon 语义）；未匹配的自定义笔记本用默认文件夹。</summary>
+    private static string NotebookIcon(string name) => name switch
+    {
+        "工作日志" => Glyphs.Pencil,
+        "读书笔记" => Glyphs.BookClosed,
+        "投资研究" => Glyphs.Chart,
+        "灵感速记" => Glyphs.Bulb,
+        _ => Glyphs.Folder,
+    };
+
+    /// <summary>笔记本条目：名称/图标居左、数量居右，无背景，hover/选中只让图标与文字变绿；右键菜单「新建笔记本 / 删除笔记本」。</summary>
+    private Button NotebookButton(string name, bool selected, Action click, int count, bool deletable)
+    {
+        var tiny = _sidebarWidth <= Metrics.SidebarTiny;
+        var wide = _sidebarWidth == Metrics.SidebarExpanded;
+        var nameColor = selected ? Palette.AccentHover : Palette.TextSecondary;
+        var iconGlyph = name == Notebooks.All ? Glyphs.Tray : NotebookIcon(name);
+        var icon = Ui.Icon(iconGlyph, tiny ? 14 : 13, selected ? Palette.Accent : Palette.TextTertiary);
+        var nameBlock = Ui.Text(name, tiny ? Metrics.FontSidebarTiny : wide ? Metrics.FontSidebarWide : Metrics.FontSidebarCompact,
+            selected ? FontWeight.SemiBold : null, nameColor);
+        nameBlock.TextTrimming = TextTrimming.CharacterEllipsis;
+
+        Control content;
+        if (tiny)
+        {
+            content = icon; // 极窄档只显示图标
+        }
+        else if (wide)
+        {
+            var left = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 9,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Children = { icon, nameBlock },
+            };
+            var countBlock = Ui.Text(count.ToString(), 11, null, Palette.TextQuaternary);
+            countBlock.VerticalAlignment = VerticalAlignment.Center;
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            grid.Children.Add(left);
+            Grid.SetColumn(countBlock, 1);
+            grid.Children.Add(countBlock);
+            content = grid;
+        }
+        else
+        {
+            // 标准档：图标在上、文案在下
+            nameBlock.HorizontalAlignment = HorizontalAlignment.Center;
+            nameBlock.TextAlignment = TextAlignment.Center;
+            content = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 3,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { icon, nameBlock },
+            };
+        }
+
+        var button = new Button
+        {
+            Content = content,
+            Background = selected ? Palette.AccentTint : Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = wide ? HorizontalAlignment.Stretch : HorizontalAlignment.Center,
+            CornerRadius = new CornerRadius(wide ? 7 : Metrics.RadiusCard),
+            Padding = new Thickness(wide ? 4 : 8, 7),
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        button.Transitions = new Avalonia.Animation.Transitions
+        {
+            new Avalonia.Animation.BrushTransition
+            {
+                Property = Button.BackgroundProperty, Duration = System.TimeSpan.FromMilliseconds(120),
+            },
+        };
+
+        // 选中＝浅绿底 + 图标主题绿 + 文字深绿；hover＝浅灰底 + 变绿
+        void Tint(IBrush iconBrush, IBrush nameBrush)
+        {
+            Icons.Tint(icon, iconBrush);
+            nameBlock.Foreground = nameBrush;
+        }
+        button.PointerEntered += (_, _) =>
+        {
+            if (!selected) button.Background = Palette.SidebarHover;
+            Tint(Palette.Accent, Palette.AccentHover);
+        };
+        button.PointerExited += (_, _) =>
+        {
+            button.Background = selected ? Palette.AccentTint : Brushes.Transparent;
+            Tint(selected ? Palette.Accent : Palette.TextTertiary,
+                 selected ? Palette.AccentHover : Palette.TextSecondary);
+        };
+        button.Click += (_, _) => click();
+
+        // 右键菜单：新建笔记本 / 删除笔记本（Mac SidebarView.swift:372-378）
+        var menu = new ContextMenu();
+        var addItem = new MenuItem { Header = "新建笔记本" };
+        addItem.Click += (_, _) => PromptNewNotebook();
+        menu.Items.Add(addItem);
+        if (deletable)
+        {
+            var delItem = new MenuItem { Header = "删除笔记本" };
+            delItem.Click += async (_, _) =>
+            {
+                var cnt = _session.Notes.CountInNotebook(name);
+                var yes = await Dialogs.Confirm(this, "删除该笔记本？",
+                    "「" + name + "」下的 " + cnt + " 篇笔记会移动到「全部笔记」，笔记本身不会删除。", "删除笔记本");
+                if (!yes) return;
+                _session.Notes.MoveNotes(name, Notebooks.All);
+                _session.Notebooks.Remove(name);
+                if (_notebookFilter == name) _notebookFilter = null;
+                Refresh();
+            };
+            menu.Items.Add(delItem);
+        }
+        button.ContextMenu = menu;
+
+        if (_sidebarWidth < Metrics.SidebarExpanded)
+            ToolTip.SetTip(button, name + " · " + count + " 篇笔记");
+        return button;
+    }
+
     private static Control QuickCard(string title, string subtitle, bool selected, Action click,
-        int pending = 0, int overdue = 0)
+        int pending = 0, int overdue = 0, string? icon = null)
     {
         var text = new StackPanel
         {
@@ -1481,18 +1713,46 @@ public sealed class ShellView : UserControl
                 Ui.Text(subtitle, 11, null, Palette.TextTertiary),
             },
         };
-        var badges = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Top };
+        var badges = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         if (pending > 0) badges.Children.Add(Ui.Badge(pending, red: false));
         if (overdue > 0) badges.Children.Add(Ui.Badge(overdue));
-        Control content = text;
+        Control trailing = text;
         if (badges.Children.Count > 0)
         {
             var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             grid.Children.Add(text);
             Grid.SetColumn(badges, 1);
             grid.Children.Add(badges);
-            content = grid;
+            trailing = grid;
         }
+        // Mac .quick .qi：34px 圆形 + 主题色矢量图标（无底色，仅图标）
+        Control content = trailing;
+        if (!string.IsNullOrEmpty(icon))
+        {
+            var badge = new Border
+            {
+                Width = 34, Height = 34,
+                CornerRadius = new CornerRadius(17),
+                Background = Brushes.Transparent,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = Ui.Icon(icon, 18, Palette.Accent),
+            };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+            row.Children.Add(badge);
+            Grid.SetColumn(trailing, 1);
+            trailing.Margin = new Thickness(10, 0, 0, 0);
+            row.Children.Add(trailing);
+            content = row;
+        }
+        // 右侧尖括号（Mac .quick .chev）：加大并加深，确保无背景、清晰可见
+        var chevron = Ui.Icon(Glyphs.ChevronRight, 11, Palette.TextSecondary);
+        chevron.VerticalAlignment = VerticalAlignment.Center;
+        chevron.Margin = new Thickness(4, 0, 0, 0);
+        var chevRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        chevRow.Children.Add(content);
+        Grid.SetColumn(chevron, 1);
+        chevRow.Children.Add(chevron);
+        content = chevRow;
         var card = new Border
         {
             Background = selected ? Palette.CardSelected : Palette.WindowBg,

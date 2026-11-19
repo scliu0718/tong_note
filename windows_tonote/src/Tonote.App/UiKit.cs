@@ -22,13 +22,21 @@ public static class Glyphs
     public const string ChevronLeft = "‹";
     public const string ChevronRight = "›";
     public const string ChevronDown = "⌄";
+    public const string ChevronUp = "⌃";
     public const string More = "⋯";
 
     public const string Gear = "⚙";
     public const string Trash = "⌫";
     public const string Pin = "◆";
     public const string Book = "▤";
+    public const string Folder = "▧";
+    public const string Tray = "▦";
     public const string Tag = "🔖";
+    // 笔记本按名称映射的专属图标（对应 Mac notebookIcon 的语义）
+    public const string Pencil = "✏";
+    public const string BookClosed = "📕";
+    public const string Chart = "📈";
+    public const string Bulb = "💡";
     public const string Note = "✎";
     public const string Cloud = "☁";
     public const string Clock = "◷";
@@ -117,25 +125,56 @@ public static class Ui
         Foreground = Palette.TextPrimary,
     };
 
+    /// <summary>圆形渐变头像徽标，与 Mac AvatarBadge 1:1（渐变 + 白色字形居中）。</summary>
+    public static Border AvatarBadge(AvatarPreset preset, double size)
+    {
+        var glyph = new TextBlock
+        {
+            Text = preset.Glyph,
+            FontSize = size * 0.42,
+            FontWeight = FontWeight.Bold,
+            Foreground = Palette.White,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+        };
+        return new Border
+        {
+            Width = size,
+            Height = size,
+            CornerRadius = new CornerRadius(size / 2),
+            Background = Palette.AvatarGradient(preset.Color1, preset.Color2),
+            Child = glyph,
+        };
+    }
+
     // ── 按钮 ──────────────────────────────────────────────────────────
-    public static Button Primary(string text, Action click, double size = 12) =>
-        Styled(text, click, Palette.Accent, Palette.White, null, size);
+    public static Button Primary(string text, Action click, double size = 12, string? icon = null) =>
+        Styled(text, click, Palette.Accent, Palette.White, null, size, icon);
 
     public static Button Ghost(string text, Action click, double size = 12) =>
         Styled(text, click, Palette.Panel, Palette.TextSecondary, Palette.Line, size);
 
-    public static Button Danger(string text, Action click, double size = 12) =>
-        Styled(text, click, Palette.Panel, Palette.Red, Palette.DangerBorder, size);
+    public static Button Danger(string text, Action click, double size = 12, string? icon = null) =>
+        Styled(text, click, Palette.Panel, Palette.Red, Palette.DangerBorder, size, icon);
 
     public static Button DangerFill(string text, Action click, double size = 12) =>
         Styled(text, click, Palette.Red, Palette.White, null, size);
 
     private static Button Styled(string text, Action click, IBrush background, IBrush foreground,
-        IBrush? border, double size)
+        IBrush? border, double size, string? icon = null)
     {
+        Control content = string.IsNullOrEmpty(icon)
+            ? Text(text, size, FontWeight.SemiBold, foreground)
+            : new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                Children = { Icon(icon, size, foreground), Text(text, size, FontWeight.SemiBold, foreground) },
+            };
         var button = new Button
         {
-            Content = text,
+            Content = content,
             FontSize = size,
             FontWeight = FontWeight.SemiBold,
             Foreground = foreground,

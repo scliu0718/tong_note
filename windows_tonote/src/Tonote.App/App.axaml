@@ -83,6 +83,16 @@
       <Setter Property="SelectionBrush" Value="#CFE9D9" />
       <Setter Property="SelectionForegroundBrush" Value="#1D1D1F" />
     </Style>
+    <!-- FluentTheme 的 :focus 会给 TextBox 加 2px 深灰边框，这里彻底压掉 -->
+    <Style Selector="TextBox:focus">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
     <Style Selector="ComboBox">
       <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
       <Setter Property="BorderThickness" Value="0" />

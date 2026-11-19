@@ -22,6 +22,18 @@ public static class Palette
         (byte)((hex >> 8) & 0xFF),
         (byte)(hex & 0xFF)));
 
+    /// <summary>头像渐变（Mac AvatarBadge：LinearGradient topLeading → bottomTrailing）。</summary>
+    public static IBrush AvatarGradient(uint color1, uint color2) => new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+        GradientStops =
+        {
+            new GradientStop(Rgb(color1), 0),
+            new GradientStop(Rgb(color2), 1),
+        },
+    };
+
     // ── 基础背景与文字（Theme.swift:16-23） ──────────────────────────────
     public static IBrush Bg { get; } = Brush(0xE9E9EC);
     public static IBrush WindowBg { get; } = Brush(0xF5F5F7);
@@ -103,7 +115,7 @@ public static class Palette
     });
 
     // ── 精致化补充令牌 ──────────────────────────────────────────────────
-    public static IBrush FieldFocusRing { get; } = Brush(0xCFE9D9);
+    public static IBrush FieldFocusRing { get; } = Brush(0x1A9E5C);
     public static IBrush ScrollThumb { get; } = Brush(0xC9CCD4);
     public static IBrush CardHoverBorder { get; } = Brush(0xE8E8EC);
 }
@@ -116,13 +128,13 @@ public static class Metrics
     public const double WindowHeight = 700;
     public const double WindowMinWidth = 960;
     public const double WindowMinHeight = 620;
-    public const double SidebarTiny = 52;
-    public const double SidebarCompact = 112;
+    public const double SidebarTiny = 50;
+    public const double SidebarCompact = 146;
     public const double SidebarExpanded = 200;
     public const double SidebarHandle = 6;
     public const double NoteListWidth = 292;
-    public const double SidebarThresholdTiny = 82;
-    public const double SidebarThresholdCompact = 156;
+    public const double SidebarThresholdTiny = 98;
+    public const double SidebarThresholdCompact = 173;
 
     // 字号
     public const double FontTitle = 22;
