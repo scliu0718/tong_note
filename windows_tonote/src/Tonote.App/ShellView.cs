@@ -71,12 +71,19 @@ public sealed class ShellView : UserControl
     private readonly StackPanel _tags = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
     private readonly TextBox _tagInput = new() { Watermark = "添加标签", Width = 120, FontSize = 12 };
     private readonly StackPanel _metaRow = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-    private readonly TextBlock _handleGlyph = new()
+    // 分隔条箭头：5×12 的矢量折线，夹角约 118°（比字符「>」更平），左右各 1px 白边正好撑满 7px 宽的分隔区
+    private static readonly Geometry HandleRight = Geometry.Parse("M1,1 L4,6 L1,11");
+    private static readonly Geometry HandleLeft = Geometry.Parse("M4,1 L1,6 L4,11");
+    private readonly Avalonia.Controls.Shapes.Path _handleGlyph = new()
     {
-        Text = ">", HorizontalAlignment = HorizontalAlignment.Center,
+        Data = HandleRight,
+        Width = 5, Height = 12,
+        Stroke = Palette.TextTertiary, StrokeThickness = 1.2,
+        StrokeLineCap = PenLineCap.Round, StrokeJoin = PenLineJoin.Round,
+        HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,
-        Foreground = Palette.TextTertiary, FontSize = 12,
     };
+    private void SetHandleGlyph(bool left) => _handleGlyph.Data = left ? HandleLeft : HandleRight;
     private readonly Border _handle;
     private readonly Button _pinButton;
     private readonly Button _trashButton;
@@ -172,7 +179,8 @@ public sealed class ShellView : UserControl
         Grid.SetRow(_quick, 2);
         Grid.SetRow(cardsScroll, 3);
 
-        var sidebarScroll = new ScrollViewer { Content = _sidebar };
+        var sidebarScroll = new ScrollViewer { Content = _sidebar, AllowAutoHide = false };
+        sidebarScroll.Classes.Add("slim");
         var sidebarPanel = new Grid
         {
             RowDefinitions = new RowDefinitions("*,Auto"),
@@ -332,7 +340,7 @@ public sealed class ShellView : UserControl
             : note.IsQuickSync
                 ? "快同步：点「立即同步本篇」只把这一篇推到网盘，不阻塞其它笔记。"
                 : "正文自动保存到本机并同步到网盘。工具条支持标题、加粗、颜色、列表、链接、图片和表格。";
-        _handleGlyph.Text = _sidebarWidth == Metrics.SidebarExpanded ? "<" : ">";
+        SetHandleGlyph(_sidebarWidth == Metrics.SidebarExpanded);
     }
 
     /// <summary>W-25：取真实百度昵称；失败静默，保留「同笔记」。仅加载一次。</summary>
@@ -883,17 +891,19 @@ public sealed class ShellView : UserControl
         ToolTip.SetTip(avatar, "点击更换头像 · " + _session.Avatar.Current.Glyph);
 
         // 齿轮按钮：宽档在账号区右侧、窄/中档在头像下方（Mac accountHeader）
-        var gearIcon = Ui.Icon(Glyphs.Gear, _sidebarWidth == Metrics.SidebarExpanded ? 15 : 14, Palette.TextTertiary);
+        var gearIcon = Ui.Icon(Glyphs.Gear, _sidebarWidth == Metrics.SidebarExpanded ? 22 : 20, Palette.TextTertiary);
         var gearButton = new Button
         {
             Content = gearIcon,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Width = 28, Height = 28,
+            Width = 32, Height = 32,
             Padding = new Thickness(0),
             Cursor = new Cursor(StandardCursorType.Hand),
             HorizontalAlignment = HorizontalAlignment.Center,
         };
+        gearButton.PointerEntered += (_, _) => Icons.Tint(gearIcon, Palette.Accent);
+        gearButton.PointerExited += (_, _) => Icons.Tint(gearIcon, Palette.TextTertiary);
         gearButton.Click += (_, _) => OpenSettings();
         ToolTip.SetTip(gearButton, "同步与存储设置");
 
@@ -1401,21 +1411,47 @@ public sealed class ShellView : UserControl
     // ── 侧栏三档吸附与分隔条 ───────────────────────────────────────────
     private Border BuildHandle()
     {
+        // 竖线（3 宽，聚焦时变浅绿）居中，「>」小块叠在线上，左右白边各 1
+        var line = new Border
+        {
+            Width = 3,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Background = Palette.SidebarBg,
+        };
         var handle = new Border
         {
             Background = Palette.SidebarBg,
             Cursor = new Cursor(StandardCursorType.SizeWestEast),
-            Child = new Border
+            Child = new Grid
             {
-                Width = 16, Height = 18,
-                Background = Palette.Panel,
-                Child = _handleGlyph,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    line,
+                    new Border
+                    {
+                        Padding = new Thickness(1, 0),
+                        Height = 18,
+                        Background = Palette.Panel,
+                        Child = _handleGlyph,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        IsHitTestVisible = false,
+                    },
+                },
             },
         };
-        handle.PointerEntered += (_, _) => handle.Background = Palette.Accent;
-        handle.PointerExited += (_, _) => { if (!_dragging) handle.Background = Palette.SidebarBg; };
+        // 聚焦色：主题绿再浅一半（与白色 50% 混合）
+        var hoverBrush = new SolidColorBrush(Color.Parse("#8CCEAD"));
+        // 整个分隔区域（全高、全宽）聚焦时底色再浅一半，中间 3px 竖线保持浅绿
+        var areaBrush = new SolidColorBrush(Color.Parse("#F5F5F5")); // 灰度 4%
+        void Hover(bool on)
+        {
+            handle.Background = areaBrush; // 常态与聚焦都是灰白
+            line.Background = on ? hoverBrush : areaBrush;
+        }
+        Hover(false);
+        handle.PointerEntered += (_, _) => Hover(true);
+        handle.PointerExited += (_, _) => { if (!_dragging) Hover(false); };
         handle.PointerPressed += (_, e) =>
         {
             _dragging = true; _didSwitch = false;
@@ -1439,7 +1475,7 @@ public sealed class ShellView : UserControl
             var moved = _didSwitch;
             _dragging = false;
             e.Pointer.Capture(null);
-            handle.Background = Palette.SidebarBg;
+            Hover(false);
             if (!moved)
                 SetSidebar(_sidebarWidth == Metrics.SidebarTiny ? (int)Metrics.SidebarCompact
                     : _sidebarWidth == Metrics.SidebarCompact ? (int)Metrics.SidebarExpanded
@@ -1452,7 +1488,7 @@ public sealed class ShellView : UserControl
     {
         _sidebarWidth = width;
         if (Content is Grid grid) grid.ColumnDefinitions[0].Width = new GridLength(width);
-        _handleGlyph.Text = width == Metrics.SidebarExpanded ? "<" : ">";
+        SetHandleGlyph(width == Metrics.SidebarExpanded);
         RebuildSidebar();
     }
 
@@ -1539,6 +1575,27 @@ public sealed class ShellView : UserControl
             grid.Children.Add(chip);
             button.Content = grid;
         }
+        else if (icon != null && !tiny && count != null)
+        {
+            // 标准/宽档：图标 + 名称居左，数量居右，撑满整行
+            labelBlock = Ui.Text(text, 12, selected ? FontWeight.SemiBold : null, fg);
+            labelBlock.TextTrimming = TextTrimming.CharacterEllipsis;
+            var left = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 9,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Children = { icon, labelBlock },
+            };
+            var countBlock = Ui.Text(count.Value.ToString(), 11, null, Palette.TextQuaternary);
+            countBlock.VerticalAlignment = VerticalAlignment.Center;
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            grid.Children.Add(left);
+            Grid.SetColumn(countBlock, 1);
+            grid.Children.Add(countBlock);
+            button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            button.Content = grid;
+        }
         else if (icon != null && !tiny)
         {
             labelBlock = Ui.Text(label, 12, selected ? FontWeight.SemiBold : null, fg);
@@ -1591,11 +1648,12 @@ public sealed class ShellView : UserControl
     private Button NotebookButton(string name, bool selected, Action click, int count, bool deletable)
     {
         var tiny = _sidebarWidth <= Metrics.SidebarTiny;
-        var wide = _sidebarWidth == Metrics.SidebarExpanded;
+        var expandedFont = _sidebarWidth == Metrics.SidebarExpanded;
+        var wide = expandedFont; // 仅宽档：名称居左、数量居右；标准档为上下结构
         var nameColor = selected ? Palette.AccentHover : Palette.TextSecondary;
         var iconGlyph = name == Notebooks.All ? Glyphs.Tray : NotebookIcon(name);
-        var icon = Ui.Icon(iconGlyph, tiny ? 14 : 13, selected ? Palette.Accent : Palette.TextTertiary);
-        var nameBlock = Ui.Text(name, tiny ? Metrics.FontSidebarTiny : wide ? Metrics.FontSidebarWide : Metrics.FontSidebarCompact,
+        var icon = Ui.Icon(iconGlyph, tiny ? 14 : wide ? 13 : 17, selected ? Palette.Accent : Palette.TextTertiary);
+        var nameBlock = Ui.Text(name, tiny ? Metrics.FontSidebarTiny : expandedFont ? Metrics.FontSidebarWide : Metrics.FontSidebarCompact,
             selected ? FontWeight.SemiBold : null, nameColor);
         nameBlock.TextTrimming = TextTrimming.CharacterEllipsis;
 
@@ -1680,6 +1738,22 @@ public sealed class ShellView : UserControl
         menu.Items.Add(addItem);
         if (deletable)
         {
+            var renameItem = new MenuItem { Header = "修改笔记本" };
+            renameItem.Click += async (_, _) =>
+            {
+                var newName = await Dialogs.Prompt(this, "修改笔记本", "输入新的笔记本名称（≤12 字）", "笔记本名称（≤12 字）", name);
+                if (string.IsNullOrWhiteSpace(newName) || newName.Trim() == name) return;
+                var err = _session.Notebooks.Rename(name, newName);
+                if (err != null)
+                {
+                    await Dialogs.Confirm(this, "无法修改笔记本", err, "知道了", "取消", danger: false);
+                    return;
+                }
+                _session.Notes.MoveNotes(name, newName.Trim());
+                if (_notebookFilter == name) _notebookFilter = newName.Trim();
+                Refresh();
+            };
+            menu.Items.Add(renameItem);
             var delItem = new MenuItem { Header = "删除笔记本" };
             delItem.Click += async (_, _) =>
             {

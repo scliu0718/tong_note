@@ -41,6 +41,32 @@ public sealed class NotebookStore
         return null;
     }
 
+    /// <summary>重命名自建笔记本（保持原位置）；成功返回 null，否则返回错误信息。笔记归属需由调用方迁移。</summary>
+    public string? Rename(string oldName, string newName)
+    {
+        var trimmed = newName.Trim();
+        var index = Custom.IndexOf(oldName);
+        if (index < 0)
+            return "只能修改手动创建的笔记本";
+        if (trimmed == oldName)
+            return null;
+        if (trimmed.Length == 0)
+            return "笔记本名称不能为空";
+        if (trimmed == Notebooks.All)
+            return "「全部笔记」是内置项，不能用作笔记本名称";
+        if (List.Contains(trimmed))
+            return "该笔记本已存在";
+        if (new StringInfo(trimmed).LengthInTextElements > Notebooks.MaxNameLength)
+            return $"笔记本名称最多 {Notebooks.MaxNameLength} 个字";
+
+        Custom[index] = trimmed;
+        if (!Removed.Contains(oldName))
+            Removed.Add(oldName);
+        Removed.RemoveAll(item => item == trimmed);
+        Persist(dirty: true);
+        return null;
+    }
+
     public void Remove(string name)
     {
         if (name == Notebooks.All || !Custom.Contains(name))

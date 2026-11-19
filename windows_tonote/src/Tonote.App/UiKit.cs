@@ -29,8 +29,9 @@ public static class Glyphs
     public const string Trash = "⌫";
     public const string Pin = "◆";
     public const string Book = "▤";
-    public const string Folder = "▧";
-    public const string Tray = "▦";
+    // 注意：Icons 字典以字符串值为键，常量值必须互不相同（Folder 曾与 Image 都是 ▧，Tray 曾与 Table 都是 ▦，互相覆盖）
+    public const string Folder = "▨";
+    public const string Tray = "▥";
     public const string Tag = "🔖";
     // 笔记本按名称映射的专属图标（对应 Mac notebookIcon 的语义）
     public const string Pencil = "✏";

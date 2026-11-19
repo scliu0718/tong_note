@@ -128,13 +128,13 @@ public static class Metrics
     public const double WindowHeight = 700;
     public const double WindowMinWidth = 960;
     public const double WindowMinHeight = 620;
-    public const double SidebarTiny = 50;
-    public const double SidebarCompact = 146;
-    public const double SidebarExpanded = 200;
-    public const double SidebarHandle = 6;
+    public const double SidebarTiny = 48;
+    public const double SidebarCompact = 130;
+    public const double SidebarExpanded = 178;
+    public const double SidebarHandle = 7;
     public const double NoteListWidth = 292;
-    public const double SidebarThresholdTiny = 98;
-    public const double SidebarThresholdCompact = 173;
+    public const double SidebarThresholdTiny = 89;      // (48 + 130) / 2
+    public const double SidebarThresholdCompact = 154;  // (130 + 178) / 2
 
     // 字号
     public const double FontTitle = 22;

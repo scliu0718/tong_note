@@ -76,7 +76,42 @@ public partial class MainWindow : Window
             if (_session.IsSignedIn) _ = _session.Sync.QuickSyncAsync();
         };
         Deactivated += (_, _) => FlushForShutdown();
-        Opened += (_, _) => RestoreGeometry();
+        Opened += (_, _) =>
+        {
+            RestoreGeometry();
+            HideTitleBarIcon();
+        };
+    }
+
+    // 标题栏左上角只显示应用名称：把「小图标」换成全透明图标；
+    // 任务栏用的「大图标」不动，仍是应用图标。
+    private const uint WmSetIcon = 0x0080;
+    private const int IconSmall = 0;
+    private static readonly IntPtr NoHandle = IntPtr.Zero;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr CreateIcon(IntPtr instance, int width, int height, byte planes,
+        byte bitsPixel, byte[] andBits, byte[] xorBits);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    private void HideTitleBarIcon()
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            var hwnd = TryGetPlatformHandle()?.Handle ?? NoHandle;
+            if (hwnd == NoHandle) return;
+            const int size = 16;
+            var andBits = new byte[size * size / 8];
+            Array.Fill(andBits, (byte)0xFF);        // 掩码全 1 = 完全透明
+            var xorBits = new byte[size * size / 8]; // 单色位图，全 0
+            var blank = CreateIcon(NoHandle, size, size, 1, 1, andBits, xorBits);
+            if (blank != NoHandle)
+                SendMessage(hwnd, WmSetIcon, (IntPtr)IconSmall, blank);
+        }
+        catch (Exception error) { DiagnosticLog.Write("app", "隐藏标题栏图标失败：" + error.Message); }
     }
 
     private sealed class WindowStateData
