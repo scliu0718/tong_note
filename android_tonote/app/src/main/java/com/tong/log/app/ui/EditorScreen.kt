@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,6 +25,8 @@ import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -301,19 +304,17 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            // 右上角文字按钮：语义明确，避免图标被误读。
-            // 「同步」= 用云端本篇覆盖本地（远程 → 本地）；
-            // 「保存」= 本地有变更后，先落盘再推云端（本地 → 本地 + 远程）。
+            // 右上角图标按钮（圆形底 + 居中图标，风格同「快任务」角标）：
+            // 「同步」= 用云端本篇覆盖本地（远程 → 本地），循环箭头图标；
+            // 「保存」= 本地有变更后，先落盘再推云端（本地 → 本地 + 远程），保存图标。
             // 两者互斥显示，不会出现「有改动却提供同步覆盖」的危险入口。
             val syncing = SyncEngine.status.collectAsState().value.isSyncing
-            Text(
-                text = when {
-                    syncing -> "同步中"
-                    needSave -> "保存"
-                    else -> "同步"
-                },
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+            Box(
+                Modifier
+                    .padding(end = 4.dp)
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(if (needSave && !syncing) GreenTint else Color(0xFFF0F0F2))
                     .clickable(enabled = !syncing) {
                         if (needSave) {
                             // 保存：正文写回本地，再推到云端。captureBody 是异步回写，
@@ -337,13 +338,25 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                                 }
                             }
                         }
-                    }
-                    .padding(start = 10.dp, end = 0.dp, top = 9.dp, bottom = 9.dp),
-                color = if (needSave) Green else TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-            // 与文字按钮间距 0，整体更贴右边缘
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (needSave) Icons.Default.Save else Icons.Default.Sync,
+                    contentDescription = when {
+                        syncing -> "同步中"
+                        needSave -> "保存"
+                        else -> "同步"
+                    },
+                    tint = when {
+                        syncing -> TextQuaternary
+                        needSave -> Green
+                        else -> TextPrimary
+                    },
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            // 更多按钮与同步图标留一点间距
             Box(
                 Modifier
                     .size(38.dp)
