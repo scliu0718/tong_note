@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
@@ -23,6 +24,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.tong.log.app.BuildConfig
 import com.tong.log.app.data.model.AvatarPresets
 import com.tong.log.app.data.store.AvatarStore
 import com.tong.log.app.data.store.NoteStore
@@ -35,8 +38,10 @@ fun MeScreen(
     onOpenDevices: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenAvatar: () -> Unit,
+    onOpenGuide: () -> Unit,
     onLogout: () -> Unit
 ) {
+    var showAbout by remember { mutableStateOf(false) }
     val avatarId by AvatarStore.currentId.collectAsState()
     val avatar = AvatarPresets.byId(avatarId)
     val syncStatus by SyncEngine.status.collectAsState()
@@ -131,7 +136,7 @@ fun MeScreen(
                     HorizontalDivider(color = LineSoft)
                     MeItem(Icons.Default.Delete, "回收站", Color(0xFFF0F0F2), TextTertiary, if (trashCount > 0) "$trashCount" else "") { onOpenTrash() }
                     HorizontalDivider(color = LineSoft)
-                    MeItem(Icons.Default.Info, "关于与帮助", Color(0xFFF0F0F2), TextTertiary, "") {}
+                    MeItem(Icons.Default.Info, "关于与帮助", Color(0xFFF0F0F2), TextTertiary, "") { showAbout = true }
                 }
             }
             item { Spacer(Modifier.height(14.dp)) }
@@ -156,6 +161,87 @@ fun MeScreen(
                     lineHeight = 15.sp
                 )
                 Spacer(Modifier.height(16.dp))
+            }
+        }
+    }
+
+    if (showAbout) {
+        AboutDialog(
+            onDismiss = { showAbout = false },
+            onOpenGuide = {
+                showAbout = false
+                onOpenGuide()
+            }
+        )
+    }
+}
+
+/** 关于弹窗：产品简介 + 版本；「使用帮助」进入 H5 使用说明页。样式同任务页的紧凑对话框。 */
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit, onOpenGuide: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(
+                    "关于同笔记",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                HorizontalDivider(thickness = 0.75.dp, color = LineHair)
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        Modifier
+                            .size(52.dp)
+                            .background(
+                                Brush.verticalGradient(listOf(Green, GreenHover)),
+                                RoundedCornerShape(14.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("同", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("同笔记", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 11.sp, color = TextQuaternary)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "把笔记直接写进你自己的百度网盘：不用订阅、不锁数据，没有中间服务器。" +
+                            "笔记以开放格式保存在 /apps/tong_log，可随时查看、导出、迁移，并与 Mac / Windows 端互通。",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        lineHeight = 19.sp
+                    )
+                }
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenGuide)
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null, tint = Green, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("使用帮助", Modifier.weight(1f), fontSize = 13.sp, color = TextPrimary)
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextQuaternary, modifier = Modifier.size(15.dp))
+                }
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("关闭", color = TextSecondary) }
+                }
             }
         }
     }

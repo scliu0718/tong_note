@@ -60,7 +60,8 @@ object NoteStore {
     }
 
     fun addNote(notebook: String): Note {
-        val n = Note(id = newUuid(), notebook = notebook)
+        // 新建即富文本：编辑器只对 richText 笔记回写正文，默认 markdown 会变成只读、输入不保存
+        val n = Note(id = newUuid(), notebook = notebook, contentFormat = NoteContentFormat.RICH_TEXT)
         _notes.value = listOf(n) + _notes.value
         save()
         markChanged(listOf(n.id))
@@ -163,10 +164,17 @@ object NoteStore {
         markChanged(listOf(id))
     }
 
+    /**
+     * 把某个笔记本下的笔记整体转移到另一个笔记本（删除笔记本时转到「全部笔记」，与 Mac `moveNotes` 一致）。
+     * 必须刷新 updatedAt：它是冲突时的胜负依据，不刷新的话这次转移会被云端旧版本覆盖。
+     * 回收站里的笔记也一并转移，恢复后才不会落在已不存在的笔记本里；删除墓碑（purged）不动。
+     */
     fun moveNotes(fromNotebook: String, toNotebook: String) {
-        val ids = _notes.value.filter { it.notebook == fromNotebook }.map { it.id }
+        val ids = _notes.value.filter { !it.purged && it.notebook == fromNotebook }.map { it.id }
+        if (ids.isEmpty()) return
+        val now = Iso8601.now()
         _notes.value = _notes.value.map {
-            if (it.notebook == fromNotebook) it.copy(notebook = toNotebook) else it
+            if (!it.purged && it.notebook == fromNotebook) it.copy(notebook = toNotebook, updatedAt = now) else it
         }
         save()
         markChanged(ids)

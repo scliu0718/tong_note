@@ -1,7 +1,15 @@
 package com.tong.log.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,6 +69,7 @@ internal fun displayTime(iso: String?): String {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NotesScreen(
     onOpenNote: (String) -> Unit,
@@ -78,16 +87,51 @@ fun NotesScreen(
     val avatarId by AvatarStore.currentId.collectAsState()
     val avatar = AvatarPresets.byId(avatarId)
     val accountName = account?.displayName?.takeIf { it.isNotBlank() } ?: "获取中…"
-    val notebooks = remember { NotebookStore.all }
+    // 笔记本列表读自本地偏好（非 Flow）：新建后用 notebookVersion 触发刷新；
+    // 同步拉到别的设备建的笔记本时 notes 会变，也顺带刷新
+    var notebookVersion by remember { mutableIntStateOf(0) }
+    val notebooks = remember(notes, notebookVersion) { NotebookStore.all }
+    val customNotebooks = remember(notes, notebookVersion) { NotebookStore.customNotebooks }
+    var showNewNotebook by remember { mutableStateOf(false) }
+    // 长按弹出「删除」菜单的笔记本 / 等待二次确认删除的笔记本
+    var menuNotebook by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteNotebook by remember { mutableStateOf<String?>(null) }
+    val notebookScroll = rememberScrollState()
+    var scrollNotebooksToEnd by remember { mutableStateOf(false) }
+    LaunchedEffect(scrollNotebooksToEnd, notebooks.size) {
+        if (scrollNotebooksToEnd) {
+            delay(60) // 等新 chip 排版完，maxValue 才是最新的
+            notebookScroll.animateScrollTo(notebookScroll.maxValue)
+            scrollNotebooksToEnd = false
+        }
+    }
     var selectedNotebook by remember { mutableStateOf(Notebooks.ALL) }
+    // 笔记本与标签互斥（与 Mac 侧栏一致）：选标签 → 笔记本回到「全部笔记」；选笔记本 → 清掉标签
+    var selectedTag by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var sort by remember { mutableStateOf("updated") }
     val searchFocus = remember { FocusRequester() }
 
-    val filtered = remember(notes, selectedNotebook, query, sort) {
+    // 标签 → 笔记数：只统计未删除、非「快同步」的笔记，避免出现点进去却是空列表的标签
+    val tagCounts = remember(notes) {
+        notes.asSequence()
+            .filter { !it.purged && !it.isTrashed && it.id != QUICK_SYNC_NOTE_ID }
+            .flatMap { it.tags.asSequence() }
+            .groupingBy { it }
+            .eachCount()
+            .toSortedMap()
+    }
+    // 选中的标签被删光（本机或其它设备同步下来）时自动取消筛选，避免列表一直为空
+    LaunchedEffect(tagCounts) {
+        val tag = selectedTag
+        if (tag != null && tag !in tagCounts) selectedTag = null
+    }
+
+    val filtered = remember(notes, selectedNotebook, selectedTag, query, sort) {
         notes.asSequence()
             .filter { !it.purged && !it.isTrashed && it.id != QUICK_SYNC_NOTE_ID }
             .filter { selectedNotebook == Notebooks.ALL || it.notebook == selectedNotebook }
+            .filter { selectedTag == null || selectedTag in it.tags }
             .filter {
                 query.isBlank() || it.title.contains(query, true) ||
                     it.plainBody.contains(query, true)
@@ -135,25 +179,97 @@ fun NotesScreen(
         // 笔记本 chips
         Row(
             Modifier.fillMaxWidth()
-                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                .horizontalScroll(notebookScroll)
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            notebooks.take(6).forEach { nb ->
-                val on = selectedNotebook == nb
-                Text(
-                    nb,
-                    Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (on) Green else Color(0xFFF0F0F2))
-                        .clickable { selectedNotebook = nb }
-                        .padding(horizontal = 13.dp, vertical = 6.dp),
-                    color = if (on) Color.White else TextSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
-                )
+            notebooks.forEach { nb ->
+                // 选了标签时笔记本一律不高亮（此时 selectedNotebook 已重置为「全部笔记」）
+                val on = selectedTag == null && selectedNotebook == nb
+                // 只有自建笔记本能删：「全部笔记」和内置四个不响应长按（与 Mac 一致）
+                val deletable = nb in customNotebooks
+                Box {
+                    Text(
+                        nb,
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (on) Green else Color(0xFFF0F0F2))
+                            .combinedClickable(
+                                onClick = {
+                                    selectedNotebook = nb
+                                    selectedTag = null
+                                },
+                                onLongClick = if (deletable) ({ menuNotebook = nb }) else null
+                            )
+                            .padding(horizontal = 13.dp, vertical = 6.dp),
+                        color = if (on) Color.White else TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                    )
+                    DropdownMenu(
+                        expanded = menuNotebook == nb,
+                        onDismissRequest = { menuNotebook = null },
+                        containerColor = Color.White
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("删除笔记本", fontSize = 13.sp, color = Red) },
+                            onClick = {
+                                menuNotebook = null
+                                pendingDeleteNotebook = nb
+                            }
+                        )
+                    }
+                }
+            }
+            // 行尾「＋」：新建笔记本
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF0F0F2))
+                    .clickable { showNewNotebook = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "新建笔记本", tint = TextSecondary, modifier = Modifier.size(16.dp))
+            }
+        }
+
+        // 标签横向 chips：紧跟在笔记本下面，与笔记本互斥；蓝色系，和绿色的笔记本区分开
+        if (tagCounts.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tagCounts.keys.forEach { tag ->
+                    val on = selectedTag == tag
+                    Text(
+                        "# $tag",
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (on) BaiduBlue else BaiduTint)
+                            .clickable {
+                                // 再点一次已选中的标签 = 取消筛选
+                                if (on) {
+                                    selectedTag = null
+                                } else {
+                                    selectedTag = tag
+                                    selectedNotebook = Notebooks.ALL
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                        color = if (on) Color.White else BaiduDeep,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                    )
+                }
             }
         }
 
@@ -256,6 +372,159 @@ fun NotesScreen(
                         modifier = Modifier.size(24.dp),
                         tint = Color.White
                     )
+                }
+            }
+        }
+    }
+
+    pendingDeleteNotebook?.let { name ->
+        val count = notes.count { !it.purged && !it.isTrashed && it.id != QUICK_SYNC_NOTE_ID && it.notebook == name }
+        DeleteNotebookDialog(
+            name = name,
+            noteCount = count,
+            onDismiss = { pendingDeleteNotebook = null },
+            onConfirm = {
+                // 与 Mac 一致：先把笔记转到「全部笔记」，再移除笔记本；笔记本身不会丢
+                NoteStore.moveNotes(fromNotebook = name, toNotebook = Notebooks.ALL)
+                NotebookStore.remove(name)
+                if (selectedNotebook == name) selectedNotebook = Notebooks.ALL
+                notebookVersion++
+                pendingDeleteNotebook = null
+            }
+        )
+    }
+
+    if (showNewNotebook) {
+        NewNotebookDialog(
+            onDismiss = { showNewNotebook = false },
+            onCreate = { input ->
+                val result = NotebookStore.add(input)
+                if (result.isSuccess) {
+                    // 成功：关窗、刷新列表、选中新笔记本，并把 chips 滚到最右让它可见
+                    val created = input.trim()
+                    notebookVersion++
+                    selectedNotebook = created
+                    selectedTag = null
+                    showNewNotebook = false
+                    scrollNotebooksToEnd = true
+                    null
+                } else {
+                    result.exceptionOrNull()?.message ?: "创建失败"
+                }
+            }
+        )
+    }
+}
+
+/** 删除笔记本二次确认：文案与 Mac 一致，红色「删除」强调危险操作。 */
+@Composable
+private fun DeleteNotebookDialog(name: String, noteCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(
+                    "删除笔记本「$name」？",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                HorizontalDivider(thickness = 0.75.dp, color = LineHair)
+                Text(
+                    if (noteCount > 0) "该笔记本下有 $noteCount 篇笔记，删除后会自动转移到「全部笔记」，笔记本身不会丢失。"
+                    else "该笔记本下暂无笔记，删除后会从笔记本列表中移除。",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 20.sp
+                )
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+                    TextButton(onClick = onConfirm) {
+                        Text("删除", color = Red, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 新建笔记本：输入名称；校验（空 / 重名 / 超长 / 内置名）复用 [NotebookStore.add]，错误就地提示。 */
+@Composable
+private fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String) -> String?) {
+    var name by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    fun submit() {
+        error = onCreate(name)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White,
+            shadowElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(
+                    "新建笔记本",
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                HorizontalDivider(thickness = 0.75.dp, color = LineHair)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Color(0xFFF0F0F2))
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        if (name.isEmpty()) {
+                            Text("笔记本名称（最多 12 个字）", fontSize = 13.sp, color = TextQuaternary)
+                        }
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it; error = null },
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 13.sp, color = TextPrimary),
+                            cursorBrush = SolidColor(Green),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { submit() }),
+                            modifier = Modifier.fillMaxWidth().focusRequester(focus)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        error ?: "新笔记本会出现在笔记本列表中，编辑笔记时也能把笔记切换过去。",
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp,
+                        color = if (error != null) Red else TextTertiary
+                    )
+                }
+                HorizontalDivider(thickness = 0.5.dp, color = LineHair)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+                    TextButton(onClick = { submit() }) {
+                        Text("创建", color = Green, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }

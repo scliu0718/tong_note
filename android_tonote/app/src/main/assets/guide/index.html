@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>同笔记使用说明</title>
+<style>
+  :root {
+    --green: #1A9E5C;
+    --green-tint: #E8F6EE;
+    --ink: #1D1D1F;
+    --muted: #6E6E73;
+    --line: #E5E5E8;
+    --bg: #F5F5F7;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.7 -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    padding-bottom: 24px;
+  }
+  header { padding: 22px 16px 6px; }
+  h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  nav {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; gap: 8px; overflow-x: auto;
+    padding: 10px 16px 12px;
+    background: linear-gradient(var(--bg) 75%, rgba(245,245,247,0));
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav a {
+    flex: 0 0 auto;
+    color: var(--ink); text-decoration: none;
+    background: #fff; border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 13px; font-size: 13px; font-weight: 600;
+  }
+  nav a:active { border-color: var(--green); color: var(--green); }
+  main { padding: 0 16px; }
+  section {
+    background: #fff; border: 1px solid var(--line); border-radius: 16px;
+    padding: 18px 16px 12px; margin: 0 0 12px;
+    scroll-margin-top: 56px;
+  }
+  h2 { margin: 0 0 8px; font-size: 18px; }
+  p { margin: 0 0 10px; }
+  ul, ol { margin: 0 0 10px; padding-left: 1.3em; }
+  li + li { margin-top: 4px; }
+  b { font-weight: 700; }
+  .tip {
+    background: var(--green-tint); color: #136F40;
+    border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 0 0 10px;
+  }
+  .warn {
+    background: #FFF4E5; color: #8A5300;
+    border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 0 0 10px;
+  }
+  .kbd {
+    display: inline-block; min-width: 1.6em; text-align: center;
+    background: #F2F2F4; border: 1px solid var(--line); border-radius: 6px;
+    padding: 0 6px; font-size: 13px; font-weight: 600;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 10px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #FAFAFB; }
+  footer { margin: 4px 16px 0; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>同笔记怎么用</h1>
+  <p>笔记写在你自己的百度网盘里。先记在手机上，联网后自动同步，和 Mac / Windows 端互通。</p>
+</header>
+<nav>
+  <a href="#login">登录</a>
+  <a href="#home">笔记</a>
+  <a href="#editor">写笔记</a>
+  <a href="#table">表格</a>
+  <a href="#tasks">快任务</a>
+  <a href="#sync">同步</a>
+  <a href="#me">我的</a>
+  <a href="#faq">常见问题</a>
+</nav>
+<main>
+  <section id="login">
+    <h2>登录</h2>
+    <p>点「使用百度网盘账号登录」，在授权页登录百度账号并同意授权，完成后会自动回到同笔记。</p>
+    <ul>
+      <li>同笔记只读写你网盘里的 <b>/apps/tong_log</b> 目录，不会碰你网盘里的其他文件。</li>
+      <li>授权信息只保存在这台手机上，没有任何中间服务器。</li>
+      <li>在「我的」页能看到当前登录的百度账号。</li>
+    </ul>
+  </section>
+
+  <section id="home">
+    <h2>笔记</h2>
+    <p>底部「笔记」是首页：顶部是笔记本（绿色）和标签（蓝色），下面是搜索、排序和笔记列表。</p>
+    <ul>
+      <li>笔记本一行最右边的「＋」可以新建笔记本，名称最多 12 个字，不能重名。</li>
+      <li>长按自己建的笔记本，点「删除笔记本」可以删除；里面的笔记会自动转到「全部笔记」，不会丢。「全部笔记」和内置的四个笔记本不能删。</li>
+      <li>点蓝色的标签只看带这个标签的笔记，再点一次取消。<b>笔记本和标签二选一</b>：选标签时笔记本回到「全部笔记」，选笔记本时标签取消。</li>
+      <li>右下角绿色「＋」新建笔记，会放进当前选中的笔记本。</li>
+      <li>搜索框可以按标题和正文找笔记。</li>
+      <li>排序支持「最近更新」「按创建」「按标题」。</li>
+      <li>列表顶部两张固定卡片：<b>快同步</b>（多台设备快速共享的一篇笔记）和 <b>快任务</b>（跳到任务页，角标是逾期数量）。</li>
+      <li>被置顶的笔记会排在最前面，并带有图钉标记。</li>
+    </ul>
+  </section>
+
+  <section id="editor">
+    <h2>写笔记</h2>
+    <p>点开一篇笔记即可编辑。标题下面是笔记本和标签，再下面是格式工具栏，选中文字后点对应按钮。</p>
+    <p>要给笔记加标签：点右上角 ⋮ →「添加标签」，输入名称，或直接点下面「已有标签」里的一个。同一篇笔记里标签不能重复。</p>
+    <table>
+      <tr><th>按钮</th><th>作用</th></tr>
+      <tr><td>正文 / H1 / H2 / H3</td><td>切换段落样式</td></tr>
+      <tr><td>引用、代码块</td><td>再点一次恢复成正文</td></tr>
+      <tr><td>无序列表 / 有序列表</td><td>连续点击循环：<b>正文 → 一级 → 二级 → 正文</b>。无序是实心点 → 空心圈，有序是 1. → a.</td></tr>
+      <tr><td>B / I / U / S</td><td>加粗、斜体、下划线、删除线</td></tr>
+      <tr><td>文字颜色、背景颜色</td><td>从色板里选一个颜色</td></tr>
+      <tr><td>链接、图片、表格</td><td>插入链接；从相册选图片；插入表格</td></tr>
+    </table>
+    <p><b>右上角图标</b>：</p>
+    <ul>
+      <li><b>循环箭头</b>：用云端这一篇覆盖本地内容，适合在别的设备改过之后拉最新版。</li>
+      <li><b>保存图标</b>：本篇有未保存的改动时出现，点一下先存到本机，再上传到网盘。</li>
+      <li>同步或保存进行中，图标会转圈。</li>
+    </ul>
+    <p>编辑中也会定时自动保存并上传，离开笔记时会把没传的内容补传。右上角「⋮」里可以删除笔记，删除后进入回收站。</p>
+    <p class="tip">Markdown 格式的老笔记在手机上是只读的；用 Mac / Windows 端写的富文本笔记，手机上可以直接编辑。</p>
+  </section>
+
+  <section id="table">
+    <h2>表格</h2>
+    <p>点工具栏里的表格图标，选好行数和列数就能插入一张表。</p>
+    <ul>
+      <li>点进格子就可以输入文字。</li>
+      <li>表格会保存为通用格式，在 Mac / Windows 端打开样式一致。</li>
+    </ul>
+  </section>
+
+  <section id="tasks">
+    <h2>快任务</h2>
+    <p>底部「任务」页管理待办。任务按状态分组：<b>待完成、进行中、已完成、已终止</b>。</p>
+    <ul>
+      <li>输入框写标题，回车或点「添加」就新建一条；点旁边的图标可以在新建时一并填写日期和备注。</li>
+      <li>点一条任务可以修改标题、备注和计划日期；已完成、已终止的任务可查看但不能改。</li>
+      <li>过了计划日期还没完成的任务会标为<b>逾期</b>，底栏「任务」图标上会显示逾期数量。</li>
+      <li>右上角循环箭头可以马上同步任务。</li>
+    </ul>
+  </section>
+
+  <section id="sync">
+    <h2>同步</h2>
+    <p>平时不用守着，这些时候会自动同步：</p>
+    <ul>
+      <li>打开应用后，以及前台使用时每 45 秒一轮。</li>
+      <li>切到「笔记」或「任务」页时。</li>
+      <li>编辑笔记时定时上传（普通笔记约 30 秒，「快同步」约 15 秒）。</li>
+      <li>切到后台时，把没传的笔记和任务补传。</li>
+    </ul>
+    <p>想看详情，去「我的 → 同步与存储」：能看到最近一次同步、待上传的内容和云端目录，也可以手动再同步。</p>
+    <p class="tip">同步失败不会丢内容，写好的笔记仍在手机上，网络恢复后会自动重试。</p>
+  </section>
+
+  <section id="me">
+    <h2>我的</h2>
+    <ul>
+      <li><b>账号卡</b>：显示当前百度账号，点击可更换头像。</li>
+      <li><b>同步与存储</b>：同步状态、云端目录、重新授权。</li>
+      <li><b>登录设备</b>：查看登录过同笔记的设备，可以让其他设备下线。</li>
+      <li><b>回收站</b>：删除的笔记先在这里，可以恢复或彻底删除。</li>
+      <li><b>关于与帮助</b>：版本信息和这份使用说明。</li>
+      <li><b>退出登录</b>：清除本机授权，网盘里的笔记不受影响。</li>
+    </ul>
+  </section>
+
+  <section id="faq">
+    <h2>常见问题</h2>
+    <p><b>换了手机怎么办？</b><br>用同一个百度网盘账号登录，笔记和任务会自动同步下来。</p>
+    <p><b>同步失败怎么办？</b><br>先检查网络；到「我的 → 同步与存储」手动再同步一次。仍失败可以点「重新授权」。</p>
+    <p><b>笔记存在哪里？</b><br>在你网盘的 <b>/apps/tong_log</b> 目录，笔记是 JSON、正文是受控 HTML、图片是普通图片文件，可以用百度网盘 App 直接查看或导出。</p>
+    <p><b>误删了笔记？</b><br>到「我的 → 回收站」恢复。</p>
+    <p><b>授权过期了？</b><br>到「我的 → 同步与存储」点「重新授权」。</p>
+  </section>
+</main>
+<footer>同笔记 · 数据属于你自己 · 无需订阅 · 无服务器存储</footer>
+</body>
+</html>

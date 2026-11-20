@@ -4,6 +4,11 @@ import android.annotation.SuppressLint
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,13 +31,19 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,7 +77,9 @@ private val BASE_URL get() = "file://${AppStorage.rootDir.absolutePath}/"
 @Composable
 fun EditorScreen(noteId: String, onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val note = NoteStore.note(noteId)
+    // 订阅笔记列表而不是一次性读 NoteStore.note()：加标签等改动才会立刻反映到顶部标签行
+    val allNotes by NoteStore.notes.collectAsState()
+    val note = allNotes.firstOrNull { it.id.equals(noteId, ignoreCase = true) }
     if (note == null) {
         LaunchedEffect(Unit) { onBack() }
         return
@@ -78,6 +91,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     var showTableDialog by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
     var showTitleDialog by remember { mutableStateOf(false) }
+    var showTagDialog by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -304,26 +318,37 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            // 右上角图标按钮（圆形底 + 居中图标，风格同「快任务」角标）：
+            // 右上角图标按钮（无底色，同步图标与「任务」页顶栏一致，同步中旋转）：
             // 「同步」= 用云端本篇覆盖本地（远程 → 本地），循环箭头图标；
             // 「保存」= 本地有变更后，先落盘再推云端（本地 → 本地 + 远程），保存图标。
             // 两者互斥显示，不会出现「有改动却提供同步覆盖」的危险入口。
-            val syncing = SyncEngine.status.collectAsState().value.isSyncing
-            Box(
-                Modifier
-                    .padding(end = 4.dp)
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(if (needSave && !syncing) GreenTint else Color(0xFFF0F0F2))
-                    .clickable(enabled = !syncing) {
+            // saving：点保存到上传完成的整段时间（含落盘前的 350ms 等待），
+            // 期间图标一律显示转圈箭头，不让保存图标转。
+            var saving by remember { mutableStateOf(false) }
+            val syncing = SyncEngine.status.collectAsState().value.isSyncing || saving
+            val spin = rememberInfiniteTransition(label = "editor-sync-spin")
+            val angle by spin.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+                label = "editor-sync-angle"
+            )
+            IconButton(
+                enabled = !syncing,
+                onClick = {
                         if (needSave) {
                             // 保存：正文写回本地，再推到云端。captureBody 是异步回写，
                             // 等落盘完成后再 syncSingleNote，否则会把旧内容推上去。
                             saveBody()
+                            saving = true
                             scope.launch {
-                                delay(350)
-                                SyncEngine.syncSingleNote(noteId)
-                                edited = false
+                                try {
+                                    delay(350)
+                                    SyncEngine.syncSingleNote(noteId)
+                                    edited = false
+                                } finally {
+                                    saving = false
+                                }
                             }
                         } else {
                             // 同步：强制拉云端本篇覆盖本地，并刷新编辑器内容
@@ -338,22 +363,21 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                                 }
                             }
                         }
-                    },
-                contentAlignment = Alignment.Center
+                }
             ) {
                 Icon(
-                    imageVector = if (needSave) Icons.Default.Save else Icons.Default.Sync,
+                    imageVector = if (needSave && !syncing) Icons.Default.Save else Icons.Default.Refresh,
                     contentDescription = when {
                         syncing -> "同步中"
                         needSave -> "保存"
                         else -> "同步"
                     },
                     tint = when {
-                        syncing -> TextQuaternary
+                        syncing -> Green
                         needSave -> Green
                         else -> TextPrimary
                     },
-                    modifier = Modifier.size(18.dp)
+                    modifier = if (syncing) Modifier.rotate(angle) else Modifier
                 )
             }
             // 更多按钮与同步图标留一点间距
@@ -388,10 +412,12 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
                     color = TextTertiary, fontSize = 11.sp
                 )
             }
-            if (note.contentFormat != NoteContentFormat.RICH_TEXT) {
-                Spacer(Modifier.width(8.dp))
-                Text("Markdown 笔记 · 手机端只读", color = TextTertiary, fontSize = 10.sp)
-            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (note.contentFormat == NoteContentFormat.RICH_TEXT) "定时 / 返回自动同步"
+                else "Markdown 笔记 · 手机端只读",
+                color = TextTertiary, fontSize = 10.sp
+            )
         }
 
         // 第二行：格式操作条（自底部上移，自动换行）。
@@ -541,12 +567,81 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         }
     }
 
+    // 添加标签：规则与 Mac 一致（去首尾空白、不能空、本篇不重复）；下方列出其它笔记已用过的标签，点一下填入
+    if (showTagDialog) {
+        var draft by remember { mutableStateOf("") }
+        var error by remember { mutableStateOf<String?>(null) }
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focus.requestFocus() }
+        // 读最新的 note，避免对话框开着时标签变了还拿旧的比较
+        val currentTags = NoteStore.note(noteId)?.tags ?: note.tags
+        val suggestions = remember(allNotes, currentTags) { NoteStore.allTags.filter { it !in currentTags } }
+        fun commit() {
+            val t = draft.trim()
+            when {
+                t.isEmpty() -> error = "标签不能为空"
+                t in currentTags -> error = "这篇笔记已有该标签"
+                else -> {
+                    NoteStore.addTag(noteId, t)
+                    showTagDialog = false
+                }
+            }
+        }
+        EditorDialog(
+            title = "添加标签",
+            onDismiss = { showTagDialog = false },
+            confirmLabel = "添加",
+            onConfirm = { commit() }
+        ) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it; error = null },
+                singleLine = true,
+                placeholder = { Text("标签名称", fontSize = 14.sp) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { commit() }),
+                isError = error != null,
+                modifier = Modifier.fillMaxWidth().focusRequester(focus)
+            )
+            if (error != null) {
+                Text(error!!, color = Red, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            }
+            if (suggestions.isNotEmpty()) {
+                Text("已有标签", color = TextTertiary, fontSize = 11.sp, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    suggestions.forEach { tag ->
+                        Text(
+                            "# $tag",
+                            Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(BaiduTint)
+                                .clickable { draft = tag; error = null }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            color = BaiduDeep,
+                            fontSize = 12.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     // 更多菜单
     if (showMore) {
         OptionDialog("更多操作", onDismiss = { showMore = false }) {
             OptionItem("编辑标题") {
                 showMore = false
                 showTitleDialog = true
+            }
+            OptionDivider()
+            OptionItem("添加标签") {
+                showMore = false
+                showTagDialog = true
             }
             OptionDivider()
             OptionItem("同步本篇") {

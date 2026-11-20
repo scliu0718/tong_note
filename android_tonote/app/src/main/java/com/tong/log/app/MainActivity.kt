@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -146,6 +147,7 @@ private fun AppRoot() {
         }
         composable("trash") { TrashScreen(onBack = { navController.popBackStack() }) }
         composable("devices") { DevicesScreen(onBack = { navController.popBackStack() }) }
+        composable("guide") { GuideScreen(onBack = { navController.popBackStack() }) }
     }
 
     // 启动即同步 + 前台每 45 秒同步；每轮都顺带刷新账号，
@@ -167,7 +169,8 @@ private data class NavTab(val label: String, val icon: ImageVector)
 
 @Composable
 private fun MainScaffold(navController: NavController) {
-    var tab by remember { mutableStateOf(0) }
+    // rememberSaveable：从二级页（使用说明 / 回收站 / 同步与存储…）返回时停留在原来的底栏页，而不是回到「笔记」
+    var tab by rememberSaveable { mutableStateOf(0) }
     var showAvatar by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // 切页：点开「笔记」/「任务」先拉远端（插队）；离开「任务」时把没传的任务同步到远端
@@ -274,6 +277,7 @@ private fun MainScaffold(navController: NavController) {
                     onOpenDevices = { navController.navigate("devices") },
                     onOpenTrash = { navController.navigate("trash") },
                     onOpenAvatar = { showAvatar = true },
+                    onOpenGuide = { navController.navigate("guide") },
                     onLogout = { scope.launch { AuthState.signOut() } }
                 )
             }
