@@ -40,6 +40,19 @@ final class NoteStoreTests: XCTestCase {
         XCTAssertEqual(updated?.body, "正文内容")
     }
 
+    // 同步回写的竞态保护：同步期间用户继续打字后，旧快照不能再覆盖本地
+    func testIsUnchangedDetectsEditsDuringSync() {
+        let note = store.addNote()
+        let snapshot = store.note(with: note.id)!
+        XCTAssertTrue(store.isUnchanged(note.id, since: snapshot))
+
+        store.updateContent(note.id, body: "同步期间刚写的内容", format: .markdown)
+        XCTAssertFalse(store.isUnchanged(note.id, since: snapshot), "正文被改过，必须判为已变化")
+
+        XCTAssertTrue(store.isUnchanged(UUID(), since: nil), "本地没有且快照为空视为未变")
+        XCTAssertFalse(store.isUnchanged(note.id, since: nil), "快照为空但本地已有，判为已变化")
+    }
+
     // 3. 删除 → 回收站
     func testMoveToTrash() {
         let note = store.addNote()

@@ -226,6 +226,22 @@ public final class NoteStore: ObservableObject {
         save()
     }
 
+    /// 同步回写前的竞态检查：自 `snapshot` 取出以来，这篇笔记有没有被用户继续编辑过。
+    /// 同步要走网络（下载、上传、回读），期间用户可能还在打字；
+    /// 此时若直接拿旧快照 / 云端版本覆盖，刚写的内容就会被换掉。
+    /// 所有编辑入口都会刷新 `updatedAt`，所以对比它和正文即可。
+    public func isUnchanged(_ id: UUID, since snapshot: Note?) -> Bool {
+        let current = note(with: id)
+        guard let snapshot else { return current == nil }
+        guard let current else { return false }
+        return current.updatedAt == snapshot.updatedAt && current.body == snapshot.body
+    }
+
+    /// 只更新同步对照表，不动笔记内容（回写时发现用户又改过笔记的场景）。
+    public func applySyncedCursor(_ cursor: SyncCursor, for id: UUID) {
+        cursors.set(cursor, for: id)
+    }
+
     // MARK: - 持久化
     private func load() {
         guard let data = try? Data(contentsOf: fileURL),

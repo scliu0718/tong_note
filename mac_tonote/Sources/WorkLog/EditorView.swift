@@ -432,6 +432,7 @@ struct EditorView: View {
                     title: "文字颜色",
                     colors: TextFormatPalette.textColors,
                     showsClear: false,
+                    currentColor: { controller.currentTextColorValue() },
                     onSelect: { controller.setTextColor($0) },
                     onClear: {},
                     customColor: $customTextColor,
@@ -443,10 +444,8 @@ struct EditorView: View {
             Button {
                 showBackgroundPalette = true
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "paintbrush.fill").font(.system(size: 13))
-                    Image(systemName: "chevron.down").font(.system(size: 8))
-                }
+                PaintBucketIcon()
+                    .frame(width: 17, height: 17)
                 .foregroundColor(Theme.textSecondary)
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
@@ -459,6 +458,7 @@ struct EditorView: View {
                     title: "背景颜色",
                     colors: TextFormatPalette.backgroundColors,
                     showsClear: true,
+                    currentColor: { controller.currentBackgroundColorValue() },
                     onSelect: { controller.setBackgroundColor($0) },
                     onClear: { controller.clearBackgroundColor() },
                     customColor: $customBackgroundColor,
@@ -469,8 +469,11 @@ struct EditorView: View {
             toolbarDivider
 
             // 有序 / 无序列表已收进左侧「T」样式菜单，这里只保留引用与代码块
-            formatButton("text.quote", .quote, "引用") { controller.applyBlockStyle(.quote) }
-            formatButton("chevron.left.forwardslash.chevron.right", .code, "代码块") { controller.applyBlockStyle(.code) }
+            // 再次点击已激活的样式 → 还原为正文
+            formatButton("text.quote", .quote, "引用",
+                         active: controller.currentBlockStyle == .quote) { controller.toggleBlockStyle(.quote) }
+            formatButton("chevron.left.forwardslash.chevron.right", .code, "代码块",
+                         active: controller.currentBlockStyle == .code) { controller.toggleBlockStyle(.code) }
 
             toolbarDivider
 
@@ -515,8 +518,9 @@ struct EditorView: View {
     }
 
     private func formatButton(_ icon: String, _ action: ToolbarAction, _ help: String,
+                              active: Bool = false,
                               perform: @escaping () -> Void) -> some View {
-        ToolbarIconButton(icon: icon, hint: help, perform: perform)
+        ToolbarIconButton(icon: icon, hint: help, active: active, perform: perform)
     }
 
     private var toolbarDivider: some View {
@@ -573,6 +577,7 @@ struct EditorView: View {
 private struct ToolbarIconButton: View {
     let icon: String
     let hint: String
+    var active: Bool = false
     let perform: () -> Void
 
     @State private var hovering = false
@@ -581,11 +586,11 @@ private struct ToolbarIconButton: View {
         Button(action: perform) {
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundColor(hovering ? Theme.accent : Theme.textSecondary)
+                .foregroundColor(hovering || active ? Theme.accent : Theme.textSecondary)
                 .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(hovering ? Theme.accentTint : Color.clear)
+                        .fill(hovering || active ? Theme.accentTint : Color.clear)
                 )
                 .contentShape(Rectangle())
         }

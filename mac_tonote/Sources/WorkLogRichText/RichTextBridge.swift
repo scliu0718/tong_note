@@ -57,6 +57,16 @@ enum RichTextBridge {
         font.fontDescriptor.symbolicTraits.contains(.italic)
     }
 
+    /// 合成斜体的倾斜量（约 11°）。中文字体没有斜体字形，统一用它实现斜体。
+    static let italicObliqueness: CGFloat = 0.2
+
+    /// 斜体 = 带倾斜属性，或字体本身带 italic trait（兼容旧内容）。
+    static func isItalic(attributes: [NSAttributedString.Key: Any]) -> Bool {
+        if let value = attributes[.obliqueness] as? NSNumber, value.doubleValue > 0.01 { return true }
+        if let font = attributes[.font] as? NSFont { return isItalic(font) }
+        return false
+    }
+
     static func hexString(from color: NSColor) -> String {
         guard let srgb = color.usingColorSpace(.sRGB) else { return "#1D1D1F" }
         let r = Int((srgb.redComponent * 255).rounded())
@@ -625,7 +635,8 @@ enum RichTextBridge {
             let italic = run.isItalic
             attributes[.font] = block.style == .code
                 ? monoFont(size: runSize, bold: bold)
-                : font(size: runSize, bold: bold, italic: italic)
+                : font(size: runSize, bold: bold, italic: false)
+            if italic { attributes[.obliqueness] = italicObliqueness }
             if let hex = run.colorHex, !polluted, let color = color(fromHex: hex) {
                 attributes[.foregroundColor] = color
             }
@@ -744,7 +755,7 @@ enum RichTextBridge {
                 let font = attributes[.font] as? NSFont
                 let size = font?.pointSize ?? baseSize
                 let bold = font.map(isBold) ?? false
-                let italic = font.map(isItalic) ?? false
+                let italic = isItalic(attributes: attributes)
                 let underline = (attributes[.underlineStyle] as? Int ?? 0) != 0
                 let strike = (attributes[.strikethroughStyle] as? Int ?? 0) != 0
 

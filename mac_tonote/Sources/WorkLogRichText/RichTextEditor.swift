@@ -342,6 +342,32 @@ public struct RichTextEditor: NSViewRepresentable {
             tv.typingAttributes = typing
         }
 
+        /// 换行符不能带文字背景色：带了的话 AppKit 会把这一行从文字一直涂到行尾。
+        /// 先选了背景色再输入文字、按回车时，typingAttributes 里的背景色会被新插入的
+        /// 换行符继承，所以每次写回前把换行符上的背景色清掉（后续输入的文字仍保留背景色）。
+        private func stripBackgroundFromLineBreaks(in storage: NSTextStorage) {
+            guard storage.length > 0 else { return }
+            let text = storage.string as NSString
+            var targets: [NSRange] = []
+            storage.enumerateAttribute(.backgroundColor,
+                                       in: NSRange(location: 0, length: storage.length),
+                                       options: []) { value, range, _ in
+                guard value != nil else { return }
+                for index in range.location..<NSMaxRange(range) {
+                    let unit = text.character(at: index)
+                    if unit == 0x0A || unit == 0x0D || unit == 0x2028 || unit == 0x2029 {
+                        targets.append(NSRange(location: index, length: 1))
+                    }
+                }
+            }
+            guard !targets.isEmpty else { return }
+            storage.beginEditing()
+            for range in targets {
+                storage.removeAttribute(.backgroundColor, range: range)
+            }
+            storage.endEditing()
+        }
+
         /// 把当前 NSTextStorage 序列化回正文（输入与格式命令共用）。
         func persist(from tv: NSTextView) {
             guard !isUpdatingProgrammatically,
@@ -358,6 +384,7 @@ public struct RichTextEditor: NSViewRepresentable {
                 undo?.disableUndoRegistration()
                 RichTextTableLayout.repairIdentity(in: storage)
                 RichTextBridge.normalizeListMarkers(in: storage)
+                stripBackgroundFromLineBreaks(in: storage)
                 undo?.enableUndoRegistration()
                 isUpdatingProgrammatically = false
             }

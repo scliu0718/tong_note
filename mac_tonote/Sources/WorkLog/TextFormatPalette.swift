@@ -57,6 +57,30 @@ extension NSColor {
     }
 }
 
+/// 「透明 / 无背景」色块：白底加红色斜杠，表示不填充。
+struct TransparentChip: View {
+    var size: CGFloat = 18
+
+    var body: some View {
+        let radius = size * 0.22
+        ZStack {
+            RoundedRectangle(cornerRadius: radius).fill(Color.white)
+            GeometryReader { geo in
+                Path { path in
+                    path.move(to: CGPoint(x: geo.size.width * 0.18, y: geo.size.height * 0.82))
+                    path.addLine(to: CGPoint(x: geo.size.width * 0.82, y: geo.size.height * 0.18))
+                }
+                .stroke(Color(hex: 0xE5484D), lineWidth: 1.5)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(
+            RoundedRectangle(cornerRadius: radius)
+                .stroke(Color.black.opacity(0.18), lineWidth: 0.7)
+        )
+    }
+}
+
 /// 纯色块：浮窗与浮动格式窗口共用，确保默认颜色一定可见。
 struct ColorChip: View {
     let hex: UInt32

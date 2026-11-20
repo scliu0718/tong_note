@@ -44,12 +44,42 @@ public final class RichTextEditorController: ObservableObject {
         }
     }
 
+    /// 斜体用 `.obliqueness`（合成倾斜）实现，而不是字体的 italic trait：
+    /// 苹方等中文字体没有斜体字形，trait 只会让数字 / 字母倾斜，汉字纹丝不动。
     public func toggleItalic() {
-        applyToSelection { font in
-            RichTextBridge.isItalic(font)
-                ? NSFontManager.shared.convert(font, toNotHaveTrait: .italicFontMask)
-                : NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        guard let tv = textView, let storage = tv.textStorage else { return }
+        let selection = tv.selectedRange()
+
+        if selection.length == 0 {
+            var typing = tv.typingAttributes
+            let on = RichTextBridge.isItalic(attributes: typing)
+            typing[.obliqueness] = on ? 0 : RichTextBridge.italicObliqueness
+            if let font = typing[.font] as? NSFont, RichTextBridge.isItalic(font) {
+                typing[.font] = NSFontManager.shared.convert(font, toNotHaveTrait: .italicFontMask)
+            }
+            tv.typingAttributes = typing
+            return
         }
+
+        let ranges = runRanges(in: storage, range: selection)
+        let allOn = ranges.allSatisfy {
+            RichTextBridge.isItalic(attributes: storage.attributes(at: $0.location, effectiveRange: nil))
+        }
+        storage.beginEditing()
+        for range in ranges {
+            storage.addAttribute(.obliqueness,
+                                 value: allOn ? 0 : RichTextBridge.italicObliqueness,
+                                 range: range)
+            // 兼容旧内容：字体上遗留的 italic trait 一并去掉，避免和合成倾斜叠加
+            if let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont,
+               RichTextBridge.isItalic(font) {
+                storage.addAttribute(.font,
+                                     value: NSFontManager.shared.convert(font, toNotHaveTrait: .italicFontMask),
+                                     range: range)
+            }
+        }
+        storage.endEditing()
+        commitChanges()
     }
 
     public func toggleUnderline() {
@@ -107,6 +137,36 @@ public final class RichTextEditorController: ObservableObject {
         commitChanges()
     }
 
+    /// 光标 / 选区起点处当前的文字颜色（0xRRGGBB）。色板用它标出「当前选中」的色块。
+    public func currentTextColorValue() -> UInt32? {
+        let color = currentAttribute(.foregroundColor) as? NSColor ?? RichTextBridge.defaultTextColor
+        return Self.rgbValue(of: color)
+    }
+
+    /// 光标 / 选区起点处当前的背景色（0xRRGGBB）；没有背景色（透明）返回 nil。
+    public func currentBackgroundColorValue() -> UInt32? {
+        guard let color = currentAttribute(.backgroundColor) as? NSColor,
+              color.alphaComponent > 0.01 else { return nil }
+        return Self.rgbValue(of: color)
+    }
+
+    /// 有选区读选区第一个字符的属性；无选区读「后续输入」的属性。
+    private func currentAttribute(_ key: NSAttributedString.Key) -> Any? {
+        guard let tv = textView, let storage = tv.textStorage else { return nil }
+        let selection = tv.selectedRange()
+        if selection.length == 0 { return tv.typingAttributes[key] }
+        guard selection.location < storage.length else { return nil }
+        return storage.attribute(key, at: selection.location, effectiveRange: nil)
+    }
+
+    private static func rgbValue(of color: NSColor) -> UInt32? {
+        guard let srgb = color.usingColorSpace(.sRGB) else { return nil }
+        let r = UInt32((srgb.redComponent * 255).rounded())
+        let g = UInt32((srgb.greenComponent * 255).rounded())
+        let b = UInt32((srgb.blueComponent * 255).rounded())
+        return (r << 16) | (g << 8) | b
+    }
+
     /// 设置文字背景色 / 高亮色（无选区时作用于后续输入）
     public func setBackgroundColor(_ color: NSColor) {
         guard let tv = textView, let storage = tv.textStorage else { return }
@@ -119,10 +179,32 @@ public final class RichTextEditorController: ObservableObject {
             return
         }
 
+        // 换行符带上背景色时，AppKit 会把整行一直涂到行尾；
+        // 所以只给文字本身上色，跳过选区里的换行符。
+        let text = storage.string as NSString
         storage.beginEditing()
-        storage.addAttribute(.backgroundColor, value: color, range: selection)
+        var start = selection.location
+        let end = NSMaxRange(selection)
+        while start < end {
+            var cursor = start
+            while cursor < end, !Self.isLineBreak(text.character(at: cursor)) { cursor += 1 }
+            if cursor > start {
+                storage.addAttribute(.backgroundColor, value: color,
+                                     range: NSRange(location: start, length: cursor - start))
+            }
+            // 顺手清掉换行符上遗留的背景色（旧内容 / 之前选中整段留下的）
+            while cursor < end, Self.isLineBreak(text.character(at: cursor)) {
+                storage.removeAttribute(.backgroundColor, range: NSRange(location: cursor, length: 1))
+                cursor += 1
+            }
+            start = cursor
+        }
         storage.endEditing()
         commitChanges()
+    }
+
+    private static func isLineBreak(_ unit: unichar) -> Bool {
+        unit == 0x0A || unit == 0x0D || unit == 0x2028 || unit == 0x2029
     }
 
     /// 清除选区（或后续输入）的文字背景色
@@ -149,6 +231,18 @@ public final class RichTextEditorController: ObservableObject {
     public func applyBlockStyle(_ style: RichTextBlockStyle) {
         guard let tv = textView, let storage = tv.textStorage else { return }
         applyBlockStyle(style, to: storage, in: tv, level: 0)
+    }
+
+    /// 工具栏「引用 / 代码块」按钮：当前段落已是该样式则还原为正文，否则切换到该样式。
+    public func toggleBlockStyle(_ style: RichTextBlockStyle) {
+        guard let tv = textView, let storage = tv.textStorage else { return }
+        var current: RichTextBlockStyle = .paragraph
+        if storage.length > 0 {
+            let location = min(tv.selectedRange().location, storage.length - 1)
+            current = resolveStyle(storage: storage, range: NSRange(location: location, length: 0))
+        }
+        applyBlockStyle(current == style ? .paragraph : style, to: storage, in: tv, level: 0)
+        refreshCurrentStyle()
     }
 
     /// 由编辑器的选区变化回调驱动，刷新「T」菜单里的当前段落样式。

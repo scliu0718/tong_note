@@ -195,6 +195,8 @@ struct NoteListView: View {
                 Text(mode.rawValue)
                     .font(.system(size: 12, weight: sortMode == mode ? .semibold : .regular))
                     .foregroundColor(sortMode == mode ? Theme.accent : Theme.textTertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .contentShape(Rectangle())
                     .onTapGesture { sortMode = mode }
             }
@@ -226,7 +228,7 @@ struct NoteListView: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundColor(.white)
-            .padding(.horizontal, 11).padding(.vertical, 6)
+            .padding(.horizontal, 6).padding(.vertical, 6)
             .background(Theme.accent)
             .clipShape(RoundedRectangle(cornerRadius: 7))
         }

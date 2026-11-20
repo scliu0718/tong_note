@@ -19,12 +19,15 @@ struct SelectionFormatBar: View {
             colorRow("文字", colors: TextFormatPalette.textColors) { hex in
                 if let color = NSColor(hex: hex) { controller.setTextColor(color) }
             }
-            HStack(spacing: 6) {
-                colorRow("背景", colors: TextFormatPalette.backgroundColors) { hex in
-                    if let color = NSColor(hex: hex) { controller.setBackgroundColor(color) }
-                }
-                actionText("清除") { controller.clearBackgroundColor() }
-                    .help("清除背景色")
+            colorRow("背景", colors: TextFormatPalette.backgroundColors,
+                     leading: AnyView(
+                        Button { controller.clearBackgroundColor() } label: {
+                            TransparentChip(size: 16)
+                        }
+                        .buttonStyle(PaletteChipButtonStyle())
+                        .help("透明（清除背景色）")
+                     )) { hex in
+                if let color = NSColor(hex: hex) { controller.setBackgroundColor(color) }
             }
         }
         .font(.system(size: 11))
@@ -75,17 +78,19 @@ struct SelectionFormatBar: View {
     // MARK: - 颜色行
     private func colorRow(_ label: String,
                           colors: [FormatPaletteColor],
+                          leading: AnyView? = nil,
                           action: @escaping (UInt32) -> Void) -> some View {
         HStack(spacing: 4) {
             Text(label)
                 .font(.system(size: 10))
                 .foregroundColor(Theme.textQuaternary)
                 .frame(width: 24, alignment: .leading)
+            if let leading { leading }
             ForEach(colors) { item in
                 Button { action(item.hex) } label: {
                     ColorChip(hex: item.hex, size: 16)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PaletteChipButtonStyle())
                 .help(item.name)
             }
         }

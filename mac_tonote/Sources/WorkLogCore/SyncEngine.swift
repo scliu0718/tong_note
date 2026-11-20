@@ -283,6 +283,8 @@ public final class SyncEngine: ObservableObject {
             return false
         case .rememberMtime:
             guard let local else { return false }
+            // 下载云端期间用户可能又在打字：此时不能拿旧快照写回，留给下一轮按「本地已改」处理
+            guard store.isUnchanged(id, since: local) else { return false }
             cursor.serverMtime = listing?.serverMtime
             cursor.dirty = false
             store.applySyncedNote(local, cursor: cursor)
@@ -297,6 +299,9 @@ public final class SyncEngine: ObservableObject {
             if await downloadAttachments(of: remote, cursor: &cursor, store: store, token: token) == false {
                 cursor.serverMtime = nil
             }
+            // 下载（含图片）期间用户在本机继续写了内容：绝不能用云端版本覆盖刚写的字。
+            // 放弃这次回写，本篇已被标脏，下一轮会按「两边都改过」走冲突保留，不会丢内容。
+            guard store.isUnchanged(id, since: local) else { return false }
             store.applySyncedNote(remote, cursor: cursor)
             return true
         case .upload(let rev):
@@ -317,6 +322,21 @@ public final class SyncEngine: ObservableObject {
                                       token: token,
                                       listingMtime: listing?.serverMtime)
             return true
+        }
+    }
+
+    /// 上传成功后的本地回写。上传 + 回读要走好几秒网络，期间用户可能还在继续打字：
+    /// 笔记没再被改过才把已发布版本写回；改过就只更新同步对照表并保持「待上传」，
+    /// 下一轮再把新内容传上去。否则旧快照会把刚写的字覆盖掉，编辑器里内容就「跳」回去了。
+    private func commitPublished(_ published: Note,
+                                 snapshot: Note,
+                                 cursor: inout SyncCursor,
+                                 store: NoteStore) {
+        if store.isUnchanged(published.id, since: snapshot) {
+            store.applySyncedNote(published, cursor: cursor)
+        } else {
+            cursor.dirty = true
+            store.applySyncedCursor(cursor, for: published.id)
         }
     }
 
@@ -363,7 +383,7 @@ public final class SyncEngine: ObservableObject {
                         try? await client.deleteRemote(path: attachmentDirectory(publishing.id), accessToken: token)
                     }
                 }
-                store.applySyncedNote(publishing, cursor: attemptCursor)
+                commitPublished(publishing, snapshot: note, cursor: &attemptCursor, store: store)
                 note = publishing
                 cursor = attemptCursor
                 return true
@@ -383,7 +403,7 @@ public final class SyncEngine: ObservableObject {
                         try? await client.deleteRemote(path: attachmentDirectory(publishing.id), accessToken: token)
                     }
                 }
-                store.applySyncedNote(publishing, cursor: attemptCursor)
+                commitPublished(publishing, snapshot: note, cursor: &attemptCursor, store: store)
                 note = publishing
                 cursor = attemptCursor
                 return true
@@ -428,7 +448,14 @@ public final class SyncEngine: ObservableObject {
                                    dirty: false,
                                    uploadedAttachments: cursor.uploadedAttachments)
             _ = await downloadAttachments(of: remote, cursor: &clean, store: store, token: token)
-            store.applySyncedNote(remote, cursor: clean)
+            if store.isUnchanged(local.id, since: local) {
+                store.applySyncedNote(remote, cursor: clean)
+            } else {
+                // 处理冲突期间用户又改了本篇：保留刚写的内容，对照表指向云端版本并保持待上传，
+                // 下一轮把它当作在云端版本之上的新修改传上去。
+                clean.dirty = true
+                store.applySyncedCursor(clean, for: local.id)
+            }
         } else {
             var copy = conflictCopy(of: remote)
             var copyCursor = SyncCursor(uploadedAttachments: cursor.uploadedAttachments)
