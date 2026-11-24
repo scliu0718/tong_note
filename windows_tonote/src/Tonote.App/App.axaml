@@ -60,6 +60,14 @@
         <Setter Property="Opacity" Value="0.38" />
       </Style>
     </ControlTheme>
+
+    <!-- Fluent 11.3 的 ComboBoxItem 高亮走这些资源画笔，普通 Style 改不动，这里精准覆盖 -->
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver">#E8F6EF</SolidColorBrush>
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected">#E6F4EC</SolidColorBrush>
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver">#D8EFE2</SolidColorBrush>
+    <!-- 下拉面板：白底 + 更淡的描边，避免 WinUI 的默认灰框 -->
+    <SolidColorBrush x:Key="ComboBoxDropDownBackground">#FFFFFF</SolidColorBrush>
+    <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush">#E6E8EC</SolidColorBrush>
   </Application.Resources>
 
   <Application.Styles>
@@ -93,11 +101,33 @@
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- 笔记本下拉：浅灰胶囊、无 WinUI 蓝框，宽度由内容决定（见 ShellView 的 MinWidth=0） -->
     <Style Selector="ComboBox">
       <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#1D1D1F" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Background" Value="#F2F2F4" />
+      <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Padding" Value="9,5" />
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <!-- 下拉项：白底细分隔、圆角 hover/选中淡绿，与右键菜单一套语言 -->
+    <Style Selector="ComboBoxItem">
+      <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#1D1D1F" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="CornerRadius" Value="5" />
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover">
+      <Setter Property="Background" Value="#E8F6EF" />
+      <Setter Property="Foreground" Value="#1D1D1F" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected">
+      <Setter Property="Background" Value="#E6F4EC" />
+      <Setter Property="Foreground" Value="#1D1D1F" />
     </Style>
 
     <!-- 细窄滚动条：Mac overlay scroller 的视觉，thumb 常驻但极淡 -->

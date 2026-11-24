@@ -73,6 +73,27 @@ public sealed class NoteStore
     public SyncCursor Cursor(Guid id) => _cursors.Cursor(id);
 
     /// <summary>
+    /// 同步回写前的竞态检查：自 snapshot 取出以来，这篇笔记有没有被用户继续编辑过。
+    /// 同步要走网络（下载、上传、回读），期间用户可能还在打字；此时若直接拿旧快照 /
+    /// 云端版本覆盖，刚写的内容就会被换掉。所有编辑入口都会刷新 UpdatedAt 与正文，
+    /// 所以对比这两项即可。与 Mac NoteStore.isUnchanged 一致。
+    /// 注意 Windows 的 Note 是引用类型，调用方传入的必须是 CopyOf 出来的独立快照。
+    /// </summary>
+    public bool IsUnchanged(Guid id, Note? snapshot)
+    {
+        var current = Find(id);
+        if (snapshot == null) return current == null;
+        if (current == null) return false;
+        return current.UpdatedAt == snapshot.UpdatedAt && current.Body == snapshot.Body;
+    }
+
+    /// <summary>只更新同步对照表、不动笔记内容（回写时发现用户又改过笔记的场景）。</summary>
+    public void ApplySyncedCursor(SyncCursor cursor, Guid id)
+    {
+        _cursors.Set(cursor, id);
+    }
+
+    /// <summary>
     /// 同步结果回写。不标脏、不触发新一轮同步，只刷新界面。
     /// 与 Mac 版 NoteStore.applySyncedNote 一致。
     /// </summary>

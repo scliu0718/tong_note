@@ -42,6 +42,25 @@ public sealed class TodoStore
 
     public SyncCursor Cursor(Guid id) => _cursors.Cursor(id);
 
+    /// <summary>
+    /// 同步回写前的竞态检查：自 snapshot 取出以来这条任务有没有被用户继续编辑过。
+    /// 与 Mac NoteStore.isUnchanged 同理，对比 UpdatedAt + 备注正文。
+    /// 调用方传入的必须是 Todo.CopyOf 出来的独立快照（Windows 的 Todo 是引用类型）。
+    /// </summary>
+    public bool IsUnchanged(Guid id, Todo? snapshot)
+    {
+        var current = Find(id);
+        if (snapshot == null) return current == null;
+        if (current == null) return false;
+        return current.UpdatedAt == snapshot.UpdatedAt && current.Notes == snapshot.Notes;
+    }
+
+    /// <summary>只更新同步对照表、不动任务内容。</summary>
+    public void ApplySyncedCursor(SyncCursor cursor, Guid id)
+    {
+        _cursors.Set(cursor, id);
+    }
+
     /// <summary>同步结果回写。不标脏、不触发新一轮同步。</summary>
     public void ApplySyncedTodo(Todo todo, SyncCursor cursor)
     {

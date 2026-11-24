@@ -19,6 +19,9 @@ public static class Glyphs
     public const string Minus = "−";
     public const string Close = "✕";
     public const string Check = "✓";
+    // 标签输入框专用：用户提供的带圆环对勾 / 叉号填充图标（独立键，不改通用 Check/Close）
+    public const string TagCheck = "tag_check";
+    public const string TagClear = "tag_clear";
     public const string ChevronLeft = "‹";
     public const string ChevronRight = "›";
     public const string ChevronDown = "⌄";
@@ -26,6 +29,7 @@ public static class Glyphs
     public const string More = "⋯";
 
     public const string Gear = "⚙";
+    public const string Sync = "⟳";
     public const string Trash = "⌫";
     public const string Pin = "◆";
     public const string Book = "▤";
@@ -192,9 +196,9 @@ public static class Ui
 
     /// <summary>编辑器工具条按钮：30×30、hover 淡绿底绿字、深色气泡提示、0.12s 过渡。</summary>
     public static Button Tool(string glyph, string tip, Action click, bool wide = false,
-        double fontSize = 13)
+        double fontSize = 13, IBrush? normalColor = null)
     {
-        var normal = Palette.TextSecondary;
+        var normal = normalColor ?? Palette.TextSecondary;
         var hover = Palette.Accent;
         var vector = Icons.Vector(glyph, 16, normal);
         Control content = vector ?? Text(glyph, fontSize, FontWeight.SemiBold, normal);
@@ -238,6 +242,50 @@ public static class Ui
         button.Click += (_, _) => click();
         return button;
     }
+
+    /// <summary>
+    /// 组合式工具条按钮：内容由多个字形拼成（如 T⌄ / ⌄字号⌄ / A⌄ / 油漆桶⌄，对齐 Mac EditorView）。
+    /// 外框、hover 淡绿底与 0.12s 过渡与 <see cref="Tool"/> 完全一致。
+    /// </summary>
+    public static Button ToolComposite(Control content, string tip, Action click, bool wide = true,
+        bool recolorOnHover = true)
+    {
+        var button = new Button
+        {
+            Content = content,
+            Width = wide ? double.NaN : Metrics.ToolButtonSize,
+            MinWidth = wide ? 40 : Metrics.ToolButtonSize,
+            Height = Metrics.ToolButtonSize,
+            Padding = wide ? new Thickness(5, 0) : new Thickness(0),
+            Margin = new Thickness(1, 0),
+            CornerRadius = new CornerRadius(6),
+            Background = Brushes.Transparent,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        button.Transitions = new Transitions
+        {
+            new BrushTransition { Property = Button.BackgroundProperty, Duration = TimeSpan.FromMilliseconds(120) },
+        };
+        ToolTip.SetTip(button, tip);
+        button.PointerEntered += (_, _) =>
+        {
+            button.Background = Palette.AccentTint;
+            if (recolorOnHover) Icons.Tint(content, Palette.Accent);
+        };
+        button.PointerExited += (_, _) =>
+        {
+            button.Background = Brushes.Transparent;
+            if (recolorOnHover) Icons.Tint(content, Palette.TextSecondary);
+        };
+        button.Click += (_, _) => click();
+        return button;
+    }
+
+    /// <summary>工具条里的小下拉箭头（chevron.down），字号比主字形小、颜色更浅。</summary>
+    public static TextBlock ToolChevron(double size = 9)
+        => Text(Glyphs.ChevronDown, size, null, Palette.TextTertiary);
 
     /// <summary>轻量文字 / 图标按钮（列表行操作、侧栏小动作、日期步进）。</summary>
     public static Button Small(string text, Action click, IBrush? foreground = null,
@@ -316,28 +364,40 @@ public static class Ui
 
     public static Border Chip(string text, Action? onRemove = null)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
-        row.Children.Add(Text(text, 12, null, Palette.TextSecondary));
+        var content = new Grid();
+        var label = Text(text, 12, null, Palette.TextSecondary);
+        label.HorizontalAlignment = HorizontalAlignment.Center;
+        label.VerticalAlignment = VerticalAlignment.Center;
+        if (onRemove != null) label.Margin = new Thickness(0, 0, 4, 0); // 给右上角叉号让位
+        content.Children.Add(label);
         if (onRemove != null)
         {
             var remove = new Button
             {
-                Content = Icons.Vector(Glyphs.Close, 9, Palette.TextTertiary) ?? (object)Glyphs.Close,
-                FontSize = 9,
+                Content = Icons.Vector(Glyphs.Close, 6, Palette.Brush(0xBFBFBF)) ?? (object)Glyphs.Close,
+                FontSize = 6,
+                Width = 12,
+                Height = 12,
                 Padding = new Thickness(0),
                 Background = Brushes.Transparent,
-                Foreground = Palette.TextTertiary,
+                BorderThickness = new Thickness(0),
+                Foreground = Palette.Brush(0xBFBFBF),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(-2, -3, -7, 0), // 顶到芯片右上角（左右边距各缩小 2）
                 Cursor = new Cursor(StandardCursorType.Hand),
             };
             remove.Click += (_, _) => onRemove();
-            row.Children.Add(remove);
+            content.Children.Add(remove);
         }
         return new Border
         {
-            Background = Palette.Pill,
+            Background = Palette.TagChipActive,
+            BorderBrush = Palette.Accent,
+            BorderThickness = new Thickness(1), // 0.5px 在圆角矩形上会被抗锯齿抹掉，改 1px 才看得见
             CornerRadius = new CornerRadius(Metrics.RadiusPill),
             Padding = new Thickness(8, 3),
-            Child = row,
+            Child = content,
         };
     }
 

@@ -60,6 +60,8 @@ public static class Palette
     public static IBrush BaiduTint { get; } = Brush(0xE5F5FF);
     public static IBrush Red { get; } = Brush(0xE5484D);
     public static IBrush Amber { get; } = Brush(0xF5A623);
+    /// <summary>工具条「文字颜色」A 的金色（Mac EditorView.swift:418 的 0xE8A317）。</summary>
+    public static IBrush Gold { get; } = Brush(0xE8A317);
 
     // ── 设计稿补充令牌（Mac 代码里散落的字面量，统一收拢） ────────────────
     public static IBrush TableAccent { get; } = Brush(0x2E7CF6);

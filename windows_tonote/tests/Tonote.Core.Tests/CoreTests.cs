@@ -287,5 +287,32 @@ public class CoreTests
         Assert.True(a > 0 && a < m && m < z);
     }
 
+    // 同步回写竞态保护：同步期间用户继续打字后，旧快照不能再覆盖本地内容。
+    [Fact]
+    public void NoteIsUnchangedDetectsEditsDuringSync()
+    {
+        var store = new NoteStore(Temp());
+        var note = store.AddNote();
+        var snapshot = Note.CopyOf(store.Find(note.Id)!); // Windows 是引用类型，必须取独立快照
+        Assert.True(store.IsUnchanged(note.Id, snapshot));
+
+        store.UpdateContent(note.Id, "同步期间刚写的内容", NoteContentFormat.richText);
+        Assert.False(store.IsUnchanged(note.Id, snapshot), "正文被改过，必须判为已变化，不能回写旧版");
+    }
+
+    [Fact]
+    public void TodoIsUnchangedDetectsEditsDuringSync()
+    {
+        var dir = Temp();
+        var store = new TodoStore(dir);
+        var todo = new Todo { Title = "任务" };
+        store.Todos.Add(todo);
+        var snapshot = Todo.CopyOf(store.Find(todo.Id)!);
+        Assert.True(store.IsUnchanged(todo.Id, snapshot));
+
+        store.Find(todo.Id)!.UpdatedAt = DateTime.UtcNow;
+        Assert.False(store.IsUnchanged(todo.Id, snapshot), "任务被改过，必须判为已变化");
+    }
+
     private static string Temp() => Directory.CreateTempSubdirectory("tonote-win-").FullName;
 }

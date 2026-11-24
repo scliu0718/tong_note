@@ -323,6 +323,9 @@ public sealed class SyncEngine : IDisposable
         string accessToken, CancellationToken cancellationToken)
     {
         var local = _notes.Find(id);
+        // Windows 的 Note 是引用类型，UI 编辑会直接改到 local 指向的对象。
+        // 取一份独立快照，供回写前判断「同步期间用户是否又改过」——对齐 Mac 的 Note 值语义。
+        var snapshot = local == null ? null : Note.CopyOf(local);
         var cursor = local == null ? SyncCursor.Unsynced() : _notes.Cursor(id);
         if (listing?.ServerMtime != null
             && SyncRules.ShouldSkipFetch(listing.ServerMtime, cursor))
@@ -352,6 +355,8 @@ public sealed class SyncEngine : IDisposable
                 return false;
             case SyncStepKind.RememberMtime:
                 if (local == null) return false;
+                // 下载云端期间用户可能又在打字：此时不能拿旧快照写回，留给下一轮按「本地已改」处理
+                if (!_notes.IsUnchanged(id, snapshot)) return false;
                 cursor.ServerMtime = listing?.ServerMtime;
                 cursor.Dirty = false;
                 _notes.ApplySyncedNote(local, cursor);
@@ -369,15 +374,18 @@ public sealed class SyncEngine : IDisposable
                 if (!await DownloadAttachmentsAsync(remote.Body, _notes.Attachments, cursor,
                         accessToken, cancellationToken).ConfigureAwait(false))
                     cursor.ServerMtime = null;
+                // 下载（含图片）期间用户在本机继续写了内容：绝不能用云端版本覆盖刚写的字。
+                // 放弃这次回写；本篇已被标脏，下一轮按「两边都改过」走冲突保留，不会丢内容。
+                if (!_notes.IsUnchanged(id, snapshot)) return false;
                 _notes.ApplySyncedNote(remote, cursor);
                 return true;
             case SyncStepKind.Upload:
                 if (local == null) return false;
-                return await PublishNoteAsync(local, step.Rev, cursor, listing?.ServerMtime,
+                return await PublishNoteAsync(local, snapshot, step.Rev, cursor, listing?.ServerMtime,
                     accessToken, cancellationToken).ConfigureAwait(false);
             case SyncStepKind.Conflict:
                 if (local == null || remote == null) return false;
-                await ResolveNoteConflictAsync(local, remote, cursor, listing?.ServerMtime,
+                await ResolveNoteConflictAsync(local, snapshot, remote, cursor, listing?.ServerMtime,
                     accessToken, cancellationToken).ConfigureAwait(false);
                 return true;
             default:
@@ -385,11 +393,32 @@ public sealed class SyncEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// 上传成功后的本地回写。上传 + 回读要走好几秒网络，期间用户可能还在继续打字：
+    /// 笔记没再被改过才把已发布版本写回；改过就只更新同步对照表并保持「待上传」，
+    /// 下一轮再把新内容传上去。否则旧快照会把刚写的字覆盖掉，编辑器里内容就「跳」回去了。
+    /// 与 Mac SyncEngine.commitPublished 一致。
+    /// </summary>
+    private void CommitPublishedNote(Note published, Note? snapshot, SyncCursor attempt)
+    {
+        if (_notes.IsUnchanged(published.Id, snapshot))
+        {
+            _notes.ApplySyncedNote(published, attempt);
+        }
+        else
+        {
+            attempt.Dirty = true;
+            _notes.ApplySyncedCursor(attempt, published.Id);
+        }
+    }
+
     /// <summary>发布一篇笔记。create errno=0 即代表已写入，回读只用于确认，最多 3 次、400ms×retry 退避；
     /// 回读全失败不重传、不 rev+1，只记已发布状态留待下一轮校验。</summary>
-    private async Task<bool> PublishNoteAsync(Note note, int rev, SyncCursor cursor,
+    private async Task<bool> PublishNoteAsync(Note note, Note? snapshot, int rev, SyncCursor cursor,
         long? listingMtime, string accessToken, CancellationToken cancellationToken)
     {
+        // snapshot 是进入同步时取的独立快照；冲突副本等场景传自身（新对象不在 UI 编辑链上）。
+        snapshot ??= note;
         var attempt = cursor.Clone();
         var publishing = Note.CopyOf(note);
         var nextRev = rev;
@@ -416,7 +445,7 @@ public sealed class SyncEngine : IDisposable
                 attempt.ServerMtime = listingMtime;
                 await CleanupPurgedNoteAttachmentsAsync(publishing, accessToken, cancellationToken)
                     .ConfigureAwait(false);
-                _notes.ApplySyncedNote(publishing, attempt);
+                CommitPublishedNote(publishing, snapshot, attempt);
                 CopyCursorFrom(cursor, attempt);
                 return true;
             }
@@ -430,7 +459,7 @@ public sealed class SyncEngine : IDisposable
                 attempt.ServerMtime = listingMtime;
                 await CleanupPurgedNoteAttachmentsAsync(publishing, accessToken, cancellationToken)
                     .ConfigureAwait(false);
-                _notes.ApplySyncedNote(publishing, attempt);
+                CommitPublishedNote(publishing, snapshot, attempt);
                 CopyCursorFrom(cursor, attempt);
                 return true;
             }
@@ -445,7 +474,7 @@ public sealed class SyncEngine : IDisposable
             if (again.Kind == SyncStepKind.Conflict)
             {
                 var current = _notes.Find(publishing.Id) ?? publishing;
-                await ResolveNoteConflictAsync(current, check, attempt, listingMtime,
+                await ResolveNoteConflictAsync(current, snapshot, check, attempt, listingMtime,
                     accessToken, cancellationToken).ConfigureAwait(false);
                 return true;
             }
@@ -495,7 +524,7 @@ public sealed class SyncEngine : IDisposable
         catch { /* 附件目录清理失败不阻塞笔记同步 */ }
     }
 
-    private async Task ResolveNoteConflictAsync(Note local, Note remote, SyncCursor cursor,
+    private async Task ResolveNoteConflictAsync(Note local, Note? snapshot, Note remote, SyncCursor cursor,
         long? listingMtime, string accessToken, CancellationToken cancellationToken)
     {
         if (SyncRules.RemoteWins(local.UpdatedAt, remote.UpdatedAt))
@@ -503,7 +532,7 @@ public sealed class SyncEngine : IDisposable
             var copy = ConflictCopy(local);
             var copyCursor = new SyncCursor { UploadedAttachments = [.. cursor.UploadedAttachments] };
             _notes.ApplySyncedNote(copy, copyCursor);
-            await PublishNoteAsync(copy, 1, copyCursor, null, accessToken, cancellationToken)
+            await PublishNoteAsync(copy, copy, 1, copyCursor, null, accessToken, cancellationToken)
                 .ConfigureAwait(false);
             var clean = new SyncCursor
             {
@@ -515,7 +544,17 @@ public sealed class SyncEngine : IDisposable
             };
             await DownloadAttachmentsAsync(remote.Body, _notes.Attachments, clean,
                 accessToken, cancellationToken).ConfigureAwait(false);
-            _notes.ApplySyncedNote(remote, clean);
+            // 处理冲突期间用户又改了本篇：保留刚写的内容，对照表指向云端版本并保持待上传，
+            // 下一轮把它当作在云端版本之上的新修改传上去（与 Mac resolveConflict 一致）。
+            if (_notes.IsUnchanged(local.Id, snapshot))
+            {
+                _notes.ApplySyncedNote(remote, clean);
+            }
+            else
+            {
+                clean.Dirty = true;
+                _notes.ApplySyncedCursor(clean, local.Id);
+            }
         }
         else
         {
@@ -524,10 +563,10 @@ public sealed class SyncEngine : IDisposable
             await DownloadAttachmentsAsync(copy.Body, _notes.Attachments, copyCursor,
                 accessToken, cancellationToken).ConfigureAwait(false);
             _notes.ApplySyncedNote(copy, copyCursor);
-            await PublishNoteAsync(copy, 1, copyCursor, null, accessToken, cancellationToken)
+            await PublishNoteAsync(copy, copy, 1, copyCursor, null, accessToken, cancellationToken)
                 .ConfigureAwait(false);
             var winnerCursor = cursor.Clone();
-            await PublishNoteAsync(local, Math.Max(local.Rev, remote.Rev) + 1, winnerCursor,
+            await PublishNoteAsync(local, snapshot, Math.Max(local.Rev, remote.Rev) + 1, winnerCursor,
                 listingMtime, accessToken, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -595,6 +634,8 @@ public sealed class SyncEngine : IDisposable
         string accessToken, CancellationToken cancellationToken)
     {
         var local = _todos.Find(id);
+        // 与笔记同理：Windows 的 Todo 是引用类型，取独立快照供回写前判断竞态。
+        var snapshot = local == null ? null : Todo.CopyOf(local);
         var cursor = local == null ? SyncCursor.Unsynced() : _todos.Cursor(id);
         if (listing?.ServerMtime != null
             && SyncRules.ShouldSkipFetch(listing.ServerMtime, cursor))
@@ -624,6 +665,7 @@ public sealed class SyncEngine : IDisposable
                 return false;
             case SyncStepKind.RememberMtime:
                 if (local == null) return false;
+                if (!_todos.IsUnchanged(id, snapshot)) return false;
                 cursor.ServerMtime = listing?.ServerMtime;
                 cursor.Dirty = false;
                 _todos.ApplySyncedTodo(local, cursor);
@@ -641,15 +683,17 @@ public sealed class SyncEngine : IDisposable
                 if (!await DownloadAttachmentsAsync(remote.Notes, _todos.Attachments, clean,
                         accessToken, cancellationToken).ConfigureAwait(false))
                     clean.ServerMtime = null;
+                // 下载期间用户又改了这条任务：不用云端版本覆盖，留给下一轮走冲突保留。
+                if (!_todos.IsUnchanged(id, snapshot)) return false;
                 _todos.ApplySyncedTodo(remote, clean);
                 return true;
             case SyncStepKind.Upload:
                 if (local == null) return false;
-                return await PublishTodoAsync(local, step.Rev, cursor, listing?.ServerMtime,
+                return await PublishTodoAsync(local, snapshot, step.Rev, cursor, listing?.ServerMtime,
                     accessToken, cancellationToken).ConfigureAwait(false);
             case SyncStepKind.Conflict:
                 if (local == null || remote == null) return false;
-                await ResolveTodoConflictAsync(local, remote, cursor, listing?.ServerMtime,
+                await ResolveTodoConflictAsync(local, snapshot, remote, cursor, listing?.ServerMtime,
                     accessToken, cancellationToken).ConfigureAwait(false);
                 return true;
             default:
@@ -657,9 +701,24 @@ public sealed class SyncEngine : IDisposable
         }
     }
 
-    private async Task<bool> PublishTodoAsync(Todo todo, int rev, SyncCursor cursor,
+    /// <summary>任务上传成功后的回写：没被继续编辑才回写已发布版本，否则保持待上传。</summary>
+    private void CommitPublishedTodo(Todo published, Todo? snapshot, SyncCursor attempt)
+    {
+        if (_todos.IsUnchanged(published.Id, snapshot))
+        {
+            _todos.ApplySyncedTodo(published, attempt);
+        }
+        else
+        {
+            attempt.Dirty = true;
+            _todos.ApplySyncedCursor(attempt, published.Id);
+        }
+    }
+
+    private async Task<bool> PublishTodoAsync(Todo todo, Todo? snapshot, int rev, SyncCursor cursor,
         long? listingMtime, string accessToken, CancellationToken cancellationToken)
     {
+        snapshot ??= todo;
         var publishing = Todo.CopyOf(todo);
         var attempt = cursor.Clone();
         var nextRev = rev;
@@ -684,7 +743,7 @@ public sealed class SyncEngine : IDisposable
                 attempt.BaseUpdatedAt = publishing.UpdatedAt;
                 attempt.Dirty = false;
                 attempt.ServerMtime = listingMtime;
-                _todos.ApplySyncedTodo(publishing, attempt);
+                CommitPublishedTodo(publishing, snapshot, attempt);
                 CopyCursorFrom(cursor, attempt);
                 return true;
             }
@@ -696,7 +755,7 @@ public sealed class SyncEngine : IDisposable
                 attempt.BaseUpdatedAt = publishing.UpdatedAt;
                 attempt.Dirty = false;
                 attempt.ServerMtime = listingMtime;
-                _todos.ApplySyncedTodo(publishing, attempt);
+                CommitPublishedTodo(publishing, snapshot, attempt);
                 CopyCursorFrom(cursor, attempt);
                 return true;
             }
@@ -711,7 +770,7 @@ public sealed class SyncEngine : IDisposable
             if (again.Kind == SyncStepKind.Conflict)
             {
                 var current = _todos.Find(publishing.Id) ?? publishing;
-                await ResolveTodoConflictAsync(current, check, attempt, listingMtime,
+                await ResolveTodoConflictAsync(current, snapshot, check, attempt, listingMtime,
                     accessToken, cancellationToken).ConfigureAwait(false);
                 return true;
             }
@@ -744,7 +803,7 @@ public sealed class SyncEngine : IDisposable
         return null;
     }
 
-    private async Task ResolveTodoConflictAsync(Todo local, Todo remote, SyncCursor cursor,
+    private async Task ResolveTodoConflictAsync(Todo local, Todo? snapshot, Todo remote, SyncCursor cursor,
         long? listingMtime, string accessToken, CancellationToken cancellationToken)
     {
         if (SyncRules.RemoteWins(local.UpdatedAt, remote.UpdatedAt))
@@ -759,11 +818,20 @@ public sealed class SyncEngine : IDisposable
             };
             await DownloadAttachmentsAsync(remote.Notes, _todos.Attachments, clean,
                 accessToken, cancellationToken).ConfigureAwait(false);
-            _todos.ApplySyncedTodo(remote, clean);
+            // 处理冲突期间用户又改了这条：保留刚写的内容，只更新对照表并保持待上传。
+            if (_todos.IsUnchanged(local.Id, snapshot))
+            {
+                _todos.ApplySyncedTodo(remote, clean);
+            }
+            else
+            {
+                clean.Dirty = true;
+                _todos.ApplySyncedCursor(clean, local.Id);
+            }
             var copy = ConflictCopy(local);
             var copyCursor = SyncCursor.Unsynced();
             _todos.ApplySyncedTodo(copy, copyCursor);
-            await PublishTodoAsync(copy, 1, copyCursor, null, accessToken, cancellationToken)
+            await PublishTodoAsync(copy, copy, 1, copyCursor, null, accessToken, cancellationToken)
                 .ConfigureAwait(false);
         }
         else
@@ -773,10 +841,10 @@ public sealed class SyncEngine : IDisposable
             await DownloadAttachmentsAsync(copy.Notes, _todos.Attachments, copyCursor,
                 accessToken, cancellationToken).ConfigureAwait(false);
             _todos.ApplySyncedTodo(copy, copyCursor);
-            await PublishTodoAsync(copy, 1, copyCursor, null, accessToken, cancellationToken)
+            await PublishTodoAsync(copy, copy, 1, copyCursor, null, accessToken, cancellationToken)
                 .ConfigureAwait(false);
             var winnerCursor = cursor.Clone();
-            await PublishTodoAsync(local, Math.Max(local.Rev, remote.Rev) + 1, winnerCursor,
+            await PublishTodoAsync(local, snapshot, Math.Max(local.Rev, remote.Rev) + 1, winnerCursor,
                 listingMtime, accessToken, cancellationToken).ConfigureAwait(false);
         }
     }

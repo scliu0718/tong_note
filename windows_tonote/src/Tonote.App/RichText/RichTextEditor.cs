@@ -2,16 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Tonote.Core;
 
 namespace Tonote.App;
@@ -56,12 +60,12 @@ public sealed class RichTextEditor : UserControl
         Orientation = Orientation.Horizontal,
         Margin = new Thickness(Metrics.ToolbarPaddingH, Metrics.ToolbarPaddingV),
     };
-    private readonly Border _popover = new()
-    {
-        IsVisible = false,
-        Margin = new Thickness(Metrics.ToolbarPaddingH, 0, Metrics.ToolbarPaddingH, 6),
-        HorizontalAlignment = HorizontalAlignment.Left,
-    };
+    // WebView2 是 NativeControlHost 创建的原生子 HWND，Z 序永远在 Avalonia 绘制内容之上。
+    // 普通 Border / Popup(OverlayLayer) 都会被它盖住，工具条弹窗只能用独立顶层 Window。
+    private ToolbarPopover? _popover;
+    // 浮窗改为 NOACTIVATE 后不再有 Deactivated 事件，点外部关闭改由主窗口指针按下监听。
+    private Window? _popoverOwner;
+    private bool _popoverOutsideHooked;
     private readonly TextBlock _status = new()
     {
         FontSize = 11,
@@ -69,9 +73,6 @@ public sealed class RichTextEditor : UserControl
         VerticalAlignment = VerticalAlignment.Center,
         Margin = new Thickness(8, 0, 0, 0),
     };
-    private readonly TextBox _linkInput = new() { Text = "https://", Watermark = "https://…", Width = 170, FontSize = 12 };
-    private readonly TextBox _linkText = new() { Watermark = "显示文字（可留空）", Width = 170, FontSize = 12 };
-
     private Guid _currentId;
     private string _currentBody = "";
     private NoteContentFormat _currentFormat = NoteContentFormat.markdown;
@@ -90,7 +91,6 @@ public sealed class RichTextEditor : UserControl
     private CancellationTokenSource? _saveDelay;
 
     public event Action<string>? StatusChanged;
-    public event Action? DeleteRequested;
     /// <summary>W-20：编辑器内 F5 触发的同步请求。</summary>
     public event Action? SyncRequested;
     /// <summary>W-31：编辑器内字数实时回传，供列表页顶栏显示。</summary>
@@ -141,12 +141,11 @@ public sealed class RichTextEditor : UserControl
         var surface = new Grid { Children = { _host, _fallback } };
         var page = new Grid
         {
-            RowDefinitions = new RowDefinitions("Auto,Auto,*"),
-            Children = { _toolbar, _popover, surface },
+            RowDefinitions = new RowDefinitions("Auto,*"),
+            Children = { _toolbar, surface },
             Background = Palette.Panel,
         };
-        Grid.SetRow(_popover, 1);
-        Grid.SetRow(surface, 2);
+        Grid.SetRow(surface, 1);
         Content = page;
 
         _host.Navigate(new Uri(htmlPath).AbsoluteUri);
@@ -155,41 +154,138 @@ public sealed class RichTextEditor : UserControl
     public bool IsWebViewReady => _host.IsReady;
     public Guid CurrentNoteId => _currentId;
 
-    // ── 16 项工具条（Mac EditorView.swift:376-489） ─────────────────────
+    // ── 工具条（三端 1:1，顺序与 Mac EditorView.swift:369-505 一致） ──────
+    // T⌄ | 加粗斜体下划线删除线 | 字号⌄ A⌄ 🖌⌄ | 引用 代码 | 链接 图片 表格
     private void BuildToolbar()
     {
-        Add(Glyphs.TextStyle, "文本样式", () => TogglePopover("style", TextStylePopover()));
-        Add("B", "加粗", () => Run("exec", "bold"));
-        Add("I", "斜体", () => Run("exec", "italic"));
-        Add("U", "下划线", () => Run("exec", "underline"));
-        Add("S", "删除线", () => Run("exec", "strikeThrough"));
+        // 文本样式：衬线粗体 T + 下拉箭头（箭头样式/大小/间距/居中由 WithChevron 统一，
+        // 与字号、A、背景色四个按钮完全一致，对齐 Mac TextStyleMenu）
+        var tGlyph = new TextBlock
+        {
+            Text = "T",
+            FontFamily = new FontFamily("Georgia, 'Times New Roman', serif"),
+            FontSize = 16,
+            FontWeight = FontWeight.Bold,
+            Foreground = Palette.TextSecondary,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var styleGlyph = WithChevron(tGlyph, gap: 7, yOffset: 2);
+        AddComposite(styleGlyph, "文本样式", () => TogglePopover("style", TextStylePopover()));
         _toolbar.Children.Add(Ui.VDivider());
 
-        Add("14", "字号", () => TogglePopover("size", FontSizePopover()));
-        Add("A", "文字颜色", () => TogglePopover("fore", ColorPopover(false)));
-        Add(Glyphs.Highlight, "背景颜色", () => TogglePopover("back", ColorPopover(true)));
+        // B/I/U/S：Mac 用「字形本身就是样式」的衬线字母（B 加粗、I 斜体、U 带下划线、S 带删除线），
+        // 比抽象图标更直观。四个按钮统一用同一衬线体，hover 由 Icons.Tint 只改前景色、不破坏装饰。
+        AddStyledLetter("B", "加粗", () => Run("exec", "bold"),
+            weight: FontWeight.Bold);
+        AddStyledLetter("I", "斜体", () => Run("exec", "italic"),
+            style: FontStyle.Italic);
+        AddStyledLetter("U", "下划线", () => Run("exec", "underline"),
+            decorations: TextDecorations.Underline);
+        AddStyledLetter("S", "删除线", () => Run("exec", "strikeThrough"),
+            decorations: TextDecorations.Strikethrough);
+        _toolbar.Children.Add(Ui.VDivider());
+
+        // 字号 / 文字颜色 / 背景颜色：右侧箭头统一用 WithChevron（与 T 同款矢量细线 chevron，
+        // 大小、描边、间距、垂直位置完全一致）；字号只保留右侧单个箭头。
+        AddComposite(WithChevron(Ui.Text("字号", 12, null, Palette.TextSecondary)),
+                     "字号", () => TogglePopover("size", FontSizePopover()));
+        // Mac 的 A 固定 0xE8A317，不随 hover 变绿
+        AddComposite(WithChevron(Ui.Text("A", 16, FontWeight.Bold, Palette.Gold)),
+                     "文字颜色", () => TogglePopover("fore", ColorPopover(false)), recolorOnHover: false);
+        AddComposite(WithChevron(Ui.Icon(Glyphs.Highlight, 16, Palette.TextSecondary)),
+                     "背景颜色", () => TogglePopover("back", ColorPopover(true)));
         _toolbar.Children.Add(Ui.VDivider());
 
         Add(Glyphs.Quote, "引用", () => Run("block", "blockquote"));
         Add(Glyphs.Code, "代码块", () => Run("block", "pre"));
-        // W-31：列表入口只保留在「文本样式」浮层，避免与独立按钮重复（工具栏收敛为 16 项）
         _toolbar.Children.Add(Ui.VDivider());
 
-        Add(Glyphs.Link, "插入链接", () => TogglePopover("link", LinkPopover()));
-        Add(Glyphs.Image, "插入图片", InsertImage);
-        Add(Glyphs.Table, "插入表格", () => TogglePopover("table", TablePopover()));
+        // 链接/图片/表格是填充图标、笔划面积大，单独调浅一档到 TextTertiary，与标题区图标一致。
+        Add(Glyphs.Link, "插入链接", () => TogglePopover("link", LinkPopover()), normalColor: Palette.TextSecondary);
+        Add(Glyphs.Image, "插入图片", InsertImage, normalColor: Palette.TextSecondary);
+        Add(Glyphs.Table, "插入表格", () => TogglePopover("table", TablePopover()), normalColor: Palette.TextSecondary);
+        // W-31：列表入口只在「文本样式」浮层；单元格对齐仅在光标进入表格时出现（Mac TableAlignmentButton）
         Add(Glyphs.Align, "单元格对齐", () => TogglePopover("align", AlignPopover()));
+        _toolButtons["单元格对齐"].IsVisible = false;
         _toolbar.Children.Add(Ui.VDivider());
-
-        Add(Glyphs.Trash, "删除笔记（移入回收站）", () => DeleteRequested?.Invoke(), wide: true);
+        // 删除入口移到标题区右上角（ShellView 的图标按钮），工具条不再放删除图标。
         _toolbar.Children.Add(_status);
+    }
+
+    private static StackPanel Composite(params Control[] parts)
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        foreach (var part in parts) panel.Children.Add(part);
+        return panel;
+    }
+
+    /// <summary>
+    /// 主体 + 右侧下拉箭头（T / 字号 / A / 背景色统一样式）。
+    /// 箭头是矢量细线 chevron（size 7、描边 0.85、TextTertiary），不再用文字字符箭头；
+    /// Grid 两列把主体与箭头放进同一行高内垂直居中，yOffset 做视觉微调。
+    /// </summary>
+    private static Grid WithChevron(Control main, double gap = 7, double yOffset = 2)
+    {
+        var chevron = Ui.Icon(Glyphs.ChevronDown, 7, Palette.TextTertiary);
+        chevron.Margin = new Thickness(gap, 0, 0, 0);
+        chevron.RenderTransform = new TranslateTransform(0, yOffset);
+        chevron.VerticalAlignment = VerticalAlignment.Center;
+        main.VerticalAlignment = VerticalAlignment.Center;
+        if (chevron is Avalonia.Controls.Shapes.Path path)
+            path.StrokeThickness = 0.85; // 矢量 chevron 默认描边 1.7，细一半（对齐 Mac 纤细下箭头）
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto"),
+            Children = { main, chevron },
+        };
+        Grid.SetColumn(main, 0);
+        Grid.SetColumn(chevron, 1);
+        return grid;
     }
 
     private readonly Dictionary<string, Button> _toolButtons = new();
 
-    private void Add(string glyph, string tip, Action click, bool wide = false)
+    private void Add(string glyph, string tip, Action click, bool wide = false, IBrush? normalColor = null)
     {
-        var button = Ui.Tool(glyph, tip, click, wide);
+        var button = Ui.Tool(glyph, tip, click, wide, normalColor: normalColor);
+        _toolButtons[tip] = button;
+        _toolbar.Children.Add(button);
+    }
+
+    /// <summary>
+    /// 衬线字母字形按钮（对齐 Mac 的 B/I/U/S）：字形本身带加粗/斜体/下划线/删除线装饰，
+    /// 直观表达样式而非抽象图标。hover 只改前景色，装饰由 Icons.Tint 保留。
+    /// </summary>
+    private void AddStyledLetter(string letter, string tip, Action click,
+        FontWeight? weight = null, FontStyle style = FontStyle.Normal,
+        TextDecorationCollection? decorations = null)
+    {
+        var glyph = new TextBlock
+        {
+            Text = letter,
+            FontFamily = new FontFamily("Georgia, 'Times New Roman', serif"),
+            FontSize = 16,
+            FontWeight = weight ?? FontWeight.Normal,
+            FontStyle = style,
+            TextDecorations = decorations,
+            Foreground = Palette.TextSecondary,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var button = Ui.ToolComposite(glyph, tip, click, wide: false);
+        _toolButtons[tip] = button;
+        _toolbar.Children.Add(button);
+    }
+
+    private void AddComposite(Control content, string tip, Action click, bool recolorOnHover = true)
+    {
+        var button = Ui.ToolComposite(content, tip, click, recolorOnHover: recolorOnHover);
         _toolButtons[tip] = button;
         _toolbar.Children.Add(button);
     }
@@ -198,21 +294,85 @@ public sealed class RichTextEditor : UserControl
     {
         if (_openPopover == key)
         {
-            _openPopover = "";
-            _popover.IsVisible = false;
-            _popover.Child = null;
+            ClosePopover();
             return;
         }
+        ClosePopover(restoreFocus: false); // 马上要开新浮窗，别把焦点抢回编辑区
         _openPopover = key;
-        _popover.Child = Ui.Popover(content, WidthFor(key));
-        _popover.IsVisible = true;
+        // 锚点用被点击的按钮本身，浮窗才会从按钮处弹出，而不是固定在编辑器左缘。
+        var anchor = _toolButtons.TryGetValue(TipForPopover(key), out var btn) ? (Control)btn : this;
+        // 靠右的入口（链接/表格/对齐）浮窗右缘对齐按钮右缘、向左展开，避免超出应用右边界；
+        // 其余入口仍左缘对齐按钮。
+        var alignRight = key is "link" or "table" or "align";
+        var popover = new ToolbarPopover(content, WidthFor(key), anchor, alignRight);
+        _popover = popover;
+        popover.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_popover, popover)) { _popover = null; _openPopover = ""; }
+        };
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner != null)
+        {
+            _popoverOwner = owner;
+            HookPopoverOutsideClick(owner);
+            popover.Show(owner);
+        }
+        else popover.Show();
+        popover.DisableActivation();
     }
 
-    private void ClosePopover()
+    /// <summary>
+    /// 浮窗 NOACTIVATE 后不会失焦、也就没有 Deactivated 事件可用来「点外部关闭」。
+    /// 改在主窗口上挂一次 Tunnel 指针监听：按下的目标不在浮窗窗口内就关闭浮窗。
+    /// 用 Tunnel 是为了先于按钮自身点击处理，保证「点编辑区一下」既关浮窗又落光标。
+    /// </summary>
+    private void HookPopoverOutsideClick(Window owner)
+    {
+        if (_popoverOutsideHooked) return;
+        _popoverOutsideHooked = true;
+        owner.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if (_popover == null) return;
+            var source = e.Source as Visual;
+            // 点在浮窗自己窗口内不算外部（浮窗是独立 TopLevel，其指针事件不会冒泡到主窗口）
+            var top = TopLevel.GetTopLevel(source);
+            if (top != null && ReferenceEquals(top, _popover)) return;
+            // 点在工具条按钮上交给按钮自己的 Click 处理（否则再点同一按钮会变成「先关后开」）
+            if (IsDescendantOf(source, _toolbar)) return;
+            ClosePopover(restoreFocus: false);
+        }, RoutingStrategies.Tunnel);
+    }
+
+    private static bool IsDescendantOf(Visual? node, Visual ancestor)
+    {
+        while (node != null)
+        {
+            if (ReferenceEquals(node, ancestor)) return true;
+            node = node.GetVisualParent();
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 浮窗全程 NOACTIVATE、不夺前台，主窗口始终保持激活，无需再 Activate()（那正是「闪一下」的来源）。
+    /// 只需把光标放回编辑区，保证选完项后可直接继续输入。
+    /// </summary>
+    private void RestoreEditorFocus()
+    {
+        if (_webFailed || _readOnly) return;
+        if (_host.IsReady)
+            _ = _host.ExecuteScriptAsync("document.getElementById('editor')?.focus();");
+        else
+            _fallback.Focus();
+    }
+
+    private void ClosePopover(bool restoreFocus = true)
     {
         _openPopover = "";
-        _popover.IsVisible = false;
-        _popover.Child = null;
+        var popover = _popover;
+        _popover = null;
+        popover?.Close();
+        if (restoreFocus) RestoreEditorFocus();
     }
 
     private static double WidthFor(string key) => key switch
@@ -224,13 +384,27 @@ public sealed class RichTextEditor : UserControl
         _ => 260,
     };
 
-    private static Button MenuOption(string text, Action click, bool active = false)
+    /// <summary>浮窗 key → 对应工具条按钮的 tip，用于把浮窗定位到被点击的按钮下方。</summary>
+    private static string TipForPopover(string key) => key switch
     {
+        "style" => "文本样式",
+        "size" => "字号",
+        "fore" => "文字颜色",
+        "back" => "背景颜色",
+        "link" => "插入链接",
+        "table" => "插入表格",
+        "align" => "单元格对齐",
+        _ => "",
+    };
+
+    private static Button MenuOption(string text, Action click, bool active = false, bool bold = false)
+    {
+        var normal = active ? Palette.Pill : Brushes.Transparent;
         var button = new Button
         {
-            Content = Ui.Text(text, 12.5, active ? FontWeight.SemiBold : null,
+            Content = Ui.Text(text, 12.5, active ? FontWeight.SemiBold : (bold ? FontWeight.Bold : null),
                 active ? Palette.AccentHover : Palette.TextPrimary),
-            Background = active ? Palette.Pill : Brushes.Transparent,
+            Background = normal,
             BorderThickness = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
@@ -238,6 +412,9 @@ public sealed class RichTextEditor : UserControl
             Padding = new Thickness(10, 7),
             Cursor = new Cursor(StandardCursorType.Hand),
         };
+        // 指针悬停显示淡绿底色（与工具条按钮一致），离开恢复
+        button.PointerEntered += (_, _) => button.Background = Palette.AccentTint;
+        button.PointerExited += (_, _) => button.Background = normal;
         button.Click += (_, _) => click();
         return button;
     }
@@ -247,19 +424,26 @@ public sealed class RichTextEditor : UserControl
         var stack = new StackPanel { Spacing = 2 };
         foreach (var (label, tag) in new[]
         {
-            ("正文", "p"), ("标题 1 · 40", "h1"), ("标题 2 · 32", "h2"),
-            ("标题 3 · 24", "h3"), ("标题 4 · 18", "h4"),
+            ("正文", "p"), ("一级标题", "h1"), ("二级标题", "h2"),
+            ("三级标题", "h3"), ("四级标题", "h4"),
+            ("", "divider"), // 标题组与列表组之间的分隔线
             ("有序列表", "ol"), ("无序列表", "ul"),
         })
         {
             var value = tag;
+            if (value == "divider")
+            {
+                stack.Children.Add(Ui.Divider(Palette.LineSoft, marginV: 5));
+                continue;
+            }
+            // 标题项文字加粗（正文/列表保持常规），与 Mac 文本样式菜单一致
             stack.Children.Add(MenuOption(label, () =>
             {
                 if (value == "ol") Run("exec", "insertOrderedList");
                 else if (value == "ul") Run("exec", "insertUnorderedList");
                 else Run("block", value);
                 ClosePopover();
-            }));
+            }, bold: value is "h1" or "h2" or "h3" or "h4"));
         }
         return stack;
     }
@@ -364,20 +548,22 @@ public sealed class RichTextEditor : UserControl
 
     private Control LinkPopover()
     {
+        // 每次打开都新建输入框：浮窗关闭后控件仍带 visual parent，
+        // 若复用字段级 TextBox，第二次 Add 到新面板会抛 "already has a visual parent" 崩溃。
+        var urlInput = new TextBox { Text = "https://", Watermark = "https://…", Width = 170, FontSize = 12 };
+        var textInput = new TextBox { Watermark = "显示文字（可留空）", Width = 170, FontSize = 12 };
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        row.Children.Add(_linkInput);
+        row.Children.Add(urlInput);
         row.Children.Add(Ui.Primary("插入", () =>
         {
-            var url = (_linkInput.Text ?? "").Trim();
+            var url = (urlInput.Text ?? "").Trim();
             if (!IsSafeUrl(url))
             {
                 _ = Dialogs.ReportFailure(this, "无法插入链接",
                     "仅支持 http、https、mailto 协议，请输入有效的链接地址。", "editor");
                 return;
             }
-            Run("insertLink", url, (_linkText.Text ?? "").Trim());
-            _linkInput.Text = "https://";
-            _linkText.Text = "";
+            Run("insertLink", url, (textInput.Text ?? "").Trim());
             ClosePopover();
         }, 11));
         return new StackPanel
@@ -387,7 +573,7 @@ public sealed class RichTextEditor : UserControl
             {
                 Ui.Text("链接地址", 11, null, Palette.TextTertiary),
                 row,
-                _linkText,
+                textInput,
             },
         };
     }
@@ -397,6 +583,20 @@ public sealed class RichTextEditor : UserControl
         var grid = new Grid();
         for (var i = 0; i < 8; i++) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
         for (var i = 0; i < 6; i++) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+        // 对齐 Mac TableInsertButton：hover (row,col) 时，从 (1,1) 到该格的矩形全部高亮，
+        // 直观表示「将插入几行几列」。绿边框 Accent + 浅绿填充 AccentTint。
+        var cells = new List<(Button button, int row, int col)>();
+        void Highlight(int hoverRow, int hoverCol)
+        {
+            foreach (var (button, row, col) in cells)
+            {
+                var selected = row <= hoverRow && col <= hoverCol;
+                button.Background = selected ? Palette.AccentTint : Palette.Panel;
+                button.BorderBrush = selected ? Palette.Accent : Palette.Line;
+            }
+        }
+
         for (var r = 0; r < 6; r++)
         for (var c = 0; c < 8; c++)
         {
@@ -411,7 +611,9 @@ public sealed class RichTextEditor : UserControl
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(2),
             };
+            cell.PointerEntered += (_, _) => Highlight(rows, cols);
             cell.Click += (_, _) => { Run("insertTable", rows.ToString(), cols.ToString()); ClosePopover(); };
+            cells.Add((cell, rows, cols));
             Grid.SetRow(cell, r);
             Grid.SetColumn(cell, c);
             grid.Children.Add(cell);
@@ -553,6 +755,7 @@ public sealed class RichTextEditor : UserControl
             var root = doc.RootElement;
             var type = root.GetProperty("type").GetString();
             if (type == "ready") { PushContent(); return; }
+            if (type == "editorFocus") { if (_popover != null) ClosePopover(restoreFocus: false); return; }
             if (type == "openExternal")
             {
                 var url = Field(root, "url");
@@ -585,9 +788,14 @@ public sealed class RichTextEditor : UserControl
                 MarkActive("删除线", state, "strikeThrough");
                 var size = Field(state, "fontSize");
                 if (!string.IsNullOrEmpty(size)) _currentFontSize = size!;
+                // Mac TableAlignmentButton：仅光标进入表格时出现，否则隐藏（而非置灰占位）
                 if (state.TryGetProperty("inTable", out var inTable)
                     && _toolButtons.TryGetValue("单元格对齐", out var alignButton))
-                    alignButton.IsEnabled = inTable.ValueKind == JsonValueKind.True;
+                {
+                    var inTbl = inTable.ValueKind == JsonValueKind.True;
+                    alignButton.IsVisible = inTbl;
+                    alignButton.IsEnabled = inTbl;
+                }
                 return;
             }
             if (type == "wordCount" && root.TryGetProperty("count", out var countElement))
@@ -763,5 +971,102 @@ public sealed class RichTextEditor : UserControl
         _lastHtml = null;
         _saveDelay?.Cancel();
         SaveHtml(html);
+    }
+}
+
+/// <summary>
+/// 工具条下拉浮窗：独立无边框顶层窗口。
+/// WebView2 是原生子 HWND，会盖住同一窗口内的一切 Avalonia 绘制（含 Popup/OverlayLayer），
+/// 只有另一个顶层 Window 才能稳定浮在编辑区之上。
+/// 关键：加 WS_EX_NOACTIVATE，浮窗全程不夺取 Windows 前台焦点——显隐都不触发应用失焦/闪烁。
+/// 由此带来的「点外部关闭」由主窗口指针监听 + 编辑区 focus 消息补足（在 RichTextEditor 中）。
+/// </summary>
+internal sealed class ToolbarPopover : Window
+{
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+    private readonly Control? _anchor;
+
+    public ToolbarPopover(Control content, double width, Control anchor, bool alignRight = false)
+    {
+        _anchor = anchor;
+        Title = string.Empty;
+        SystemDecorations = SystemDecorations.None;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        ShowInTaskbar = false;
+        CanResize = false;
+        SizeToContent = SizeToContent.WidthAndHeight;
+        Background = Brushes.Transparent;
+        TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent, WindowTransparencyLevel.AcrylicBlur };
+
+        Content = new Border
+        {
+            Margin = new Thickness(8), // 留出阴影空间
+            Child = Ui.Popover(content, width),
+        };
+
+        // 定位：浮窗左边缘对齐被点击按钮左边缘，顶部在按钮下方。
+        // 这样每个下拉都从自己的入口弹出，而非统一贴到编辑器左缘。
+        // PointToScreen / Position 都是物理像素，无需再乘 RenderScaling。
+        var topLevel = TopLevel.GetTopLevel(anchor);
+        var scale = topLevel?.RenderScaling ?? 1;
+        var topLeft = anchor.PointToScreen(new Point(0, 0));
+        var bottomLeft = anchor.PointToScreen(new Point(0, anchor.Bounds.Height));
+        var shadowPx = (int)Math.Round(8 * scale);          // Border 阴影留白
+        var popupWpx = (int)Math.Round((width + 16) * scale); // 浮窗宽 + 左右留白
+        // 右对齐入口：面板右缘贴齐按钮右缘、向左展开，避免宽浮窗伸出应用右边界；
+        // 左对齐入口：面板左缘贴齐按钮左缘（原行为）。
+        var x = alignRight
+            ? topLeft.X + (int)Math.Round(anchor.Bounds.Width * scale) + shadowPx - popupWpx
+            : topLeft.X - shadowPx;
+        var y = bottomLeft.Y + (int)Math.Round(2 * scale);   // 按钮下方留 2px
+        // 右边界保护：超出屏幕则左移，至少贴左屏边
+        var screens = topLevel?.Screens;
+        var screen = screens?.ScreenFromPoint(bottomLeft);
+        if (screen != null)
+        {
+            var area = screen.WorkingArea;
+            if (x + popupWpx > area.Right) x = area.Right - popupWpx;
+            if (x < area.X) x = area.X;
+        }
+        Position = new PixelPoint(x, y);
+    }
+
+    /// <summary>Show() 之后调用：加上 NOACTIVATE/TOOLWINDOW，浮窗永不成为前台窗口。</summary>
+    public void DisableActivation()
+    {
+        var handle = TryGetPlatformHandle();
+        if (handle == null || handle.Handle == IntPtr.Zero) return;
+        var style = GetWindowLong(handle.Handle, GWL_EXSTYLE);
+        SetWindowLong(handle.Handle, GWL_EXSTYLE, style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _anchor?.Focus();
+        base.OnClosed(e);
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+    private static extern int GetWindowLongPtr32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+    private static extern int SetWindowLongPtr32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    private static int GetWindowLong(IntPtr hWnd, int nIndex)
+        => IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex).ToInt32() : GetWindowLongPtr32(hWnd, nIndex);
+
+    private static void SetWindowLong(IntPtr hWnd, int nIndex, int value)
+    {
+        if (IntPtr.Size == 8) SetWindowLongPtr64(hWnd, nIndex, new IntPtr(value));
+        else SetWindowLongPtr32(hWnd, nIndex, value);
     }
 }

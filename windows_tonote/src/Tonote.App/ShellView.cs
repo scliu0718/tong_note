@@ -49,7 +49,9 @@ public sealed class ShellView : UserControl
         Foreground = Palette.TextPrimary,
     };
     private readonly RichTextEditor _richEditor;
-    private readonly TextBlock _meta = new() { Foreground = Palette.TextTertiary, FontSize = 12 };
+    private readonly TextBlock _meta = new() { Foreground = Palette.TextTertiary, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+    // 用固定尺寸的圆形 Border 代替字符「●」：字符基线会让圆点下沉，圆形 + Center 才能与文字中线严格对齐。
+    private readonly Border _metaDot = new() { Width = 5, Height = 5, CornerRadius = new CornerRadius(2.5), Background = Palette.Accent, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _banner = new()
     {
         Foreground = Palette.TextTertiary,
@@ -67,9 +69,15 @@ public sealed class ShellView : UserControl
         HorizontalAlignment = HorizontalAlignment.Right,
     };
     private readonly TextBlock _count = new() { Foreground = Palette.TextTertiary, FontSize = 11.5 };
-    private readonly ComboBox _notebook = new() { MinWidth = 120, FontSize = 12 };
+    // 笔记本按内容自适应宽度，用 MinWidth=0 覆盖 Fluent 主题自带的 120 默认最小宽度。
+    private readonly ComboBox _notebook = new() { MinWidth = 0, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly StackPanel _tags = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
-    private readonly TextBox _tagInput = new() { Watermark = "添加标签", Width = 120, FontSize = 12 };
+    // 标签输入框整体收窄 10px（120 → 110），右侧对勾只在有内容时出现。
+    // 高度与 ComboBox 对齐：Fluent TextBox 默认 MinHeight=32，不压掉会把标签框撑到 34px。
+    private readonly TextBox _tagInput = new() { Watermark = "添加标签", FontSize = 12, Padding = new Thickness(8, 4, 8, 2), MinHeight = 0, Height = 24, VerticalAlignment = VerticalAlignment.Stretch };
+    private readonly Button _tagSubmit;
+    private readonly Button _tagClear;
+    private readonly Border _tagFrame;
     private readonly StackPanel _metaRow = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     // 分隔条箭头：5×12 的矢量折线，夹角约 118°（比字符「>」更平），左右各 1px 白边正好撑满 7px 宽的分隔区
     private static readonly Geometry HandleRight = Geometry.Parse("M1,1 L4,6 L1,11");
@@ -111,27 +119,37 @@ public sealed class ShellView : UserControl
     private readonly Dictionary<Guid, int> _frozenOrder = new();
     private Control? _editorCached;
 
+    // 同步按钮转圈动画：点循环箭头即转，同步结束停下（后台其实一直在同步，之前缺的是可见反馈）。
+    private DispatcherTimer? _syncSpinTimer;
+    private RotateTransform? _syncSpinTransform;
+    private bool _syncSpinning;
+
     public event Action? LogoutRequested;
 
     public ShellView(AppSession session)
     {
         _session = session;
-        _pinButton = Ui.Small("置顶", TogglePin);
-        _trashButton = Ui.Small("删除笔记", MoveCurrentToTrash);
+        // 标题区三个操作按钮统一用图标，说明文字放 tooltip。
+        // 置顶是实心填充、笔划面积大，比另两个图标显重，单独调浅一档到 TextTertiary。
+        _pinButton = Ui.Small(Glyphs.Pin, TogglePin, Palette.TextTertiary);
+        ToolTip.SetTip(_pinButton, "置顶");
+        // 删除入口改用图标（从编辑器工具条移来），外观与其它标题区按钮一致。
+        _trashButton = Ui.Small(Glyphs.Trash, MoveCurrentToTrash);
+        ToolTip.SetTip(_trashButton, "删除笔记（移入回收站）");
         _restoreButton = Ui.Primary("恢复笔记", RestoreCurrent);
         _purgeButton = Ui.Danger("彻底删除", PurgeCurrent, icon: Glyphs.Trash);
-        _syncOneButton = Ui.Small("同步本篇", async () =>
-        {
-            if (_selected == null) return;
-            await _session.Sync.SyncSingleNoteAsync(_selected.Value);
-        });
+        _syncOneButton = Ui.Small(Glyphs.Sync, () => _ = SyncOneWithSpin());
+        ToolTip.SetTip(_syncOneButton, "同步本篇");
+        // 标题区三个图标按钮去掉边框线，只保留图标与 hover 反馈。
+        _syncOneButton.BorderThickness = new Thickness(0);
+        _pinButton.BorderThickness = new Thickness(0);
+        _trashButton.BorderThickness = new Thickness(0);
         _handle = BuildHandle();
         _richEditor = new RichTextEditor(session) { Margin = new Thickness(0) };
         _richEditor.StatusChanged += message => OnUi(() => _banner.Text = message);
-        _richEditor.DeleteRequested += MoveCurrentToTrash;
         _richEditor.SyncRequested += () => _ = _session.Sync.QuickSyncAsync();
         _richEditor.WordCountChanged += count => OnUi(() => _count.Text = count + " 字");
-        _richEditor.ToolbarTrailing = _count;
+        // 字数已移到标题区右上角按钮下方，不再作为工具条尾部控件。
         KeyDown += OnShellKeyDown;
         _search.TextChanged += (_, _) =>
         {
@@ -146,6 +164,31 @@ public sealed class ShellView : UserControl
         _clearSearch.Background = Brushes.Transparent;
         _title.TextChanged += (_, _) => SaveTitle();
         _notebook.SelectionChanged += (_, _) => SaveNotebook();
+
+        // 标签输入：有内容才显示细边框 + 绿色圆环对勾（提交）+ 灰色圆环叉号（清空）。
+        _tagSubmit = TagIconButton(Glyphs.TagCheck, Palette.Brush(0x069F21), "添加标签", AddTag, top: 4); // 勾上边距 +1 → 4
+        _tagClear = TagIconButton(Glyphs.TagClear, Palette.Brush(0xBFBFBF), "清空输入", ClearTagInput, size: 11, top: 0, left: 2, right: 2); // 叉宽高 11，左间距 +2，右边距 2
+        _tagSubmit.IsVisible = false;
+        _tagClear.IsVisible = false;
+        var tagGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
+        tagGrid.Children.Add(_tagInput);
+        Grid.SetColumn(_tagSubmit, 1);
+        tagGrid.Children.Add(_tagSubmit);
+        Grid.SetColumn(_tagClear, 2);
+        tagGrid.Children.Add(_tagClear);
+        _tagFrame = new Border
+        {
+            Width = 110,
+            Height = 26, // 与笔记本 ComboBox 的 MinHeight=26 严格一致（空/有内容都一样）
+            Child = tagGrid,
+            BorderThickness = new Thickness(1),
+            BorderBrush = Palette.Transparent,
+            CornerRadius = new CornerRadius(7),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _tagInput.TextChanged += (_, _) => UpdateTagFrame();
+        _tagInput.GotFocus += (_, _) => UpdateTagFrame();
+        _tagInput.LostFocus += (_, _) => UpdateTagFrame();
         _tagInput.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter) AddTag();
@@ -234,6 +277,59 @@ public sealed class ShellView : UserControl
         else Dispatcher.UIThread.Post(action);
     }
 
+    /// <summary>点击「同步本篇」：图标持续转圈给出可见反馈，同步结束后停下并复位。</summary>
+    private async Task SyncOneWithSpin()
+    {
+        if (_selected == null) return;
+        var id = _selected.Value;
+        StartSyncSpin();
+        var started = DateTime.UtcNow;
+        try
+        {
+            await _session.Sync.SyncSingleNoteAsync(id);
+        }
+        finally
+        {
+            // 无变更时同步可能几毫秒就返回；至少转够最短时长，否则用户看不到任何反馈。
+            var remaining = TimeSpan.FromMilliseconds(700) - (DateTime.UtcNow - started);
+            if (remaining > TimeSpan.Zero)
+                await Task.Delay(remaining);
+            OnUi(StopSyncSpin);
+        }
+    }
+
+    private void StartSyncSpin()
+    {
+        if (_syncSpinning) return;
+        _syncSpinning = true;
+        // 图标是按钮 Content 里的 Path；绕自身中心旋转。
+        if (_syncOneButton.Content is Control icon)
+        {
+            icon.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+            _syncSpinTransform = new RotateTransform(0);
+            icon.RenderTransform = _syncSpinTransform;
+        }
+        _syncSpinTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        _syncSpinTimer.Tick -= OnSyncSpinTick;
+        _syncSpinTimer.Tick += OnSyncSpinTick;
+        _syncSpinTimer.Start();
+    }
+
+    private void OnSyncSpinTick(object? sender, EventArgs e)
+    {
+        if (_syncSpinTransform != null)
+            _syncSpinTransform.Angle = (_syncSpinTransform.Angle + 18) % 360;
+    }
+
+    private void StopSyncSpin()
+    {
+        _syncSpinning = false;
+        _syncSpinTimer?.Stop();
+        if (_syncOneButton.Content is Control icon)
+            icon.RenderTransform = null;
+        _syncSpinTransform = null;
+    }
+
     private void Refresh()
     {
         if (_loading) return;
@@ -260,9 +356,25 @@ public sealed class ShellView : UserControl
             _ => "等待同步",
         };
         _syncSlot.Content = BuildSyncControl(status, shortText);
+        // 同步完成后 LastSyncDate 会更新，编辑器状态文案的「上次同步」时间也要跟着刷新。
+        if (ReferenceEquals(_right.Content, _editorCached)) UpdateMetaText();
         var note = Current();
         if (note?.IsQuickSync == true)
             _banner.Text = shortText + (string.IsNullOrWhiteSpace(status.Message) ? "" : " · " + status.Message);
+    }
+
+    /// <summary>编辑器状态文案：回收站/上次同步时间，灰色次要信息。</summary>
+    private void UpdateMetaText()
+    {
+        var note = Current();
+        if (note == null) return;
+        var lastSync = _session.Sync.LastSyncDate;
+        _meta.Text = note.IsTrashed ? "回收站中的笔记"
+            : lastSync == null ? "尚未同步"
+            : "上次同步 " + lastSync.Value.ToString("MM-dd HH:mm");
+        _meta.Foreground = Palette.TextTertiary;
+        // 状态圆点用主题绿，文字仍保持灰色次要信息。
+        _metaDot.Background = Palette.Accent;
     }
 
     /// <summary>排序栏右侧的同步组件：同步中＝文字；否则＝绿色「一键同步」按钮。</summary>
@@ -314,7 +426,7 @@ public sealed class ShellView : UserControl
         _notebook.ItemsSource = NotebookChoices(note);
         _notebook.SelectedItem = note.Notebook;
         _notebook.IsVisible = !note.IsQuickSync && !note.IsTrashed;
-        _tagInput.IsVisible = !note.IsQuickSync && !note.IsTrashed;
+        _tagFrame.IsVisible = !note.IsQuickSync && !note.IsTrashed;
         _metaRow.IsVisible = !note.IsQuickSync;
         RenderTags(note);
         _loading = false;
@@ -325,13 +437,15 @@ public sealed class ShellView : UserControl
     {
         var note = Current();
         if (note == null || !ReferenceEquals(_right.Content, _editorCached)) return;
-        _meta.Text = note.IsTrashed ? "回收站中的笔记" : "已保存到本地 · " + note.TimeText;
+        // 状态文案：灰色次要信息。改为展示上次同步时间，未同步过则提示尚未同步。
+        UpdateMetaText();
         _count.Text = note.WordCount + " 字";
         var editable = !note.IsTrashed && !note.IsQuickSync;
         _syncOneButton.IsVisible = !note.IsTrashed;
-        _syncOneButton.Content = note.IsQuickSync ? "立即同步本篇" : "同步本篇";
+        // 图标按钮不能再设 Content（会把矢量图标换成文字），状态变化只更新 tooltip。
+        ToolTip.SetTip(_syncOneButton, note.IsQuickSync ? "立即同步本篇" : "同步本篇");
         _pinButton.IsVisible = editable;
-        _pinButton.Content = note.Pinned ? "取消置顶" : "置顶";
+        ToolTip.SetTip(_pinButton, note.Pinned ? "取消置顶" : "置顶");
         _trashButton.IsVisible = editable;
         _restoreButton.IsVisible = note.IsTrashed;
         _purgeButton.IsVisible = note.IsTrashed;
@@ -371,38 +485,58 @@ public sealed class ShellView : UserControl
 
         _metaRow.Children.Add(_notebook);
         _metaRow.Children.Add(_tags);
-        _metaRow.Children.Add(_tagInput);
+        _metaRow.Children.Add(_tagFrame);
 
         var header = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
             Margin = new Thickness(Metrics.EditorInset, 16, Metrics.EditorInset, 10),
         };
         header.Children.Add(_title);
-        var buttons = new[] { _syncOneButton, _pinButton, _trashButton, _restoreButton, _purgeButton };
-        for (var i = 0; i < buttons.Length; i++)
+        // 右上角：一行图标按钮。字数已移到 meta 行，与「已保存到本地」同排。
+        var buttonRow = new StackPanel
         {
-            buttons[i].Margin = new Thickness(6, 0, 0, 0);
-            Grid.SetColumn(buttons[i], i + 1);
-            header.Children.Add(buttons[i]);
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        var buttons = new[] { _syncOneButton, _pinButton, _trashButton, _restoreButton, _purgeButton };
+        foreach (var button in buttons)
+        {
+            button.Margin = new Thickness(6, 0, 0, 0);
+            buttonRow.Children.Add(button);
         }
+        Grid.SetColumn(buttonRow, 1);
+        header.Children.Add(buttonRow);
 
-        var metaStack = new StackPanel
+        // 元数据行：左侧笔记本/标签 + 状态文案；字数右对齐到最右侧（垃圾桶下方），
+        // 但仍在同一个 meta 行内，与状态文案保持同一水平线。
+        var metaStack = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            Margin = new Thickness(Metrics.EditorInset, 0, Metrics.EditorInset, 10),
+        };
+        var metaLeft = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
-            Margin = new Thickness(Metrics.EditorInset, 0, Metrics.EditorInset, 10),
+            VerticalAlignment = VerticalAlignment.Center,
             Children =
             {
                 _metaRow,
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
-                    Spacing = 4,
-                    Children = { Ui.Text("●", 10, FontWeight.Bold, Palette.Accent), _meta },
+                    Spacing = 6,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children = { _metaDot, _meta },
                 },
             },
         };
+        metaStack.Children.Add(metaLeft);
+        _count.HorizontalAlignment = HorizontalAlignment.Right;
+        _count.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(_count, 1);
+        metaStack.Children.Add(_count);
 
         var page = new Grid
         {
@@ -1249,6 +1383,45 @@ public sealed class ShellView : UserControl
         _session.Notes.SetNotebook(note.Id, name);
     }
 
+    /// <summary>标签框里的图标按钮：固定颜色、无边框无 hover 换色，保持用户给的图标色。</summary>
+    private static Button TagIconButton(string glyph, IBrush color, string tip, Action click,
+        int size = 18, int top = 1, int left = 0, int right = 0)
+    {
+        var button = new Button
+        {
+            Content = Icons.Vector(glyph, size - 2, color),
+            Width = size,
+            Height = size,
+            Margin = new Thickness(left, top, right, 0), // left 控制与前一图标间距，right 控制离框右缘距离
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        ToolTip.SetTip(button, tip);
+        button.Click += (_, _) => click();
+        return button;
+    }
+
+    private void ClearTagInput()
+    {
+        _tagInput.Text = "";
+        UpdateTagFrame();
+        _tagInput.Focus();
+    }
+
+    /// <summary>标签输入：有内容才显示边框、对勾与叉号，聚焦时用主题绿描边。</summary>
+    private void UpdateTagFrame()
+    {
+        var hasText = !string.IsNullOrWhiteSpace(_tagInput.Text);
+        _tagSubmit.IsVisible = hasText;
+        _tagClear.IsVisible = hasText;
+        _tagFrame.BorderBrush = !hasText ? Palette.Transparent
+            : _tagInput.IsFocused ? Palette.FieldFocusRing : Palette.Line;
+    }
+
     private void AddTag()
     {
         if (_selected == null) return;
@@ -1259,6 +1432,7 @@ public sealed class ShellView : UserControl
         var tags = note.Tags.ToList();
         if (!tags.Contains(text)) tags.Add(text);
         _tagInput.Text = "";
+        UpdateTagFrame();
         _session.Notes.UpdateTags(note.Id, tags);
         RenderTags(note);
     }

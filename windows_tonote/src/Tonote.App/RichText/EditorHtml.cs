@@ -2,7 +2,7 @@ namespace Tonote.App;
 
 /// <summary>
 /// WebView2 里运行的受控 HTML 编辑器。CSS 与 Mac 端 RichTextBridge / 编辑器设计稿 1:1：
-/// 正文 #47474A / 14px / 行高 1.85、标题 40/32/24/18、引用绿竖线、代码块圆角、
+/// 正文 #47474A / 14px / 行高 1.35、标题 40/32/24/18、引用绿竖线、代码块圆角、
 /// 列表标记蓝、表格 100pt 列宽与 #D8D9DE 边框、图片最大 480px。
 /// 浏览器 contenteditable 会产出 div / font / tbody / 绝对路径图片，
 /// 这里在 JS 侧先规整成三端约定的受控标签集，C# 侧再用 RichTextHtmlCodec 校验一遍。
@@ -29,7 +29,7 @@ public static class EditorHtml
   #editor {
     outline: none; min-height: 100%;
     padding: 28px 28px 96px;
-    font-size: 14px; line-height: 1.85;
+    font-size: 14px; line-height: 1.35;
     letter-spacing: .005em;
     max-width: 680px;
     caret-color: #1A9E5C;
@@ -49,7 +49,7 @@ public static class EditorHtml
     background: #C9CCD4; border-radius: 9px; border: 2px solid #FFFFFF;
   }
   ::-webkit-scrollbar-thumb:hover { background: #A1A1A6; }
-  p, div { margin: 0 0 8px; min-height: 1.3em; }
+  p, div { margin: 0 0 3px; min-height: 1.2em; }
   h1 { font-size: 40px; margin: 18px 0 8px; line-height: 1.2; }
   h2 { font-size: 32px; margin: 15px 0 6px; line-height: 1.25; }
   h3 { font-size: 24px; margin: 12px 0 5px; line-height: 1.3; }
@@ -71,9 +71,35 @@ public static class EditorHtml
     font-family: Consolas, "Courier New", monospace;
     white-space: pre-wrap; font-size: 12.5px; line-height: 1.7;
   }
-  ul, ol { margin: 6px 0; padding-left: 26px; }
-  li { line-height: 1.3; padding-left: 2px; }
-  li::marker { color: #2E7CF6; }
+  /* 列表层级与 Mac / Android 对齐：扁平 <li data-level="n"> 存层级，不嵌套 <ul>。
+     Tab/Shift+Tab 改 data-level（0-3，见 keydown），这里按层级缩进 + 切编号体系（1.→a.→i.）。
+     标记用 CSS 自绘、不进正文 HTML，data-level 属性由清洗白名单保留。 */
+  ul, ol { list-style: none; margin: 6px 0; padding-left: 8px; }
+  /* min-height：刚回车出的空列表项也占一行，否则绝对定位的标记会叠到下一块 */
+  li { position: relative; margin: 0; padding-left: 22px; line-height: 1.3; min-height: 1.3em; }
+  li::before { position: absolute; left: 4px; top: 0; color: #2E7CF6; line-height: inherit; }
+  li[data-level="1"] { margin-left: 28px; }
+  li[data-level="2"] { margin-left: 56px; }
+  li[data-level="3"] { margin-left: 84px; }
+  li[data-level="4"] { margin-left: 112px; }
+  li[data-level="5"] { margin-left: 140px; }
+  li[data-level="6"] { margin-left: 168px; }
+  li[data-level="7"] { margin-left: 196px; }
+  /* 无序：一级实心、子级空心圆点，同字形同尺寸（left/top 按 Windows 14px 字号微调） */
+  ul > li::before {
+    content: ""; box-sizing: border-box; width: 6px; height: 6px;
+    border-radius: 50%; background: #2E7CF6; border: 1.2px solid #2E7CF6; left: 5px; top: 5.5px;
+  }
+  ul > li[data-level]::before { background: transparent; }
+  /* 有序：1. → a. → i.，CSS 计数器逐级编号，标记不进正文 */
+  ol > li { counter-increment: n0; counter-reset: n1 n2; }
+  ol > li::before { content: counter(n0) "."; left: 4px; }
+  ol > li[data-level="1"] { counter-increment: n1; counter-reset: n2; }
+  ol > li[data-level="1"]::before { content: counter(n1, lower-alpha) "."; }
+  ol > li[data-level="2"], ol > li[data-level="3"], ol > li[data-level="4"],
+  ol > li[data-level="5"], ol > li[data-level="6"], ol > li[data-level="7"] { counter-increment: n2; counter-reset: none; }
+  ol > li[data-level="2"]::before, ol > li[data-level="3"]::before, ol > li[data-level="4"]::before,
+  ol > li[data-level="5"]::before, ol > li[data-level="6"]::before, ol > li[data-level="7"]::before { content: counter(n2, lower-roman) "."; }
   /* W-08：三端契约是「满宽为默认、不写属性；data-fullwidth="0" 才是固定宽」 */
   table {
     border-collapse: collapse; table-layout: fixed;
@@ -276,6 +302,8 @@ public static class EditorHtml
   }
 
   editor.addEventListener('input', changed);
+  // 点击编辑区获得焦点时通知宿主关闭工具条浮窗（浮窗 NOACTIVATE 后无失焦事件，靠这里补点外部关闭）
+  editor.addEventListener('focus', function () { post({ type: 'editorFocus' }); });
   editor.addEventListener('blur', function () {
     if (timer) clearTimeout(timer);
     var html = clean();
@@ -385,7 +413,10 @@ public static class EditorHtml
       if (item) {
         event.preventDefault();
         var level = parseInt(item.getAttribute('data-level') || '0', 10) + (event.shiftKey ? -1 : 1);
-        item.setAttribute('data-level', Math.max(0, Math.min(3, level)));
+        level = Math.max(0, Math.min(3, level)); // 与 Mac changeListLevel 一致：0-3
+        // 三端契约：0 级不写 data-level（Mac codec / Android 均如此），否则会被子级 CSS 当空心点
+        if (level === 0) item.removeAttribute('data-level');
+        else item.setAttribute('data-level', String(level));
         changed();
       }
       return;
@@ -429,6 +460,37 @@ public static class EditorHtml
     return cell ? cell.parentNode : null;
   }
 
+  // 切换段样式（标题/正文）时清掉当前块内所有 inline font-size，
+  // 避免之前手动设的字号盖过标题 CSS 字号（h1 40 / h2 32 / h3 24 / h4 18 / 正文 14）。
+  // 只清字号，保留 color / background-color 等其它行内样式（对齐 Mac 保留文字颜色）。
+  function clearBlockInlineFontSize() {
+    var sel = window.getSelection();
+    if (!sel || !sel.anchorNode) return;
+    var block = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode;
+    while (block && block !== editor) {
+      if (block.nodeType === 1 && BLOCK[block.tagName.toLowerCase()]) break;
+      block = block.parentNode;
+    }
+    if (!block || block === editor) return;
+    var spans = block.querySelectorAll('span[style]');
+    for (var i = 0; i < spans.length; i++) {
+      var span = spans[i];
+      var kept = [];
+      (span.getAttribute('style') || '').split(';').forEach(function (piece) {
+        var p = piece.trim();
+        if (!p || p.toLowerCase().indexOf('font-size') === 0) return;
+        kept.push(p);
+      });
+      if (kept.length) {
+        span.setAttribute('style', kept.join(';'));
+      } else {
+        // 字号是唯一样式：展开 span 为纯文本，避免留下空壳
+        while (span.firstChild) span.parentNode.insertBefore(span.firstChild, span);
+        span.parentNode.removeChild(span);
+      }
+    }
+  }
+
   window.tn = {
     setContent: function (html) {
       editor.innerHTML = html || '<p><br></p>';
@@ -443,7 +505,15 @@ public static class EditorHtml
       document.execCommand(command, false, value === undefined ? null : value);
       changed();
     },
-    block: function (tag) { window.tn.exec('formatBlock', tag); },
+    block: function (tag) {
+      editor.focus();
+      document.execCommand('formatBlock', false, tag);
+      // 对齐 Mac applyBlockStyle：切标题时清掉旧 inline 字号，让标题 CSS 字号生效；
+      // 字号基准随块样式走，用户之后仍可手动用字号菜单改。
+      clearBlockInlineFontSize();
+      changed();
+      reportState(); // 字号工具条自动同步为标题对应字号（40/32/24/18/14）
+    },
     setFontSize: function (px) {
       editor.focus();
       document.execCommand('fontSize', false, '7');
