@@ -318,7 +318,9 @@ public static class Ui
         button.PointerExited += (_, _) =>
         {
             button.Background = Brushes.Transparent;
-            if (vector != null) Icons.Tint(vector, fg);
+            // 恢复成「当前」Foreground 而非创建时的 fg：调用方若动态改色（如置顶按钮变黄），
+            // hover 离开后不会丢失新颜色。
+            if (vector != null) Icons.Tint(vector, button.Foreground ?? fg);
         };
         return button.WithClick(click);
     }

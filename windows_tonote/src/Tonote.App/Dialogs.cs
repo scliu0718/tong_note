@@ -149,6 +149,8 @@ public static class Dialogs
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
             Spacing = 12,
+            // 正文最后一行与按钮区之间的垂直间距 24px
+            Margin = new Thickness(0, 24, 0, 0),
         };
         foreach (var button in buttons) row.Children.Add(button);
         return row;
@@ -203,13 +205,25 @@ public static class Dialogs
                 Padding = new Thickness(10, 8),
                 CornerRadius = new CornerRadius(Metrics.RadiusButton),
                 BorderBrush = Palette.Line,
-                Margin = new Thickness(0, 0, 0, 16),
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(0),
             };
             _input.KeyDown += (_, e) =>
             {
                 if (e.Key == Avalonia.Input.Key.Enter) Close(_input.Text ?? "");
             };
-            body.Children.Add(_input);
+            // 全局 TextBox 样式把边框压成 0，这里用外层 Border 画出可见输入框，
+            // 否则「修改笔记本」弹窗里看不出文字区域可以编辑。
+            var inputFrame = new Border
+            {
+                Background = Palette.Panel,
+                BorderBrush = Palette.Line,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(Metrics.RadiusButton),
+                Margin = new Thickness(0, 0, 0, 16),
+                Child = _input,
+            };
+            body.Children.Add(inputFrame);
             var ok = Ui.Primary("确定", () => Close(_input.Text ?? ""));
             ok.MinWidth = 96;
             var cancel = Ui.Ghost("取消", () => Close(null));

@@ -200,6 +200,13 @@
       <Setter Property="Background" Value="#E8F6EF" />
     </Style>
 
+    <!-- 右键菜单分隔线：Fluent 默认 1px 偏粗，统一细一半、颜色浅一档 -->
+    <Style Selector="Separator">
+      <Setter Property="Height" Value="0.5" />
+      <Setter Property="Margin" Value="8,2" />
+      <Setter Property="Background" Value="#ECECEF" />
+    </Style>
+
     <!-- 右键菜单浮层：白底、细边框、圆角、内边距 -->
     <Style Selector="ContextMenu">
       <Setter Property="Background" Value="#FFFFFF" />

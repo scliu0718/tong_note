@@ -498,7 +498,7 @@ public sealed class RichTextEditor : UserControl
             };
             grid.Children.Add(chip);
         }
-        var custom = new TextBox { Watermark = "#RRGGBB", Width = 96, FontSize = 11 };
+        var custom = new TextBox { Watermark = "#RRGGBB", FontSize = 11, Padding = new Thickness(6, 5) };
         var apply = Ui.Primary("自定义", () =>
         {
             var value = (custom.Text ?? "").Trim();
@@ -511,7 +511,7 @@ public sealed class RichTextEditor : UserControl
             Run("exec", background ? "hiliteColor" : "foreColor", value);
             ClosePopover();
         }, 11);
-        var customRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { custom, apply } };
+        var customRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { BorderedInput(custom, 96), apply } };
         var stack = new StackPanel
         {
             Spacing = 6,
@@ -546,15 +546,32 @@ public sealed class RichTextEditor : UserControl
         return scheme is "http" or "https" or "mailto";
     }
 
+    /// <summary>全局 TextBox 样式把边框压成 0，浮窗输入框用外包 Border 画出可见边框。</summary>
+    private static Border BorderedInput(TextBox input, double width) => new()
+    {
+        Width = width,
+        Height = 32,
+        // 固定宽度控件在 Stretch 的 StackPanel 里会被居中，导致第二行输入框缩进；
+        // 统一左对齐，和「链接地址」标签、第一行输入框的左缘一致。
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Center,
+        Background = Palette.Panel,
+        BorderBrush = Palette.Line,
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(5),
+        Child = input,
+    };
+
     private Control LinkPopover()
     {
         // 每次打开都新建输入框：浮窗关闭后控件仍带 visual parent，
         // 若复用字段级 TextBox，第二次 Add 到新面板会抛 "already has a visual parent" 崩溃。
-        var urlInput = new TextBox { Text = "https://", Watermark = "https://…", Width = 170, FontSize = 12 };
-        var textInput = new TextBox { Watermark = "显示文字（可留空）", Width = 170, FontSize = 12 };
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        row.Children.Add(urlInput);
-        row.Children.Add(Ui.Primary("插入", () =>
+        var urlInput = new TextBox { Text = "https://", Watermark = "https://…", FontSize = 12,
+            Padding = new Thickness(6, 5), MinHeight = 0, VerticalAlignment = VerticalAlignment.Center };
+        var textInput = new TextBox { Watermark = "显示文字（可留空）", FontSize = 12,
+            Padding = new Thickness(6, 5), MinHeight = 0, VerticalAlignment = VerticalAlignment.Center };
+        // 两行网格：左列输入框，右列按钮；「取消」与第二个输入框同一行、位于其右侧。
+        var insert = Ui.Primary("插入", () =>
         {
             var url = (urlInput.Text ?? "").Trim();
             if (!IsSafeUrl(url))
@@ -565,15 +582,35 @@ public sealed class RichTextEditor : UserControl
             }
             Run("insertLink", url, (textInput.Text ?? "").Trim());
             ClosePopover();
-        }, 11));
+        }, 11);
+        insert.Width = 52;
+        insert.Margin = new Thickness(6, 0, 0, 0);
+        var cancel = Ui.Ghost("取消", () => ClosePopover(), 11);
+        cancel.Width = 52;
+        cancel.Margin = new Thickness(6, 0, 0, 0);
+
+        var urlRow = new Grid { ColumnDefinitions = new ColumnDefinitions("170,Auto") };
+        var urlBox = BorderedInput(urlInput, 170);
+        urlBox.VerticalAlignment = VerticalAlignment.Top;
+        urlRow.Children.Add(urlBox);
+        Grid.SetColumn(insert, 1);
+        urlRow.Children.Add(insert);
+
+        var textRow = new Grid { ColumnDefinitions = new ColumnDefinitions("170,Auto") };
+        var textBox = BorderedInput(textInput, 170);
+        textBox.VerticalAlignment = VerticalAlignment.Top;
+        textRow.Children.Add(textBox);
+        Grid.SetColumn(cancel, 1);
+        textRow.Children.Add(cancel);
+
         return new StackPanel
         {
             Spacing = 6,
             Children =
             {
                 Ui.Text("链接地址", 11, null, Palette.TextTertiary),
-                row,
-                textInput,
+                urlRow,
+                textRow,
             },
         };
     }
@@ -944,7 +981,7 @@ public sealed class RichTextEditor : UserControl
             var source = files.FirstOrDefault()?.TryGetLocalPath();
             if (string.IsNullOrWhiteSpace(source))
             {
-                _ = Dialogs.ReportFailure(this, "操作失败", "没有选择图片文件。", "editor");
+                // 用户在文件选择器里点「取消」属于正常操作，静默返回，不弹「操作失败」。
                 return;
             }
             var relative = _session.Notes.Attachments.ImportImage(source, _currentId);

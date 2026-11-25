@@ -445,6 +445,11 @@ public sealed class ShellView : UserControl
         // 图标按钮不能再设 Content（会把矢量图标换成文字），状态变化只更新 tooltip。
         ToolTip.SetTip(_syncOneButton, note.IsQuickSync ? "立即同步本篇" : "同步本篇");
         _pinButton.IsVisible = editable;
+        // 置顶状态：图钉变黄（与列表卡片一致），未置顶为灰色；同步更新 Foreground，
+        // 这样 hover 离开后 Ui.Small 会按当前 Foreground 恢复，不会把黄色冲掉。
+        var pinBrush = note.Pinned ? Palette.Amber : Palette.TextTertiary;
+        _pinButton.Foreground = pinBrush;
+        if (_pinButton.Content is Control pinIcon) Icons.Tint(pinIcon, pinBrush);
         ToolTip.SetTip(_pinButton, note.Pinned ? "取消置顶" : "置顶");
         _trashButton.IsVisible = editable;
         _restoreButton.IsVisible = note.IsTrashed;
@@ -1124,7 +1129,24 @@ public sealed class ShellView : UserControl
                     () => { _pane = Pane.Notes; _tagFilter = name; _notebookFilter = null; Refresh(); },
                     _session.Notes.CountWithTag(name), glyph: Glyphs.Tag);
                 var menu = new ContextMenu();
-                var remove = new MenuItem { Header = "删除标签" };
+                var rename = new MenuItem { Header = "修改标签", Icon = Ui.Icon(Glyphs.Pencil, 14, Palette.TextSecondary) };
+                rename.Click += async (_, _) =>
+                {
+                    var newName = await Dialogs.Prompt(this, "修改标签", "输入新的标签名称", "标签名称", name);
+                    var trimmed = newName?.Trim();
+                    if (string.IsNullOrWhiteSpace(trimmed) || trimmed == name) return;
+                    var err = _session.Notes.RenameTag(name, trimmed!);
+                    if (err != null)
+                    {
+                        await Dialogs.Confirm(this, "无法修改标签", err, "知道了", "取消", danger: false);
+                        return;
+                    }
+                    if (_tagFilter == name) _tagFilter = trimmed;
+                    Refresh();
+                };
+                menu.Items.Add(rename);
+                menu.Items.Add(new Separator());
+                var remove = new MenuItem { Header = "删除标签", Foreground = Palette.Red, Icon = Ui.Icon(Glyphs.Trash, 14, Palette.Red) };
                 remove.Click += async (_, _) =>
                 {
                     var yes = await Dialogs.Confirm(this, "删除标签？",
@@ -1295,7 +1317,15 @@ public sealed class ShellView : UserControl
                 card.WithHover(Palette.Panel, Palette.CardHover);
                 card.WithElevate();
             }
-            card.PointerPressed += (_, e) => { Select(current.Id); e.Handled = true; };
+            // 只让左键选中；右键留给 ContextMenu，避免 Handled=true 吞掉右键手势导致菜单弹不出来。
+            card.PointerPressed += (_, e) =>
+            {
+                if (e.GetCurrentPoint(card).Properties.IsLeftButtonPressed)
+                {
+                    Select(current.Id);
+                    e.Handled = true;
+                }
+            };
 
             var menu = new ContextMenu();
             if (_pane == Pane.Trash)
@@ -1315,11 +1345,25 @@ public sealed class ShellView : UserControl
             }
             else
             {
-                var pin = new MenuItem { Header = current.Pinned ? "取消置顶笔记" : "置顶笔记" };
+                var add = new MenuItem { Header = "新建笔记", Icon = Ui.Icon(Glyphs.Plus, 14, Palette.Accent) };
+                add.Click += (_, _) => NewNote();
+                menu.Items.Add(add);
+                menu.Items.Add(new Separator());
+                // 置顶图标沿用笔记列表里的图钉：置顶时用黄色（Palette.Amber），未置顶为灰色。
+                var pin = new MenuItem
+                {
+                    Header = current.Pinned ? "取消置顶" : "置顶笔记",
+                    Icon = Ui.Icon(Glyphs.Pin, 14, current.Pinned ? Palette.Amber : Palette.TextTertiary),
+                };
                 pin.Click += (_, _) => _session.Notes.TogglePin(current.Id);
                 menu.Items.Add(pin);
                 menu.Items.Add(new Separator());
-                var trash = new MenuItem { Header = "删除笔记", Foreground = Palette.Red };
+                var trash = new MenuItem
+                {
+                    Header = "删除笔记",
+                    Foreground = Palette.Red,
+                    Icon = Ui.Icon(Glyphs.Trash, 14, Palette.Red),
+                };
                 trash.Click += async (_, _) =>
                 {
                     var yes = await Dialogs.Confirm(this, "删除笔记？",
@@ -1720,6 +1764,7 @@ public sealed class ShellView : UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = iconOnly || _sidebarWidth != Metrics.SidebarExpanded
                 ? HorizontalAlignment.Center : HorizontalAlignment.Left,
+            VerticalContentAlignment = VerticalAlignment.Center,
             CornerRadius = new CornerRadius(_sidebarWidth == Metrics.SidebarExpanded ? 7 : Metrics.RadiusCard),
             Padding = new Thickness(8, 7),
             FontSize = tiny ? Metrics.FontSidebarTiny
@@ -1759,7 +1804,7 @@ public sealed class ShellView : UserControl
             var left = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 9,
+                Spacing = 6,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
                 Children = { icon, labelBlock },
@@ -1780,10 +1825,13 @@ public sealed class ShellView : UserControl
         else if (icon != null && !tiny)
         {
             labelBlock = Ui.Text(label, 12, selected ? FontWeight.SemiBold : null, fg);
+            labelBlock.VerticalAlignment = VerticalAlignment.Center;
+            icon!.VerticalAlignment = VerticalAlignment.Center;
             button.Content = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 9,
+                Spacing = 6,
+                VerticalAlignment = VerticalAlignment.Center,
                 Children = { icon, labelBlock },
             };
         }
@@ -1919,14 +1967,15 @@ public sealed class ShellView : UserControl
         };
         button.Click += (_, _) => click();
 
-        // 右键菜单：新建笔记本 / 删除笔记本（Mac SidebarView.swift:372-378）
+        // 右键菜单：新建笔记本 / 修改笔记本 / 删除笔记本（与笔记菜单同款：语义色图标 + 细分割线）
         var menu = new ContextMenu();
-        var addItem = new MenuItem { Header = "新建笔记本" };
+        var addItem = new MenuItem { Header = "新建笔记本", Icon = Ui.Icon(Glyphs.Plus, 14, Palette.Accent) };
         addItem.Click += (_, _) => PromptNewNotebook();
         menu.Items.Add(addItem);
         if (deletable)
         {
-            var renameItem = new MenuItem { Header = "修改笔记本" };
+            menu.Items.Add(new Separator());
+            var renameItem = new MenuItem { Header = "修改笔记本", Icon = Ui.Icon(Glyphs.Pencil, 14, Palette.TextSecondary) };
             renameItem.Click += async (_, _) =>
             {
                 var newName = await Dialogs.Prompt(this, "修改笔记本", "输入新的笔记本名称（≤12 字）", "笔记本名称（≤12 字）", name);
@@ -1942,7 +1991,8 @@ public sealed class ShellView : UserControl
                 Refresh();
             };
             menu.Items.Add(renameItem);
-            var delItem = new MenuItem { Header = "删除笔记本" };
+            menu.Items.Add(new Separator());
+            var delItem = new MenuItem { Header = "删除笔记本", Foreground = Palette.Red, Icon = Ui.Icon(Glyphs.Trash, 14, Palette.Red) };
             delItem.Click += async (_, _) =>
             {
                 var cnt = _session.Notes.CountInNotebook(name);

@@ -253,6 +253,28 @@ public sealed class NoteStore
         TouchMany(touched);
     }
 
+    /// <summary>重命名标签：把旧标签替换为新标签，已含新标签的笔记去重；标脏并通知。返回错误说明，成功为 null。</summary>
+    public string? RenameTag(string from, string to)
+    {
+        if (from == to) return null;
+        if (AllTags.Contains(to)) return "标签「" + to + "」已存在。";
+        var touched = new List<Guid>();
+        foreach (var note in Notes.Where(note => note.Tags.Contains(from)))
+        {
+            var replaced = note.Tags.Select(t => t == from ? to : t).Distinct().ToList();
+            note.Tags.Clear();
+            note.Tags.AddRange(replaced);
+            note.UpdatedAt = DateTime.UtcNow;
+            touched.Add(note.Id);
+        }
+
+        if (touched.Count == 0)
+            return null;
+        Save();
+        TouchMany(touched);
+        return null;
+    }
+
     public void RemoveTag(string tag)
     {
         var touched = new List<Guid>();
