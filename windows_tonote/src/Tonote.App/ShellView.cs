@@ -609,11 +609,18 @@ public sealed class ShellView : UserControl
             var items = _session.Todos.InStatus(status);
             if (_expandedTodo != null && _frozenOrder.Count > 0)
                 items = items.OrderBy(todo => _frozenOrder.TryGetValue(todo.Id, out var index) ? index : int.MaxValue).ToList();
-            groups.Children.Add(GroupHeader(status, items.Count));
+            var groupHeader = GroupHeader(status, items.Count);
+            // 分组与分组之间多留 6px（第一组不需要）
+            // 展开时标题与第一条任务的间距缩小 4px（折叠的分组不动，免得挤到下一组标题）
+            groupHeader.Margin = new Thickness(0, groups.Children.Count > 0 ? 6 : 0, 0,
+                _collapsedGroups.Contains(status) ? 0 : -5);
+            groups.Children.Add(groupHeader);
             if (_collapsedGroups.Contains(status)) continue;
             if (items.Count == 0)
             {
-                groups.Children.Add(Ui.Text("暂无任务", 12, null, Palette.TextQuaternary));
+                var emptyHint = Ui.Text("暂无任务", 12, null, Palette.TextQuaternary);
+                emptyHint.Margin = new Thickness(16, 0, 0, 0); // 圆点 8 + 间距 8，与分类文字左对齐
+                groups.Children.Add(emptyHint);
                 continue;
             }
             any = true;
@@ -626,10 +633,14 @@ public sealed class ShellView : UserControl
         {
             Watermark = "添加任务，回车即可创建…",
             FontSize = 13,
-            Padding = new Thickness(12, 9),
-            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(14, 8), // 上下各 -1，整体高度 -2
+            CornerRadius = new CornerRadius(16),
+            // 白色填充 + 浅灰边框，与页面灰底区分开
+            Background = Brushes.White,
             BorderBrush = Palette.Line,
+            BorderThickness = new Thickness(1),
         };
+        input.Classes.Add("quick-add");
         void AddQuick()
         {
             var value = (input.Text ?? "").Trim();
@@ -642,9 +653,27 @@ public sealed class ShellView : UserControl
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
             Margin = new Thickness(20, 12),
-            Children = { input, Ui.Primary("添加", AddQuick) },
+            Children = { input },
         };
-        Grid.SetColumn((Control)foot.Children[1], 1);
+        // 圆形「+」添加按钮：与输入框间距 16
+        var addButton = new Button
+        {
+            Content = Icons.Render(Glyphs.Plus, 16, Palette.White),
+            Width = 33, Height = 33, MinWidth = 0, MinHeight = 0,
+            Margin = new Thickness(16, 0, 0, 0),
+            Padding = new Thickness(0),
+            CornerRadius = new CornerRadius(16.5),
+            Background = Palette.Accent,
+            BorderThickness = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        ToolTip.SetTip(addButton, "添加任务");
+        addButton.Click += (_, _) => AddQuick();
+        foot.Children.Add(addButton);
+        Grid.SetColumn(addButton, 1);
 
         var page = new Grid
         {
@@ -753,7 +782,8 @@ public sealed class ShellView : UserControl
             Child = chevron,
         };
         // 朝下的 V 形视觉重心偏上，整体下移 1px；右箭头保持原位
-        if (!collapsed) chevronBadge.RenderTransform = new TranslateTransform(0, 1);
+        // 右箭头的尖端在右、视觉重心偏左，实测比白底中心偏左 1px，右移 1px 补正
+        chevronBadge.RenderTransform = collapsed ? new TranslateTransform(1, 0) : new TranslateTransform(0, 1);
         lineHost.Children.Add(chevronBadge);
         Grid.SetColumn(lineHost, 3);
         row.Children.Add(lineHost);

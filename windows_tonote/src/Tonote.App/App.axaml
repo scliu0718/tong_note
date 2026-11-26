@@ -115,6 +115,17 @@
     <Style Selector="TextBox.notes-input:focus /template/ Border#PART_BorderElement">
       <Setter Property="Background" Value="White" />
     </Style>
+    <!-- 底部「添加任务」输入框：白底 + 浅灰边框，获得焦点后保持不变（覆盖上面 :focus 的透明/无边框） -->
+    <Style Selector="TextBox.quick-add:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="White" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="#86868B" />
+    </Style>
+    <Style Selector="TextBox.quick-add:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="White" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="#86868B" />
+    </Style>
     <!-- 笔记本下拉：浅灰胶囊、无 WinUI 蓝框，宽度由内容决定（见 ShellView 的 MinWidth=0） -->
     <Style Selector="ComboBox">
       <Setter Property="FontFamily" Value="{StaticResource TnFont}" />
