@@ -92,7 +92,7 @@ fun TodoScreen(onSync: () -> Unit) {
     // 待删除的任务：非 null 时弹出二次确认框
     var pendingDelete by remember { mutableStateOf<Todo?>(null) }
 
-    val active = todos.filter { !it.purged }
+    val active = TodoStore.active // todos 已 collect，变化时重组；排序规则在 TodoStore.active
     val todo = active.filter { it.status == TodoStatus.TODO }
     val doing = active.filter { it.status == TodoStatus.DOING }
     val done = active.filter { it.status == TodoStatus.DONE }
@@ -110,7 +110,7 @@ fun TodoScreen(onSync: () -> Unit) {
     // Android 15 边到边后 adjustResize 不缩窗口，必须显式消费 IME inset。
     Column(Modifier.fillMaxSize().background(Bg).imePadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("任务", fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -135,7 +135,8 @@ fun TodoScreen(onSync: () -> Unit) {
         }
         // 标题栏分割线
         TopBarDivider()
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.height(4.dp))
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "待完成 ${todo.size} · 进行中 ${doing.size} · 已完成 ${done.size}" +
                     (if (terminated.isNotEmpty()) " · 终止 ${terminated.size}" else "") +

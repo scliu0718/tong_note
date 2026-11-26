@@ -64,6 +64,7 @@ public sealed class ShellView : UserControl
     private bool _accountNameLoaded;
     private bool _quickExpanded = true;
     private bool _showingTodos;
+    private ScrollViewer? _todoScroll; // 任务页滚动容器，重建页面时用来保持滚动位置
     private readonly ContentControl _syncSlot = new()
     {
         VerticalAlignment = VerticalAlignment.Center,
@@ -267,6 +268,11 @@ public sealed class ShellView : UserControl
         _session.Sync.StatusChanged += () => OnUi(UpdateSyncLabels);
         _session.Avatar.Changed += () => OnUi(RebuildSidebar);
 
+        // 快同步：编辑过程中每 15 秒把本地这一篇自动上传到远端（有改动才传）。
+        _quickAutoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _quickAutoTimer.Tick += (_, _) => QuickAutoUpload();
+        _quickAutoTimer.Start();
+
         _loading = false;
         var first = _session.Notes.ActiveNotes.FirstOrDefault(note => !note.IsQuickSync);
         if (first != null) Select(first.Id);
@@ -280,7 +286,55 @@ public sealed class ShellView : UserControl
         else Dispatcher.UIThread.Post(action);
     }
 
+    private DispatcherTimer? _quickAutoTimer;
+    private DateTime _quickUploadedAt;
+
+    private void QuickAutoUpload()
+    {
+        if (_selected != Note.QuickSyncNoteId || !_session.IsSignedIn) return;
+        _richEditor.Flush();
+        var note = Current();
+        if (note == null || note.IsTrashed || note.UpdatedAt <= _quickUploadedAt) return;
+        _quickUploadedAt = note.UpdatedAt;
+        _ = _session.Sync.SyncSingleNoteAsync(note.Id);
+    }
+
     /// <summary>点击「同步本篇」：图标持续转圈给出可见反馈，同步结束后停下并复位。</summary>
+    // 任务页同步图标的旋转：共享 transform + 计时器，页面重建后仍继续转
+    private readonly RotateTransform _taskSpinTransform = new(0);
+    private DispatcherTimer? _taskSpinTimer;
+    private bool _taskSyncing;
+
+    private async Task TaskSyncWithSpin()
+    {
+        if (_taskSyncing) return;
+        _taskSyncing = true;
+        _taskSpinTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        _taskSpinTimer.Tick -= OnTaskSpinTick;
+        _taskSpinTimer.Tick += OnTaskSpinTick;
+        _taskSpinTimer.Start();
+        var started = DateTime.UtcNow;
+        try
+        {
+            await _session.Sync.QuickSyncAsync();
+        }
+        finally
+        {
+            // 无变更时同步几毫秒就返回，至少转够 700ms，否则看不到反馈
+            var remaining = TimeSpan.FromMilliseconds(700) - (DateTime.UtcNow - started);
+            if (remaining > TimeSpan.Zero) await Task.Delay(remaining);
+            OnUi(() =>
+            {
+                _taskSpinTimer?.Stop();
+                _taskSpinTransform.Angle = 0;
+                _taskSyncing = false;
+            });
+        }
+    }
+
+    private void OnTaskSpinTick(object? sender, EventArgs e)
+        => _taskSpinTransform.Angle = (_taskSpinTransform.Angle + 18) % 360;
+
     private async Task SyncOneWithSpin()
     {
         if (_selected == null) return;
@@ -410,6 +464,12 @@ public sealed class ShellView : UserControl
     {
         _richEditor.Flush();
         _selected = id;
+        if (id == Note.QuickSyncNoteId)
+        {
+            _quickUploadedAt = _session.Notes.Find(id)?.UpdatedAt ?? DateTime.MinValue;
+            // 打开「快同步」时先拉取这一篇的云端最新版。
+            if (_session.IsSignedIn) _ = _session.Sync.SyncSingleNoteAsync(id);
+        }
         _showingTodos = false;
         if (_pane is Pane.Todos or Pane.Settings) _pane = Pane.Notes;
         LoadEditor();
@@ -572,6 +632,9 @@ public sealed class ShellView : UserControl
         // Mac：只在「进入」任务页时插队拉一次，避免任务变更事件反过来触发无限同步轮次。
         // 用户要求：点「快任务」只在编辑窗口显示任务页，笔记列表保持不动（不切 _pane、不隐藏列表）。
         var entered = !_showingTodos;
+        // 每次 ShowTodos 都会重建整页（含 ScrollViewer），不记住滚动位置的话，
+        // 切换日期 / 状态等操作后列表会跳回顶部。这里先记下旧偏移，重建后再还原。
+        var savedScrollY = entered || _todoScroll == null ? 0 : _todoScroll.Offset.Y;
         _showingTodos = true;
         _selected = null;
         if (entered) _ = _session.Sync.QuickSyncAsync();
@@ -597,7 +660,17 @@ public sealed class ShellView : UserControl
         var last = _session.Sync.LastSyncDate;
         headRight.Children.Add(Ui.Text(last == null ? "尚未同步" : "上次同步 " + last.Value.ToString("MM-dd HH:mm"),
             11, null, Palette.TextQuaternary));
-        headRight.Children.Add(Ui.Primary("同步", () => _ = _session.Sync.QuickSyncAsync(), 11.5));
+        // 与笔记右上角同一个同步图标（无边框，仅图标 + hover 反馈）
+        var syncButton = Ui.Small(Glyphs.Sync, () => _ = TaskSyncWithSpin());
+        syncButton.BorderThickness = new Thickness(0);
+        // 同步期间任务页会被反复重建，所以旋转变换是全局共享的：新建的图标继续套同一个 transform 就接着转
+        if (syncButton.Content is Control syncIcon)
+        {
+            syncIcon.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+            syncIcon.RenderTransform = _taskSpinTransform;
+        }
+        ToolTip.SetTip(syncButton, "同步");
+        headRight.Children.Add(syncButton);
         Grid.SetColumn(headRight, 1);
         header.Children.Add(headRight);
 
@@ -675,6 +748,20 @@ public sealed class ShellView : UserControl
         foot.Children.Add(addButton);
         Grid.SetColumn(addButton, 1);
 
+        var scroll = new ScrollViewer { Content = groups };
+        _todoScroll = scroll;
+        if (savedScrollY > 0)
+        {
+            // 新内容布局完成（范围够高）后再还原偏移，只执行一次
+            void Restore(object? s, EventArgs e)
+            {
+                if (scroll.Extent.Height <= 0) return;
+                scroll.LayoutUpdated -= Restore;
+                var max = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
+                scroll.Offset = new Vector(0, Math.Min(savedScrollY, max));
+            }
+            scroll.LayoutUpdated += Restore;
+        }
         var page = new Grid
         {
             RowDefinitions = new RowDefinitions("Auto,*,Auto"),
@@ -682,7 +769,7 @@ public sealed class ShellView : UserControl
             Children =
             {
                 new Border { Child = header, BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = Palette.LineSoft },
-                new ScrollViewer { Content = groups },
+                scroll,
                 new Border { Child = foot, BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = Palette.LineSoft },
             },
         };

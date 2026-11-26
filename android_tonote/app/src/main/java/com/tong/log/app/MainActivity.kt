@@ -147,7 +147,14 @@ private fun AppRoot() {
         }
         composable("trash") { TrashScreen(onBack = { navController.popBackStack() }) }
         composable("devices") { DevicesScreen(onBack = { navController.popBackStack() }) }
-        composable("guide") { GuideScreen(onBack = { navController.popBackStack() }) }
+        // 使用说明页含 WebView：默认的淡入淡出会让 WebView 首帧与标题栏叠在一起闪一下，故关掉转场。
+        composable(
+            "guide",
+            enterTransition = { androidx.compose.animation.EnterTransition.None },
+            exitTransition = { androidx.compose.animation.ExitTransition.None },
+            popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+            popExitTransition = { androidx.compose.animation.ExitTransition.None }
+        ) { GuideScreen(onBack = { navController.popBackStack() }) }
     }
 
     // 启动即同步 + 前台每 45 秒同步；每轮都顺带刷新账号，

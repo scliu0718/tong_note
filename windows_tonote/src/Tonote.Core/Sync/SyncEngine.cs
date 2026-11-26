@@ -180,7 +180,9 @@ public sealed class SyncEngine : IDisposable
     {
         if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
-            _needsAnotherRound = true;
+            // 单篇请求不能丢：忙时记下来，当前轮结束后补跑（否则点开「快同步」拉不到云端内容）。
+            if (onlyNoteId != null) _pendingSingle = onlyNoteId;
+            else _needsAnotherRound = true;
             return;
         }
 
@@ -247,7 +249,14 @@ public sealed class SyncEngine : IDisposable
         {
             _gate.Release();
         }
+
+        var pending = _pendingSingle;
+        _pendingSingle = null;
+        if (pending != null && !cancellationToken.IsCancellationRequested)
+            await SyncRoundAsync(pending, cancellationToken).ConfigureAwait(false);
     }
+
+    private Guid? _pendingSingle;
 
     /// <summary>网络类瞬态故障才自动重试；数据/契约错误立即暴露，不掩盖问题。按异常类型判断，不靠文案子串。</summary>
     private static bool IsTransient(Exception error)
@@ -347,7 +356,13 @@ public sealed class SyncEngine : IDisposable
             remote = await DownloadNoteAsync(id, accessToken, cancellationToken).ConfigureAwait(false);
         }
 
-        var step = SyncRules.AfterFetch(cursor.Dirty, remote?.Rev, remote?.UpdatedAt,
+        // 「快同步」本机从未同步、正文还是出厂默认文案：不算用户改动，云端有就直接用云端，
+        // 否则会被判成冲突，云端内容进不来。
+        var dirty = cursor.Dirty;
+        if (local != null && local.IsQuickSync && cursor.BaseRev == 0 && cursor.BaseUpdatedAt == null
+            && local.Body == NoteSamples.QuickSync().Body)
+            dirty = false;
+        var step = SyncRules.AfterFetch(dirty, remote?.Rev, remote?.UpdatedAt,
             local?.UpdatedAt, cursor);
         switch (step.Kind)
         {

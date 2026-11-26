@@ -303,7 +303,7 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
     ) {
         // 顶部导航：返回 + 笔记标题（单行省略，改标题走右上角菜单）
         Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 0.dp, top = 4.dp, bottom = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 0.dp, top = 1.dp, bottom = 1.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { leave() }) {
@@ -393,10 +393,11 @@ fun EditorScreen(noteId: String, onBack: () -> Unit) {
         }
         // 标题栏分割线
         TopBarDivider()
+        Spacer(Modifier.height(4.dp))
 
         // 第一行：笔记本 + 标签（数量多时自动换行）
         FlowRow(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {

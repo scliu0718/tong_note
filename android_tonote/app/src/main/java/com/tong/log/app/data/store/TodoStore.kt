@@ -36,11 +36,27 @@ object TodoStore {
     val active: List<Todo>
         get() = _todos.value.asSequence()
             .filter { !it.purged }
+            // 与 Mac / Windows 一致：先按状态分组（界面按状态过滤，这里保证比较器是全序），
+            // 组内：逾期在前 → 截止时间越近越靠前（没有截止时间的排最后）→
+            // 已完成按完成时间新到旧 → 最后按创建时间旧到新。
             .sortedWith(
-                compareByDescending<Todo> { it.isOverdue }
-                    .thenByDescending { it.updatedAt }
+                compareBy<Todo> { statusRank(it.status) }
+                    .thenByDescending { it.isOverdue }
+                    .thenBy { epochMillis(it.plannedAt) ?: Long.MAX_VALUE }
+                    .thenByDescending { if (it.status == TodoStatus.DONE) epochMillis(it.completedAt) ?: Long.MIN_VALUE else 0L }
+                    .thenBy { epochMillis(it.createdAt) ?: Long.MAX_VALUE }
             )
             .toList()
+
+    private fun statusRank(status: String): Int = when (status) {
+        TodoStatus.TODO -> 0
+        TodoStatus.DOING -> 1
+        TodoStatus.DONE -> 2
+        else -> 3
+    }
+
+    private fun epochMillis(iso: String?): Long? =
+        if (iso == null) null else runCatching { Iso8601.parse(iso).toEpochMilli() }.getOrNull()
 
     fun todo(id: String): Todo? = _todos.value.firstOrNull { it.id.equals(id, ignoreCase = true) }
 

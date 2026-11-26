@@ -90,6 +90,86 @@ public sealed class RichTextEditor : UserControl
     private Control? _trailing;
     private CancellationTokenSource? _saveDelay;
 
+    // 加载进度：长笔记转换/渲染期间隐藏旧内容、显示进度条，避免看起来还停在上一篇。
+    private int _loadSeq;
+    private bool _loadingContent;
+    private DispatcherTimer? _loadShowTimer;
+    private DispatcherTimer? _loadGuardTimer;
+    private readonly Border _loadingOverlay = new()
+    {
+        Background = Palette.Panel,
+        IsVisible = false,
+        Child = new StackPanel
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Spacing = 10,
+            Width = 220,
+            Children =
+            {
+                new ProgressBar { IsIndeterminate = true, Height = 4 },
+                new TextBlock
+                {
+                    Text = "正在加载笔记…",
+                    FontSize = 12,
+                    Foreground = Palette.TextTertiary,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                },
+            },
+        },
+    };
+
+    private void BeginLoading()
+    {
+        _loadingContent = true;
+        _loadShowTimer?.Stop();
+        // 短笔记瞬间就好，120ms 后仍未完成才亮出进度条，避免来回闪烁。
+        _loadShowTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        _loadShowTimer.Tick += (_, _) =>
+        {
+            _loadShowTimer?.Stop();
+            if (!_loadingContent || _loadingOverlay.Child == null) return;
+            // 加载偏久：隐藏 WebView 控件（原生窗口会盖住 Avalonia 绘制），露出进度条。
+            _loadingOverlay.Child.IsVisible = true;
+            _loadingOverlay.IsVisible = true;
+            if (!_webFailed) _host.IsVisible = false;
+        };
+        _loadShowTimer.Start();
+        // 在网页内立刻把编辑区设为不可见（保留底色），旧内容不会闪出；
+        // 不能靠隐藏 WebView 控件：隐藏期间 Chromium 不重绘，重新显示时会先露出旧帧。
+        if (_loadingOverlay.Child != null) _loadingOverlay.Child.IsVisible = false;
+        if (!_webFailed && _host.IsReady)
+            _ = _host.ExecuteScriptAsync("document.getElementById('editor').style.visibility='hidden';");
+        _loadGuardTimer?.Stop();
+        _loadGuardTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _loadGuardTimer.Tick += (_, _) => EndLoading();
+        _loadGuardTimer.Start();
+    }
+
+    private void EndLoading()
+    {
+        _loadingContent = false;
+        _loadShowTimer?.Stop();
+        _loadGuardTimer?.Stop();
+        if (_webFailed)
+        {
+            _loadingOverlay.IsVisible = false;
+            return;
+        }
+        // 'loaded' 只表示 DOM 已写入：网页内等两帧重绘后再显示编辑区，
+        // 若进度条已出现，再等一会儿才揭开 WebView 控件。
+        _ = _host.ExecuteScriptAsync(
+            "requestAnimationFrame(function(){requestAnimationFrame(function(){"
+            + "document.getElementById('editor').style.visibility='visible';});});");
+        var seq = _loadSeq;
+        DispatcherTimer.RunOnce(() =>
+        {
+            if (_loadingContent || seq != _loadSeq) return;
+            _host.IsVisible = true;
+            _loadingOverlay.IsVisible = false;
+        }, TimeSpan.FromMilliseconds(150));
+    }
+
     public event Action<string>? StatusChanged;
     /// <summary>W-20：编辑器内 F5 触发的同步请求。</summary>
     public event Action? SyncRequested;
@@ -138,7 +218,7 @@ public sealed class RichTextEditor : UserControl
 
         BuildToolbar();
 
-        var surface = new Grid { Children = { _host, _fallback } };
+        var surface = new Grid { Children = { _host, _fallback, _loadingOverlay } };
         var page = new Grid
         {
             RowDefinitions = new RowDefinitions("Auto,*"),
@@ -731,20 +811,43 @@ public sealed class RichTextEditor : UserControl
         _currentId = note.Id;
         _currentBody = note.Body;
         _currentFormat = note.ContentFormat;
-        _pendingHtml = note.ContentFormat == NoteContentFormat.richText
-            ? note.Body
-            : RichTextHtmlCodec.Encode(MarkdownConverter.ToDocument(note.Body));
-        // W-09：markdown 基线取「解码→再编码」的规范化结果，与 JS clean() 后的形态一致
-        _markdownBaseline = note.ContentFormat == NoteContentFormat.markdown
-            ? RichTextHtmlCodec.Encode(RichTextHtmlCodec.Decode(_pendingHtml))
-            : null;
+        _pendingHtml = null;
+        _markdownBaseline = null;
+        var seq = ++_loadSeq;
+        BeginLoading();
         ClosePopover();
 
         _loadingFallback = true;
         _fallback.Text = note.VisibleBody;
         _loadingFallback = false;
         SetReadOnly(note.IsTrashed);
-        if (_host.IsReady) PushContent();
+
+        // 转换放到后台线程，UI 线程不被长笔记卡住，进度条才能显示出来。
+        var body = note.Body;
+        var format = note.ContentFormat;
+        _ = Task.Run(() =>
+        {
+            var html = format == NoteContentFormat.richText
+                ? body
+                : RichTextHtmlCodec.Encode(MarkdownConverter.ToDocument(body));
+            // W-09：markdown 基线取「解码→再编码」的规范化结果，与 JS clean() 后的形态一致
+            var baseline = format == NoteContentFormat.markdown
+                ? RichTextHtmlCodec.Encode(RichTextHtmlCodec.Decode(html))
+                : null;
+            return (html, baseline);
+        }).ContinueWith(task => Dispatcher.UIThread.Post(() =>
+        {
+            if (seq != _loadSeq) return;
+            if (task.IsFaulted)
+            {
+                EndLoading();
+                return;
+            }
+            _pendingHtml = task.Result.html;
+            _markdownBaseline = task.Result.baseline;
+            if (_webFailed) EndLoading();
+            else if (_host.IsReady) PushContent();
+        }));
     }
 
     private void SetReadOnly(bool readOnly)
@@ -769,6 +872,7 @@ public sealed class RichTextEditor : UserControl
     private void OnFailed(string message)
     {
         _webFailed = true;
+        EndLoading();
         _host.IsVisible = false;
         _fallback.IsVisible = true;
         _status.Text = "WebView2 不可用，已退回纯文本";
@@ -792,6 +896,7 @@ public sealed class RichTextEditor : UserControl
             var root = doc.RootElement;
             var type = root.GetProperty("type").GetString();
             if (type == "ready") { PushContent(); return; }
+            if (type == "loaded") { EndLoading(); return; }
             if (type == "editorFocus") { if (_popover != null) ClosePopover(restoreFocus: false); return; }
             if (type == "openExternal")
             {
@@ -854,7 +959,7 @@ public sealed class RichTextEditor : UserControl
             }
             if (type != "changed" || !root.TryGetProperty("html", out var htmlElement)) return;
             var html = htmlElement.GetString() ?? "";
-            if (_readOnly) return;
+            if (_readOnly || _loadingContent) return;
             _lastHtml = html;
 
             _saveDelay?.Cancel();

@@ -149,7 +149,7 @@ fun NotesScreen(
     Column(Modifier.fillMaxSize().background(Bg)) {
         // 顶部导航
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -175,6 +175,7 @@ fun NotesScreen(
         }
         // 标题栏分割线
         TopBarDivider()
+        Spacer(Modifier.height(4.dp))
 
         // 笔记本 chips
         Row(

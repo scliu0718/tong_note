@@ -51,12 +51,13 @@ fun MeScreen(
 
     Column(Modifier.fillMaxSize().background(Bg)) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("我的", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
         }
+        Spacer(Modifier.height(4.dp))
 
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             item {

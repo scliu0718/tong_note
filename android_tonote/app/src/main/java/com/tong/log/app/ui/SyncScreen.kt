@@ -39,7 +39,7 @@ fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
     // 二级页面没有 Scaffold 自动处理系统栏，必须自己避开状态栏
     Column(Modifier.fillMaxSize().background(Bg).statusBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -67,6 +67,7 @@ fun SyncScreen(onBack: () -> Unit, onReauth: () -> Unit, onLogout: () -> Unit) {
         }
         // 标题栏分割线
         TopBarDivider()
+        Spacer(Modifier.height(4.dp))
 
         Column(
             Modifier

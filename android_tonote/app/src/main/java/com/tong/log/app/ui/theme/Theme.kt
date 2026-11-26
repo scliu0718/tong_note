@@ -80,7 +80,7 @@ fun TongNoteTheme(content: @Composable () -> Unit) {
     )
 }
 
-/** 标题栏分割线：0.75dp（在 0.5dp 基础上加粗 50%），浅色，仅用于各页面顶栏。 */
+/** 标题栏分割线：与「关于同笔记」弹窗标题分割线一致（0.75dp LineHair）。 */
 @Composable
 fun TopBarDivider() {
     HorizontalDivider(thickness = 0.75.dp, color = LineHair)

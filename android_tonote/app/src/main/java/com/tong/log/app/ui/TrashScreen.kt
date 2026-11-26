@@ -30,7 +30,7 @@ fun TrashScreen(onBack: () -> Unit) {
     // 二级页面没有 Scaffold 自动处理系统栏，标题栏必须避开状态栏
     Column(Modifier.fillMaxSize().background(Bg).statusBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -40,6 +40,7 @@ fun TrashScreen(onBack: () -> Unit) {
         }
         // 标题栏分割线
         TopBarDivider()
+        Spacer(Modifier.height(4.dp))
         if (trash.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("回收站是空的", color = TextQuaternary, fontSize = 13.sp)

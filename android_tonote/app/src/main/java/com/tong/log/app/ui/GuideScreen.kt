@@ -6,6 +6,7 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -31,7 +32,7 @@ fun GuideScreen(onBack: () -> Unit) {
     // 二级页面没有 Scaffold 自动处理系统栏，标题栏必须避开状态栏
     Column(Modifier.fillMaxSize().background(Bg).statusBarsPadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -44,7 +45,7 @@ fun GuideScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize().navigationBarsPadding(),
             factory = { ctx ->
                 WebView(ctx).apply {
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    // 与页面底色一致的实色背景，避免 WebView 首帧透明/白闪\n                    setBackgroundColor(Bg.toArgb())
                     // 页内只有锚点跳转，不需要脚本；android_asset 不受 allowFileAccess 影响，
                     // 所以文件访问全部关掉，页面只能读本包 assets
                     settings.javaScriptEnabled = false
