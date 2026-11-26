@@ -562,6 +562,20 @@ private fun QuickCard(
     }
 }
 
+// 摘要缓存：snippet 每次都要整篇扫描 HTML；切 tab 会重建整个列表，进程级缓存避免重复解析。
+// key 含 updatedAt 与正文长度，笔记一改就自然失效。
+private val snippetCache = object : LinkedHashMap<String, String>(256, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 500
+}
+
+private fun cachedSnippet(note: Note): String {
+    val key = "${note.id}|${note.updatedAt}|${note.body.length}|${note.contentFormat}"
+    synchronized(snippetCache) { snippetCache[key]?.let { return it } }
+    val s = note.snippet
+    synchronized(snippetCache) { snippetCache[key] = s }
+    return s
+}
+
 @Composable
 private fun NoteCard(note: Note, onClick: () -> Unit) {
     Column(
@@ -583,7 +597,7 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            note.snippet, fontSize = 12.sp, color = TextTertiary,
+            cachedSnippet(note), fontSize = 12.sp, color = TextTertiary,
             maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp
         )
         Spacer(Modifier.height(8.dp))

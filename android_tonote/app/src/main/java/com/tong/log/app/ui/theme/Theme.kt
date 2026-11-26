@@ -31,10 +31,17 @@ val Line = Color(0xFFE0E0E4)
 val LineSoft = Color(0xFFECECEF)
 val LineHair = Color(0xFFF3F3F6)
 val Red = Color(0xFFE5484D)
-val RedTint = Color(0xFFFCEBEB)
+val RedTint = Color(0xFFFEF3F3)
+val RedLine = Color(0xFFF0A3A6)
 val Amber = Color(0xFFF5A623)
 val AmberTint = Color(0xFFFDF1DC)
 val CardSelected = Color(0xFFF4FAF6)
+
+// 任务状态图标色（与 Mac / Windows 一致的矢量图标：待完成/进行中/已完成/已终止）
+val StatusTodo = Color(0xFFF66060)
+val StatusDoing = Color(0xFFFEB621)
+val StatusDone = Color(0xFF029B00)
+val StatusTerminated = Color(0xFF8A8A8A)
 
 private val LightColors = lightColorScheme(
     primary = Green,

@@ -240,7 +240,7 @@ private fun MainScaffold(navController: NavController) {
                                     if (index == 1) {
                                         OverdueCountBadge(
                                             overdueCount,
-                                            Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-5).dp)
+                                            Modifier.align(Alignment.TopEnd).offset(x = 15.dp, y = (-5).dp)
                                         )
                                     }
                                 }

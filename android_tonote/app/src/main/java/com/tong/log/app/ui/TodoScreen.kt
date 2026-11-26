@@ -323,27 +323,19 @@ private fun LazyListScope.todoGroup(
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(11.dp))
                 .background(if (t.isOverdue) RedTint else Color.White)
-                .then(if (t.isOverdue) Modifier.border(0.75.dp, Red, RoundedCornerShape(11.dp)) else Modifier)
+                .then(if (t.isOverdue) Modifier.border(0.75.dp, RedLine, RoundedCornerShape(11.dp)) else Modifier)
                 .clickable { onEdit(t) }
                 .padding(start = 12.dp, top = 11.dp, end = 9.dp, bottom = 11.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // 状态圈用各组颜色区分：待完成=红空心、进行中=琥珀空心、已完成=绿实心带勾、已终止=灰实心
-            val ringColor = color
-            val filled = t.status == TodoStatus.DONE || t.status == TodoStatus.TERMINATED
-            Box(
+            // 状态图标：待完成=红色播放三角、进行中=黄色指针、已完成=绿色对勾、已终止=灰色减号
+            StatusRing(
+                t.status,
                 Modifier
                     .size(17.dp)
                     // 去掉点击涟漪：默认 indication 会按方形 bounds 画阴影，圆圈上很突兀
                     .clickable(interactionSource = null, indication = null) { TodoStore.toggleDone(t.id) }
-                    .background(if (filled) ringColor else Color.Transparent, CircleShape)
-                    .border(1.dp, ringColor, CircleShape)
-                    .padding(3.dp)
-            ) {
-                if (t.status == TodoStatus.DONE) {
-                    Text("✓", color = Color.White, fontSize = 10.sp, modifier = Modifier.align(Alignment.Center))
-                }
-            }
+            )
             Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
                 Text(

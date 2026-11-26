@@ -49,6 +49,10 @@ public static class Glyphs
     public const string Calendar = "▩";
     // 截止时间行日历按钮：用户提供的 iconfont 填充路径（日历+对勾），1024 viewBox
     public const string CalendarFilled = "calendar_filled";
+    public const string StateTerminated = "state_terminated";
+    public const string StateTodo = "state_todo";
+    public const string StateDone = "state_done";
+    public const string StateDoing = "state_doing";
 
     public const string Table = "▦";
     public const string Quote = "❝";
@@ -440,23 +444,25 @@ public static class Ui
         switch (status)
         {
             case TodoStatus.todo:
-                ring.BorderBrush = Palette.Red;
-                // 空心圈描边细一半（0.5 在圆角上会被抗锯齿抹掉，0.75 是安全值）
-                ring.BorderThickness = new Thickness(0.75);
+                // 待完成：用户提供的红色圆形播放三角图标（#F66060）
+                ring.BorderThickness = new Thickness(0);
+                ring.Child = Icons.Render(Glyphs.StateTodo, size, Palette.Brush(0xF66060));
                 break;
             case TodoStatus.doing:
-                ring.BorderBrush = Palette.Amber;
-                ring.BorderThickness = new Thickness(0.75);
+                // 进行中：用户提供的黄色圆形时钟指针图标（#FEB621）
+                ring.BorderThickness = new Thickness(0);
+                ring.Child = Icons.Render(Glyphs.StateDoing, size, Palette.Brush(0xFEB621));
                 break;
             case TodoStatus.done:
-                ring.Background = Palette.Accent;
-                ring.BorderBrush = Palette.Accent;
-                ring.Child = Icons.Render(Glyphs.Check, 11, Palette.White);
+                // 已完成：用户提供的绿色圆形对勾图标（#029B00）
+                ring.BorderThickness = new Thickness(0);
+                ring.Child = Icons.Render(Glyphs.StateDone, size, Palette.Brush(0x029B00));
                 break;
             case TodoStatus.terminated:
-                ring.Background = Palette.TextQuaternary;
-                ring.BorderBrush = Palette.TextQuaternary;
-                ring.Child = Text("—", 10, FontWeight.Bold, Palette.White);
+                // 已终止：用户提供的灰色圆形减号图标（#8A8A8A，镂空横杠）
+                ring.BorderThickness = new Thickness(0);
+                ring.Background = Brushes.Transparent;
+                ring.Child = Icons.Render(Glyphs.StateTerminated, size, Palette.Brush(0x8A8A8A));
                 break;
         }
         return ring;

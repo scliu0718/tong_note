@@ -443,21 +443,10 @@ struct TodoView: View {
     }
 
     private func checkbox(for todo: Todo) -> some View {
-        let border: Color = todo.status == .doing ? Theme.amber
-            : (todo.status == .done ? Theme.accent : Color(hex: 0xC7C7CC))
+        // 状态图标：待完成=红色播放三角 / 进行中=黄色指针 / 已完成=绿色对勾 / 已终止=灰色减号
         return Button(action: { mutate(todo.id) { store.toggleDone(todo.id) } }) {
             ZStack {
-                if todo.status == .done {
-                    Circle().fill(Theme.accent).frame(width: 17, height: 17)
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                } else {
-                    Circle().stroke(border, lineWidth: 1.5).frame(width: 17, height: 17)
-                    if todo.status == .terminated {
-                        Rectangle().fill(Theme.textQuaternary).frame(width: 7, height: 1.5)
-                    }
-                }
+                StatusRingIcon(status: todo.status).frame(width: 17, height: 17)
             }
             .frame(width: 22, height: 22)
             .contentShape(Rectangle())

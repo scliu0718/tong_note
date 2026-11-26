@@ -32,6 +32,11 @@ enum Theme {
     static let baiduTint = Color(hex: 0xE5F5FF)
     static let red = Color(hex: 0xE5484D)
     static let amber = Color(hex: 0xF5A623)
+    // 任务状态图标色（与 Android / Windows 一致）
+    static let statusTodo = Color(hex: 0xF66060)
+    static let statusDoing = Color(hex: 0xFEB621)
+    static let statusDone = Color(hex: 0x029B00)
+    static let statusTerminated = Color(hex: 0x8A8A8A)
 
     static let monoFont = Font.system(.body, design: .monospaced)
 }
