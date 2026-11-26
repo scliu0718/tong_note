@@ -66,7 +66,11 @@ public static class Palette
     // ── 设计稿补充令牌（Mac 代码里散落的字面量，统一收拢） ────────────────
     public static IBrush TableAccent { get; } = Brush(0x2E7CF6);
     public static IBrush PanelSoft { get; } = Brush(0xF8FCFA);
+    /// <summary>任务面板底色（浅灰），衬托白色任务卡片形成层次。</summary>
+    public static IBrush TodoPanelBg { get; } = Brush(0xF7F7F7);
     public static IBrush RedTint { get; } = Brush(0xFCEBEB);
+    /// <summary>逾期任务行淡红底（比 RedTint 浅一档）。</summary>
+    public static IBrush RedTintSoft { get; } = Brush(0xFEF5F5);
     public static IBrush DangerBorder { get; } = Brush(0xF3D2D3);
     public static IBrush CardSelected { get; } = Brush(0xF4FAF6);
     public static IBrush CardSelectedBorder { get; } = Brush(0xDCEDE2);
@@ -175,10 +179,11 @@ public static class Metrics
     // 组件
     public const double ToolButtonSize = 30;
     public const double BadgeSize = 18;
-    public const double StateRingSize = 17;
+    public const double StateRingSize = 16;
     public const double CardPadding = 11;
     public const double EditorInset = 24;
     public const double ToolbarPaddingH = 20;
     public const double ToolbarPaddingV = 6;
-    public const double GroupSpacing = 32;
+    // 任务页组内间距（分组标题↔任务、任务↔任务），原 32 缩小 70%
+    public const double GroupSpacing = 9.6;
 }

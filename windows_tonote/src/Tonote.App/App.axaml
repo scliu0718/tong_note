@@ -82,6 +82,13 @@
     <Style Selector="Button">
       <Setter Property="Theme" Value="{StaticResource TnButton}" />
     </Style>
+    <!-- 纯图标按钮（如任务删除）：hover/pressed 不做任何透明度或底色变化 -->
+    <Style Selector="Button.plain-icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.plain-icon:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
 
     <!-- 输入框：去掉 WinUI 的蓝色 focus 边框，光标与选区换成主题绿 -->
     <Style Selector="TextBox">
@@ -100,6 +107,13 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!-- 任务备注输入框：浅绿面板上编辑时内部保持白底（覆盖上面的 Transparent） -->
+    <Style Selector="TextBox.notes-input /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="White" />
+    </Style>
+    <Style Selector="TextBox.notes-input:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="White" />
     </Style>
     <!-- 笔记本下拉：浅灰胶囊、无 WinUI 蓝框，宽度由内容决定（见 ShellView 的 MinWidth=0） -->
     <Style Selector="ComboBox">

@@ -47,6 +47,8 @@ public static class Glyphs
     public const string Clock = "◷";
     public const string Search = "⌕";
     public const string Calendar = "▩";
+    // 截止时间行日历按钮：用户提供的 iconfont 填充路径（日历+对勾），1024 viewBox
+    public const string CalendarFilled = "calendar_filled";
 
     public const string Table = "▦";
     public const string Quote = "❝";
@@ -439,9 +441,12 @@ public static class Ui
         {
             case TodoStatus.todo:
                 ring.BorderBrush = Palette.Red;
+                // 空心圈描边细一半（0.5 在圆角上会被抗锯齿抹掉，0.75 是安全值）
+                ring.BorderThickness = new Thickness(0.75);
                 break;
             case TodoStatus.doing:
                 ring.BorderBrush = Palette.Amber;
+                ring.BorderThickness = new Thickness(0.75);
                 break;
             case TodoStatus.done:
                 ring.Background = Palette.Accent;

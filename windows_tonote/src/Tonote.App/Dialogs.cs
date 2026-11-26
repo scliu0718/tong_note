@@ -274,9 +274,16 @@ public static class Dialogs
                 11, null, Palette.TextTertiary);
             selectedLabel.HorizontalAlignment = HorizontalAlignment.Center;
             var stack = new StackPanel { Margin = new Thickness(12), Children = { nav, selectedLabel, _days, Ui.Divider(marginV: 6) } };
-            var clear = Ui.Ghost("清除日期", () => Close(null));
-            clear.HorizontalAlignment = HorizontalAlignment.Center;
-            stack.Children.Add(clear);
+            // 清除 = 返回 DateTime.MinValue（调用方据此清空截止时间）；取消 = 返回 null（不做任何改动）
+            var clear = Ui.Ghost("清除日期", () => Close(DateTime.MinValue));
+            var cancel = Ui.Ghost("取消", () => Close(null));
+            var footer = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 8,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { clear, cancel },
+            };
+            stack.Children.Add(footer);
 
             Content = new Border
             {

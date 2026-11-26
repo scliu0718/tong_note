@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Tonote.Core;
 
 namespace Tonote.App;
@@ -115,6 +116,8 @@ public sealed class ShellView : UserControl
     private readonly HashSet<TodoStatus> _collapsedGroups = [];
     private Guid? _expandedTodo;
     private Guid? _editingNotesTodo;
+    /// <summary>当前正在编辑的备注输入框引用，供收起 / 切换任务时自动保存。</summary>
+    private TextBox? _editingNotesBox;
     /// <summary>W-27：展开任务期间冻结列表顺序，避免状态 / 时间变化导致跳动。</summary>
     private readonly Dictionary<Guid, int> _frozenOrder = new();
     private Control? _editorCached;
@@ -646,7 +649,7 @@ public sealed class ShellView : UserControl
         var page = new Grid
         {
             RowDefinitions = new RowDefinitions("Auto,*,Auto"),
-            Background = Palette.Panel,
+            Background = Palette.TodoPanelBg,
             Children =
             {
                 new Border { Child = header, BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = Palette.LineSoft },
@@ -689,20 +692,72 @@ public sealed class ShellView : UserControl
 
     private Control GroupHeader(TodoStatus status, int count)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var dot = new Border
+        // 标题行：圆点 + 文字 + 数字胶囊 + 横线（占满整行剩余宽度），箭头叠在横线中间。
+        // 必须用 Grid 的 * 列才能让横线铺满——横向 StackPanel 里的 Stretch 只按内容测量。
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        // 分组标识：8px 实心圆 + 外圈浅色光圈（Grid 仍占 8px，光圈向外溢出不推挤文字）
+        var dotHost = new Grid
+        {
+            Width = 8, Height = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        dotHost.Children.Add(new Border
+        {
+            Width = 16, Height = 16,
+            CornerRadius = new CornerRadius(8),
+            Background = Palette.Alpha(ColorOf(status), 48),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        dotHost.Children.Add(new Border
         {
             Width = 8, Height = 8,
             CornerRadius = new CornerRadius(4),
             Background = Ui.GroupColor(status),
+            HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.Children.Add(dotHost);
+        var label = Ui.Text(status.Label(), 13, FontWeight.SemiBold);
+        label.Margin = new Thickness(8, 0, 0, 0);
+        Grid.SetColumn(label, 1);
+        row.Children.Add(label);
+        var pill = Ui.Pill(count.ToString(), Palette.Alpha(ColorOf(status), 26), Ui.GroupColor(status), 11, 9);
+        pill.Margin = new Thickness(8, 0, 0, 0);
+        Grid.SetColumn(pill, 2);
+        row.Children.Add(pill);
+
+        var lineHost = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
+        lineHost.Children.Add(new Border
+        {
+            Height = 0.7,
+            Background = Palette.Alpha(ColorOf(status), 110),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var collapsed = _collapsedGroups.Contains(status);
+        var chevron = Ui.Icon(collapsed ? Glyphs.ChevronRight : Glyphs.ChevronDown,
+            6.5, Palette.TextTertiary);
+        // 缩小到原尺寸一半后同步调细描边，避免小箭头显得粗重
+        if (chevron is Avalonia.Controls.Shapes.Path chevronPath) chevronPath.StrokeThickness = 1;
+        // 白底盖住线条，使箭头真正叠在横线正中（水平、垂直都居中）
+        var chevronBadge = new Border
+        {
+            Background = Brushes.White,
+            Padding = new Thickness(3, 2),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = chevron,
         };
-        row.Children.Add(dot);
-        row.Children.Add(Ui.Text(status.Label(), 13, FontWeight.SemiBold));
-        row.Children.Add(Ui.Pill(count.ToString(), Palette.Alpha(ColorOf(status), 26), Ui.GroupColor(status), 11, 9));
-        var chevron = Ui.Icon(_collapsedGroups.Contains(status) ? Glyphs.ChevronRight : Glyphs.ChevronDown,
-            13, Palette.TextTertiary);
-        row.Children.Add(chevron);
+        // 朝下的 V 形视觉重心偏上，整体下移 1px；右箭头保持原位
+        if (!collapsed) chevronBadge.RenderTransform = new TranslateTransform(0, 1);
+        lineHost.Children.Add(chevronBadge);
+        Grid.SetColumn(lineHost, 3);
+        row.Children.Add(lineHost);
+
         var border = new Border { Child = row, Padding = new Thickness(0, 4), Cursor = new Cursor(StandardCursorType.Hand) };
         border.PointerPressed += (_, e) =>
         {
@@ -734,7 +789,8 @@ public sealed class ShellView : UserControl
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Cursor = new Cursor(StandardCursorType.Hand),
-            VerticalAlignment = VerticalAlignment.Center,
+            // 状态圈贴在条目上边，不垂直居中
+            VerticalAlignment = VerticalAlignment.Top,
         };
         ToolTip.SetTip(ringButton, readOnly ? "恢复为待完成" : "标记完成");
         ringButton.Click += (_, _) => _session.Todos.SetStatus(todo.Id,
@@ -742,45 +798,66 @@ public sealed class ShellView : UserControl
 
         var title = Ui.Text(todo.Title, 13, FontWeight.Medium,
             todo.IsOverdue ? Palette.Red : Palette.TextPrimary);
-        title.Cursor = new Cursor(StandardCursorType.Hand);
-        title.PointerPressed += (_, e) =>
-        {
-            _expandedTodo = expanded ? null : todo.Id;
-            if (expanded) _frozenOrder.Clear();
-            else
-            {
-                var index = 0;
-                foreach (var state in new[] { TodoStatus.todo, TodoStatus.doing, TodoStatus.done, TodoStatus.terminated })
-                foreach (var item in _session.Todos.InStatus(state)) _frozenOrder[item.Id] = index++;
-                if (!readOnly && string.IsNullOrWhiteSpace(VisibleText.From(todo.Notes)))
-                    _editingNotesTodo = todo.Id;
-            }
-            ShowTodos();
-            e.Handled = true;
-        };
+        title.TextWrapping = TextWrapping.Wrap;
+        title.MaxLines = 2;
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        // 右侧按钮宽高写死，避免不同状态/字数导致行高跳动。
+        static Button ButtonSized(Button button)
+        {
+            button.Width = 36;
+            button.Height = 24;
+            button.MinHeight = 0;
+            button.Padding = new Thickness(0);
+            return button;
+        }
+        // 主题色小按钮：浅色调背景 + 同色系文字/边框。Ui.Small 自带 hover→灰底/exit→透明，
+        // 这里在后面追加 handler 覆盖成主题色（Avalonia 事件按顺序触发，后注册生效）。
+        static Button TintedSmall(string text, Action click, IBrush fg, IBrush bg, IBrush border, IBrush hoverBg)
+        {
+            var b = Ui.Small(text, click, fg, 11);
+            b.Background = bg;
+            b.BorderBrush = border;
+            b.PointerEntered += (_, _) => b.Background = hoverBg;
+            b.PointerExited += (_, _) => b.Background = bg;
+            return b;
+        }
         if (!readOnly)
         {
             if (todo.Status != TodoStatus.doing)
-                actions.Children.Add(Ui.Small("开始", () => _session.Todos.SetStatus(todo.Id, TodoStatus.doing), null, 11));
-            if (todo.Status != TodoStatus.done)
-                actions.Children.Add(Ui.Small("完成", () => _session.Todos.SetStatus(todo.Id, TodoStatus.done), null, 11));
+                actions.Children.Add(ButtonSized(TintedSmall("开始", () => _session.Todos.SetStatus(todo.Id, TodoStatus.doing),
+                    Palette.Accent, Palette.AccentTint, Palette.AccentTint2, Palette.Brush(0xD5EBDD))));
+            // 必须先「开始」进入进行中，才显示「完成」——待完成状态不能直接完成
+            if (todo.Status == TodoStatus.doing)
+                actions.Children.Add(ButtonSized(TintedSmall("完成", () => _session.Todos.SetStatus(todo.Id, TodoStatus.done),
+                    Palette.SyncRunText, Palette.SyncRunBg, Palette.Brush(0xEBD3A0), Palette.Brush(0xFBE7BE))));
             if (todo.Status != TodoStatus.terminated)
-                actions.Children.Add(Ui.Small("终止", () => _session.Todos.SetStatus(todo.Id, TodoStatus.terminated), null, 11));
+                actions.Children.Add(ButtonSized(Ui.Small("终止", () => _session.Todos.SetStatus(todo.Id, TodoStatus.terminated), null, 11)));
         }
         else
         {
-            actions.Children.Add(Ui.Small("恢复", () => _session.Todos.SetStatus(todo.Id, TodoStatus.todo), null, 11));
+            actions.Children.Add(ButtonSized(Ui.Small("恢复", () => _session.Todos.SetStatus(todo.Id, TodoStatus.todo), null, 11)));
         }
-        actions.Children.Add(Ui.Small(Glyphs.Trash, async () =>
+        // 删除：纯图标按钮，无边框、无 hover 背景；指向时图标由红变灰，仍是垃圾桶样式
+        var trashIcon = Icons.Render(Glyphs.Trash, 14, Palette.Red);
+        var deleteButton = ButtonSized(new Button
+        {
+            Content = trashIcon,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        });
+        deleteButton.Classes.Add("plain-icon");
+        deleteButton.PointerEntered += (_, _) => Icons.Tint(trashIcon, Palette.TextTertiary);
+        deleteButton.PointerExited += (_, _) => Icons.Tint(trashIcon, Palette.Red);
+        deleteButton.Click += async (_, _) =>
         {
             var yes = await Dialogs.Confirm(this, "删除任务？",
                 "「" + todo.Title + "」将被永久删除，其他已同步设备上也会一并移除，此操作不可恢复。", "永久删除");
             if (yes) _session.Todos.Remove(todo.Id);
-        }, Palette.Red, 11));
+        };
+        actions.Children.Add(deleteButton);
 
-        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
         head.Children.Add(ringButton);
         // W-27：任务行显示「文字[图片]」摘要与最近修改时间
         var titleStack = new StackPanel
@@ -796,37 +873,92 @@ public sealed class ShellView : UserControl
         if (imageCount > 0) preview += (preview.Length > 0 ? " " : "") + "[图片]";
         if (preview.Length > 0)
             titleStack.Children.Add(Ui.Text(preview, 10.5, null, Palette.TextQuaternary));
-        titleStack.Children.Add(Ui.Text("最近修改 " + todo.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-            10, null, Palette.TextQuaternary));
-        Grid.SetColumn(titleStack, 1);
-        head.Children.Add(titleStack);
+        // 完成日期胶囊放到「最近修改」前面，水平间距 6px
+        var metaLine = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         if (todo.PlannedAt != null)
         {
             var local = todo.PlannedAt.Value.ToLocalTime();
-            var pill = Ui.Pill(local.ToString("M月d日"),
+            metaLine.Children.Add(Ui.Pill(local.ToString("M月d日"),
                 todo.IsOverdue ? Palette.Panel : Palette.Pill,
-                todo.IsOverdue ? Palette.Red : Palette.TextTertiary, 11, 9);
-            pill.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(pill, 2);
-            head.Children.Add(pill);
+                todo.IsOverdue ? Palette.Red : Palette.TextTertiary, 11, 9));
         }
-        Grid.SetColumn(actions, 3);
+        metaLine.Children.Add(Ui.Text("最近修改 " + todo.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            10, null, Palette.TextQuaternary));
+        titleStack.Children.Add(metaLine);
+        Grid.SetColumn(titleStack, 1);
+        head.Children.Add(titleStack);
+        Grid.SetColumn(actions, 2);
         head.Children.Add(actions);
 
         var frame = new Border
         {
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = new CornerRadius(10),
             Padding = new Thickness(9, 8, 8, 8),
-            Background = todo.IsOverdue ? Palette.RedTint : Brushes.Transparent,
-            BorderBrush = todo.IsOverdue ? Palette.Red : Brushes.Transparent,
-            BorderThickness = new Thickness(todo.IsOverdue ? 1 : 0),
+            // 灰底面板上的悬浮卡片：普通任务白底无边框；逾期任务淡红底 + 浅一档红框。
+            Background = todo.IsOverdue ? Palette.RedTintSoft : Palette.White,
+            BorderBrush = todo.IsOverdue ? Palette.Alpha(0xE5484D, 120) : Brushes.Transparent,
+            BorderThickness = new Thickness(todo.IsOverdue ? 0.7 : 0),
+            Cursor = new Cursor(StandardCursorType.Hand),
             Child = head,
         };
+        frame.PointerPressed += (_, e) =>
+        {
+            // 点在状态圈 / 操作按钮上时，交给按钮自己处理，不切换面板。
+            if (e.Source is Visual src && src != frame && IsInsideButton(src, frame)) return;
+            // 收起（或切换到别的任务）前，把正在编辑的备注自动保存。
+            AutoSaveEditingNotes();
+            if (expanded) { _expandedTodo = null; _frozenOrder.Clear(); }
+            else
+            {
+                _expandedTodo = todo.Id;
+                var index = 0;
+                foreach (var state in new[] { TodoStatus.todo, TodoStatus.doing, TodoStatus.done, TodoStatus.terminated })
+                foreach (var item in _session.Todos.InStatus(state)) _frozenOrder[item.Id] = index++;
+                if (!readOnly && string.IsNullOrWhiteSpace(VisibleText.From(todo.Notes)))
+                    _editingNotesTodo = todo.Id;
+            }
+            ShowTodos();
+            e.Handled = true;
+        };
 
-        var stack = new StackPanel { Children = { frame } };
-        if (!todo.IsOverdue) stack.Children.Add(Ui.Hairline());
+        // 整条任务对齐分组标题光圈右缘：光圈 16px 居中于 8px dotHost，右缘溢出 12px，卡片缩进同量
+        var stack = new StackPanel { Spacing = 6, Margin = new Thickness(12, 0, 0, 0), Children = { frame } };
         if (expanded) stack.Children.Add(TodoDetail(todo));
         return stack;
+    }
+
+    /// <summary>从点击源向上找，判断是否点在 Button 内（Button 自身含图标/文字子进程）。</summary>
+    private static bool IsInsideButton(Visual source, Visual root)
+    {
+        Visual? v = source;
+        while (v != null && v != root)
+        {
+            if (v is Button) return true;
+            v = v.GetVisualParent();
+        }
+        return false;
+    }
+
+    /// <summary>切换任务 / 收起面板前自动保存正在编辑的备注；内容未变则不写盘。</summary>
+    private void AutoSaveEditingNotes()
+    {
+        var box = _editingNotesBox;
+        if (box == null) return;
+        var id = _editingNotesTodo;
+        _editingNotesBox = null;
+        _editingNotesTodo = null;
+        if (id == null) return;
+        var todo = _session.Todos.Find(id.Value);
+        if (todo == null) return;
+        var originalPlain = NotesPlain(todo.Notes);
+        var edited = box.Text ?? "";
+        if (edited.Trim() != originalPlain.Trim())
+            _session.Todos.UpdateNotes(id.Value, RebuildTodoNotes(todo.Notes, edited));
     }
 
     private Control TodoDetail(Todo todo)
@@ -834,30 +966,58 @@ public sealed class ShellView : UserControl
         var readOnly = todo.IsTerminal;
         var editing = !readOnly && _editingNotesTodo == todo.Id;
         var body = new StackPanel { Spacing = 8 };
+        var date = todo.PlannedAt?.ToLocalTime() ?? DateTime.Today;
 
-        var topRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        topRow.Children.Add(Ui.Text("备注", 11.5, FontWeight.SemiBold, Palette.TextSecondary));
-        if (readOnly) topRow.Children.Add(Ui.Pill("只读", Palette.Pill, Palette.TextTertiary, 10));
-        if (!readOnly && !editing && !string.IsNullOrWhiteSpace(todo.Notes))
-            topRow.Children.Add(Ui.Small("编辑", () => { _editingNotesTodo = todo.Id; ShowTodos(); }, null, 11));
+        // 标题行：左侧「备注 + 最近修改」；仅编辑态右上角放「插图(图片上传)」
+        var topRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+        var titleGroup = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        titleGroup.Children.Add(Ui.Text("备注", 11.5, FontWeight.SemiBold, Palette.TextSecondary));
+        titleGroup.Children.Add(Ui.Text("最近修改 " + todo.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            11, null, Palette.TextQuaternary));
+        if (readOnly) titleGroup.Children.Add(Ui.Pill("只读", Palette.Pill, Palette.TextTertiary, 10));
+        topRow.Children.Add(titleGroup);
+
+        var topActions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 6,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        Grid.SetColumn(topActions, 2);
+        topRow.Children.Add(topActions);
         body.Children.Add(topRow);
 
         if (editing)
         {
-            var originalPlain = VisibleText.From(todo.Notes);
+            var originalPlain = NotesPlain(todo.Notes);
             var notes = new TextBox
             {
                 Text = originalPlain,
                 Watermark = "写点备注…",
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
-                MinHeight = 90,
+                MinHeight = 60, // 初始高度减半，行数增多时 TextBox 自动撑高
                 FontSize = 12.5,
                 Padding = new Thickness(10),
                 CornerRadius = new CornerRadius(6),
+                Background = Palette.White,
                 BorderBrush = Palette.Line,
             };
+            notes.Classes.Add("notes-input");
+            // Ctrl+V / Shift+Insert：剪贴板里有截图/位图就作为图片附件加入，否则按普通文本粘贴
+            notes.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                var paste = (e.Key == Key.V && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+                            || (e.Key == Key.Insert && e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                if (!paste) return;
+                e.Handled = true;
+                PasteIntoNotes(todo.Id, notes);
+            }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
             var noteText = notes;
+            _editingNotesBox = notes;
             void SaveNotes(bool collapse)
             {
                 var edited = noteText.Text ?? "";
@@ -865,51 +1025,245 @@ public sealed class ShellView : UserControl
                 if (edited.Trim() != originalPlain.Trim())
                     _session.Todos.UpdateNotes(todo.Id, RebuildTodoNotes(todo.Notes, edited));
                 _editingNotesTodo = null;
+                _editingNotesBox = null;
                 if (collapse) { _expandedTodo = null; _frozenOrder.Clear(); }
                 ShowTodos();
             }
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            row.Children.Add(Ui.Primary("保存", () => SaveNotes(false), 11));
-            row.Children.Add(Ui.Ghost("保存并收起", () => SaveNotes(true), 11));
-            row.Children.Add(Ui.Ghost("插入图片", () => InsertTodoImage(todo.Id), 11));
-            row.Children.Add(Ui.Ghost("取消", () => { _editingNotesTodo = null; ShowTodos(); }, 11));
+            // 底部操作行：保存 / 取消 / 截止日期组件（勾选后才显示年月日与日历）
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 8,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var saveBtn = Ui.Primary("保存", () => SaveNotes(false), 11);
+            saveBtn.Width = 48; // 与「编辑」按钮同宽高
+            saveBtn.Height = 25;
+            saveBtn.Padding = new Thickness(0);
+            row.Children.Add(saveBtn);
+            var cancelBtn = Ui.Ghost("取消", () =>
+            {
+                _editingNotesTodo = null;
+                _editingNotesBox = null;
+                ShowTodos();
+            }, 11);
+            // 整个背景、边框都去掉（含 hover/pressed，用 plain-icon 压掉透明度反馈）
+            cancelBtn.Background = Brushes.Transparent;
+            cancelBtn.BorderBrush = Brushes.Transparent;
+            cancelBtn.BorderThickness = new Thickness(0);
+            cancelBtn.Classes.Add("plain-icon");
+            row.Children.Add(cancelBtn);
+
+            AddDateControls(row);
+
             body.Children.Add(notes);
+            body.Children.Add(BuildImageStrip(todo, () => noteText.Text ?? ""));
             body.Children.Add(row);
         }
         else
         {
-            var plain = VisibleText.From(todo.Notes);
+            var plain = NotesPlain(todo.Notes);
+            var viewBox = new StackPanel { MinHeight = 60, Spacing = 2 };
             if (!string.IsNullOrWhiteSpace(plain))
-                body.Children.Add(new TextBlock { Text = plain, FontSize = 12.5, TextWrapping = TextWrapping.Wrap, Foreground = Palette.TextSecondary });
+                viewBox.Children.Add(new TextBlock { Text = plain, FontSize = 12.5, TextWrapping = TextWrapping.Wrap, Foreground = Palette.TextSecondary });
             else
-                body.Children.Add(Ui.Text(readOnly ? "（无备注）" : "还没有备注", 12, null, Palette.TextQuaternary));
-            foreach (var image in TodoImages(todo.Notes)) body.Children.Add(image);
+                viewBox.Children.Add(Ui.Text(readOnly ? "（无备注）" : "还没有备注", 12, null, Palette.TextQuaternary));
+            body.Children.Add(viewBox);
+            // 图片不混在备注文字里，统一放在下方图片区（只读缩略图，点击放大查看）
+            if (NoteImageRefs(todo.Notes).Count > 0)
+                body.Children.Add(BuildImageStrip(todo, () => "", false));
+            if (!readOnly)
+            {
+                var viewRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                var editBtn = Ui.Primary("编辑", () => { _editingNotesTodo = todo.Id; ShowTodos(); }, 11);
+                editBtn.Width = 48; // 与「保存」按钮同宽高
+                editBtn.Height = 25;
+                editBtn.Padding = new Thickness(0);
+                editBtn.Margin = new Thickness(0, 0, 8, 0); // 与右侧勾选框间距 +8
+                viewRow.Children.Add(editBtn);
+                viewRow.Spacing = 8;
+                viewRow.VerticalAlignment = VerticalAlignment.Center;
+                AddDateControls(viewRow);
+                body.Children.Add(viewRow);
+            }
         }
 
-        // 计划日期：年 / 月 / 日紧凑步进 + 日历 + 清除（Mac TodoView.swift:543-699）
-        var date = todo.PlannedAt?.ToLocalTime() ?? DateTime.Today;
-        var dateRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        dateRow.Children.Add(Ui.Text("设置截止时间", 11.5, null, Palette.TextSecondary));
-        if (!readOnly)
+        // 日期控件辅助：勾选框未选中时只显示「设置截止时间」，选中后才显示年月日框与日历按钮。
+        // 编辑态由调用方合并进底部按钮行；查看/只读态单独一行。
+
+        DateTime SafeDate(int y, int m, int d)
         {
-            dateRow.Children.Add(Stepper(date.Year.ToString(), () => ChangeDate(todo.Id, date.AddYears(-1)), () => ChangeDate(todo.Id, date.AddYears(1))));
-            dateRow.Children.Add(Ui.Text("年", 11, null, Palette.TextTertiary));
-            dateRow.Children.Add(Stepper(date.Month.ToString(), () => ChangeDate(todo.Id, date.AddMonths(-1)), () => ChangeDate(todo.Id, date.AddMonths(1))));
-            dateRow.Children.Add(Ui.Text("月", 11, null, Palette.TextTertiary));
-            dateRow.Children.Add(Stepper(date.Day.ToString(), () => ChangeDate(todo.Id, date.AddDays(-1)), () => ChangeDate(todo.Id, date.AddDays(1))));
-            dateRow.Children.Add(Ui.Text("日", 11, null, Palette.TextTertiary));
-            dateRow.Children.Add(Ui.Small(Glyphs.Calendar, async () =>
+            y = Math.Clamp(y, 2000, 2100);
+            m = Math.Clamp(m, 1, 12);
+            d = Math.Clamp(d, 1, DateTime.DaysInMonth(y, m));
+            return new DateTime(y, m, d, 12, 0, 0, DateTimeKind.Local);
+        }
+
+        Border DateField(string value, double width, Action<int> commit)
+        {
+            var box = new TextBox
             {
-                var picked = await Dialogs.PickDate(this, todo.PlannedAt?.ToLocalTime());
-                if (picked != null) ChangeDate(todo.Id, picked.Value);
-            }, null, 11));
-            dateRow.Children.Add(Ui.Small("清除", () => _session.Todos.SetPlannedAt(todo.Id, null), null, 11));
+                Text = value, Width = width,
+                // 外框只有 9 高，但输入框本体要有足够高度（≥ 一行字高）文字才不会被模板裁掉；
+                // 本体垂直居中、溢出部分由外层裁剪，数字落在可见的 9px 带内。
+                MinWidth = 0, MinHeight = 0, Height = 17,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                FontSize = 10, Padding = new Thickness(3, 2, 3, 0), // 顶部 +2：文字下移 1px 居中
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+            };
+            box.LostFocus += (_, _) =>
+            {
+                if (int.TryParse(box.Text?.Trim(), out var n)) commit(n);
+            };
+            return new Border
+            {
+                Background = Palette.White,
+                BorderBrush = Palette.Line,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(0),
+                Height = 17,
+                Child = box,
+            };
         }
-        else
+
+        // 步进分段：[−][数值][+] 同一行，圆角边框，竖线分隔；step(±1) 返回新日期（月/日会自动进退位）
+        Border DateStepper(string value, double width, Action<int> commit, Func<int, DateTime> step)
         {
-            dateRow.Children.Add(Ui.Text(todo.PlannedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "未设置", 11.5, null, Palette.TextQuaternary));
+            Button StepBtn(string sign, int delta)
+            {
+                var label = Ui.Text(sign, 10, null, Palette.Accent);
+                label.HorizontalAlignment = HorizontalAlignment.Center;
+                label.VerticalAlignment = VerticalAlignment.Center;
+                var b = new Button
+                {
+                    Content = label,
+                    Width = 12, Height = 17, MinWidth = 0, MinHeight = 0,
+                    FontSize = 10,
+                    Padding = new Thickness(0),
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    // 外框圆角 6 − 边线 1 = 5：灰底只在外侧两角带圆弧，贴合外框
+                    CornerRadius = delta < 0 ? new CornerRadius(5, 0, 0, 5) : new CornerRadius(0, 5, 5, 0),
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                };
+                // 指向 / 按下：整块按钮浅灰底（plain-icon 去掉默认透明度变化）
+                b.Classes.Add("plain-icon");
+                var hoverBg = Palette.Brush(0xEEEFF2);
+                var pressBg = Palette.Brush(0xDEE0E5);
+                b.PointerEntered += (_, _) => b.Background = hoverBg;
+                b.PointerExited += (_, _) => b.Background = Brushes.Transparent;
+                b.AddHandler(InputElement.PointerPressedEvent, (_, _) => b.Background = pressBg,
+                    Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble, true);
+                b.AddHandler(InputElement.PointerReleasedEvent, (_, _) => b.Background = b.IsPointerOver ? hoverBg : Brushes.Transparent,
+                    Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble, true);
+                b.Click += (_, _) => ChangeDate(todo.Id, step(delta));
+                return b;
+            }
+            Border Sep() => new Border { Width = 1, Background = Palette.Line };
+
+            var field = DateField(value, width, commit);
+            field.BorderThickness = new Thickness(0);
+            field.CornerRadius = new CornerRadius(0);
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(StepBtn("−", -1));
+            row.Children.Add(Sep());
+            row.Children.Add(field);
+            row.Children.Add(Sep());
+            row.Children.Add(StepBtn("+", 1));
+            return new Border
+            {
+                Background = Palette.White,
+                BorderBrush = Palette.Line,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                ClipToBounds = true,
+                // 否则会被所在行（含 25 高的按钮）纵向拉伸，比日历图标高
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = row,
+            };
         }
-        body.Children.Add(dateRow);
+
+        void AddDateControls(StackPanel host)
+        {
+            // 自绘勾选框：方框 12×12（原 16，缩小 4），整体高度 16（原约 20）
+            var hasDeadline = todo.PlannedAt != null;
+            var tickBox = new Border
+            {
+                Width = 12, Height = 12,
+                CornerRadius = new CornerRadius(2),
+                BorderBrush = Palette.Accent,
+                BorderThickness = new Thickness(1),
+                Background = hasDeadline ? Palette.Accent : Palette.White,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = hasDeadline ? Icons.Render(Glyphs.Check, 9, Palette.White) : null,
+            };
+            var checkContent = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 5,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    tickBox,
+                    Ui.Text("设置截止时间", 10.5, null, Palette.Link),
+                },
+            };
+            var check = new Button
+            {
+                Content = checkContent,
+                Height = 16,
+                Padding = new Thickness(0),
+                Background = Brushes.Transparent,
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = new Cursor(StandardCursorType.Hand),
+            };
+            check.Classes.Add("plain-icon");
+            check.Click += (_, _) =>
+            {
+                if (!hasDeadline) ChangeDate(todo.Id, DateTime.Today);
+                else _session.Todos.SetPlannedAt(todo.Id, null);
+            };
+            host.Children.Add(check);
+            // 勾选后才显示后面的年月日输入框与日历按钮
+            if (todo.PlannedAt != null)
+            {
+                // 年月日输入框：宽 -8、高 -4；框与前后间距 +2
+                host.Children.Add(DateStepper(date.Year.ToString(), 34, v => ChangeDate(todo.Id, SafeDate(v, date.Month, date.Day)), d => date.AddYears(d)));
+                host.Children.Add(DateStepper(date.Month.ToString(), 24, v => ChangeDate(todo.Id, SafeDate(date.Year, v, date.Day)), d => date.AddMonths(d)));
+                host.Children.Add(DateStepper(date.Day.ToString(), 24, v => ChangeDate(todo.Id, SafeDate(date.Year, date.Month, v)), d => date.AddDays(d)));
+                var cal = new Button
+                {
+                    Content = Icons.Render(Glyphs.CalendarFilled, 16, Palette.Accent),
+                    Width = 16, Height = 16, MinWidth = 0, MinHeight = 0,
+                    Padding = new Thickness(0),
+                    Background = Brushes.Transparent,
+                    BorderBrush = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    CornerRadius = new CornerRadius(0),
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                };
+                cal.Classes.Add("plain-icon");
+                cal.Click += async (_, _) =>
+                {
+                    var picked = await Dialogs.PickDate(this, todo.PlannedAt?.ToLocalTime());
+                    if (picked == DateTime.MinValue) _session.Todos.SetPlannedAt(todo.Id, null);
+                    else if (picked != null) ChangeDate(todo.Id, picked.Value);
+                };
+                host.Children.Add(cal);
+            }
+        }
+
+        // 截止时间设置控件只在编辑态显示（已并入底部按钮行）；
+        // 查看/只读态不显示——任务卡片头部的日期胶囊已展示截止时间。
 
         var info = new List<string>();
         if (todo.StartedAt != null) info.Add("开始 " + todo.StartedAt.Value.ToLocalTime().ToString("MM-dd HH:mm"));
@@ -930,15 +1284,6 @@ public sealed class ShellView : UserControl
         };
     }
 
-    private static Control Stepper(string value, Action dec, Action inc)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
-        row.Children.Add(Ui.Small("−", dec, null, 11));
-        row.Children.Add(Ui.Pill(value, Palette.Panel, Palette.TextPrimary, 11, 5));
-        row.Children.Add(Ui.Small("＋", inc, null, 11));
-        return row;
-    }
-
     private void ChangeDate(Guid id, DateTime value)
     {
         // W-27：年步进钳制在 2000–2100
@@ -947,7 +1292,217 @@ public sealed class ShellView : UserControl
         _session.Todos.SetPlannedAt(id, date.ToUniversalTime());
     }
 
-    private async void InsertTodoImage(Guid id)
+    /// <summary>备注转纯文字，段落/换行标签还原成换行（VisibleText 直接去标签会把多行并成一行）。</summary>
+    private static string NotesPlain(string? html)
+    {
+        if (string.IsNullOrEmpty(html)) return "";
+        var text = Regex.Replace(html, @"</p>\s*<p[^>]*>|<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+        return VisibleText.From(text);
+    }
+
+    private static List<string> NoteImageRefs(string? notes) =>
+        string.IsNullOrEmpty(notes)
+            ? []
+            : Regex.Matches(notes, "<img[^>]+src=\"(attachments/[^\"]+)\"[^>]*>").Select(m => m.Groups[1].Value).ToList();
+
+    /// <summary>编辑态图片区：横向多张缩略图（右上角叉删除）+ 末尾「＋」添加框。</summary>
+    private void ShowImageViewer(string path)
+    {
+        Bitmap bmp;
+        try { bmp = new Bitmap(path); } catch { return; }
+        var window = new Window
+        {
+            Title = Path.GetFileName(path),
+            Width = Math.Clamp(bmp.Size.Width + 40, 320, 1100),
+            Height = Math.Clamp(bmp.Size.Height + 60, 240, 800),
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brushes.Black,
+            Content = new Image { Source = bmp, Stretch = Stretch.Uniform, Margin = new Thickness(10) },
+        };
+        window.KeyDown += (_, e) => { if (e.Key == Key.Escape) window.Close(); };
+        window.PointerPressed += (_, _) => window.Close();
+        if (TopLevel.GetTopLevel(this) is Window owner) window.Show(owner); else window.Show();
+    }
+
+    private Control BuildImageStrip(Todo todo, Func<string> currentText, bool editable = true)
+    {
+        const double Size = 56;
+        var strip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+
+        foreach (var rel in NoteImageRefs(todo.Notes))
+        {
+            var path = _session.Todos.Attachments.AbsolutePath(rel);
+            if (!File.Exists(path)) continue;
+            Bitmap bmp;
+            try { bmp = new Bitmap(path); } catch { continue; }
+            var cell = new Grid { Width = Size + 6, Height = Size + 6 };
+            var thumb = new Border
+            {
+                Width = Size, Height = Size,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                CornerRadius = new CornerRadius(6),
+                BorderBrush = Palette.Line, BorderThickness = new Thickness(1),
+                ClipToBounds = true,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                Child = new Image { Source = bmp, Stretch = Stretch.UniformToFill },
+            };
+            ToolTip.SetTip(thumb, "点击查看大图");
+            thumb.PointerPressed += (_, e) => { e.Handled = true; ShowImageViewer(path); };
+            cell.Children.Add(thumb);
+            // 图片名称：位于缩略图正下方，最大宽度 = 缩略图宽度，超出省略
+            var nameLabel = new TextBlock
+            {
+                Text = Path.GetFileName(path),
+                FontSize = 9.5,
+                Foreground = Palette.TextTertiary,
+                MaxWidth = Size,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 2, 0, 0),
+            };
+            ToolTip.SetTip(nameLabel, Path.GetFileName(path));
+            var column = new StackPanel { Spacing = 0 };
+            column.Children.Add(cell);
+            column.Children.Add(nameLabel);
+            if (!editable) { strip.Children.Add(column); continue; }
+            var x = new Button
+            {
+                Content = Ui.Text("✕", 8, FontWeight.Bold, Palette.White),
+                Width = 16, Height = 16, MinWidth = 0, MinHeight = 0,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(8),
+                Background = Palette.TextTertiary,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Cursor = new Cursor(StandardCursorType.Hand),
+            };
+            x.Classes.Add("plain-icon");
+            var captured = rel;
+            x.Click += (_, _) => CommitNoteImages(todo.Id, currentText(), imgs => imgs.Where(i => i != captured).ToList());
+            cell.Children.Add(x);
+            strip.Children.Add(column);
+        }
+
+        var plus = new Border
+        {
+            Width = Size, Height = Size,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 6, 0, 0), // 与缩略图（顶部留 6 给 ✕）对齐
+            CornerRadius = new CornerRadius(6),
+            BorderBrush = Palette.Line, BorderThickness = new Thickness(1),
+            Background = Palette.White,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = Ui.Text("+", 22, null, Palette.TextQuaternary),
+        };
+        if (plus.Child is Control pc)
+        {
+            pc.HorizontalAlignment = HorizontalAlignment.Center;
+            pc.VerticalAlignment = VerticalAlignment.Center;
+        }
+        ToolTip.SetTip(plus, "添加图片");
+        plus.PointerPressed += (_, e) => { e.Handled = true; AddTodoImages(todo.Id, currentText()); };
+        if (editable) strip.Children.Add(plus);
+
+        var holder = new StackPanel { Spacing = 4 };
+        holder.Children.Add(Ui.Text("附件图片", 11.5, FontWeight.SemiBold, Palette.TextSecondary));
+        holder.Children.Add(new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = strip,
+        });
+        return holder;
+    }
+
+    /// <summary>先把当前输入框文字存下，再按 mutate 改图片列表，避免刷新时丢失未保存文字。</summary>
+    private void CommitNoteImages(Guid id, string text, Func<List<string>, List<string>> mutate)
+    {
+        var todo = _session.Todos.Find(id);
+        if (todo == null) return;
+        var images = mutate(NoteImageRefs(todo.Notes));
+        _session.Todos.UpdateNotes(id, RebuildTodoNotes(todo.Notes, text, images));
+        ShowTodos();
+    }
+
+    private async void PasteIntoNotes(Guid id, TextBox box)
+    {
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                var formats = await clipboard.GetFormatsAsync();
+                byte[]? bytes = null;
+                var ext = "png";
+                async Task<byte[]?> Read(string name)
+                {
+                    var data = await clipboard.GetDataAsync(name);
+                    if (data is byte[] raw) return raw;
+                    if (data is Stream stream)
+                    {
+                        using var copy = new MemoryStream();
+                        await stream.CopyToAsync(copy);
+                        return copy.ToArray();
+                    }
+                    if (data is Bitmap bmpData)
+                    {
+                        using var copy = new MemoryStream();
+                        bmpData.Save(copy);
+                        return copy.ToArray();
+                    }
+                    return null;
+                }
+                string? Pick(params string[] keys) =>
+                    formats.FirstOrDefault(f => keys.Any(k => f.Contains(k, StringComparison.OrdinalIgnoreCase)));
+                var pngName = Pick("png");
+                var dibName = Pick("DeviceIndependentBitmap", "CF_DIB", "dib");
+                byte[]? dib = null;
+                if (pngName != null) bytes = await Read(pngName);
+                if (bytes == null && dibName != null) dib = await Read(dibName);
+                if (bytes == null && dib != null && dib.Length > 40)
+                {
+                    // DIB 没有文件头：补 14 字节 BMP 头后即可解码，再统一转存为 PNG
+                    var offset = 14 + BitConverter.ToInt32(dib, 0);
+                    var bpp = BitConverter.ToUInt16(dib, 14);
+                    var colors = BitConverter.ToInt32(dib, 32);
+                    if (bpp <= 8) offset += (colors == 0 ? 1 << bpp : colors) * 4;
+                    var bmp = new byte[14 + dib.Length];
+                    bmp[0] = (byte)'B'; bmp[1] = (byte)'M';
+                    BitConverter.GetBytes(bmp.Length).CopyTo(bmp, 2);
+                    BitConverter.GetBytes(offset).CopyTo(bmp, 10);
+                    dib.CopyTo(bmp, 14);
+                    using var src = new MemoryStream(bmp);
+                    using var decoded = new Bitmap(src);
+                    using var pngStream = new MemoryStream();
+                    decoded.Save(pngStream);
+                    bytes = pngStream.ToArray();
+                }
+                if (bytes != null)
+                {
+                    var relative = _session.Todos.Attachments.ImportImageBytes(bytes, ext, id);
+                    CommitNoteImages(id, box.Text ?? "", imgs => imgs.Append(relative).ToList());
+                    return;
+                }
+                // 没有可识别的图片：若剪贴板也没有文字，把格式列表提示出来便于排查
+                if (!formats.Any(f => f.Contains("text", StringComparison.OrdinalIgnoreCase)))
+                {
+                    _banner.Text = "剪贴板中没有可粘贴的图片/文字，格式：" + string.Join(", ", formats);
+                    return;
+                }
+            }
+        }
+        catch (Exception error)
+        {
+            _banner.Text = "粘贴图片失败：" + error.Message;
+            return;
+        }
+        box.Paste();
+    }
+
+    private async void AddTodoImages(Guid id, string currentText)
     {
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel?.StorageProvider == null) return;
@@ -955,17 +1510,19 @@ public sealed class ShellView : UserControl
         {
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "选择一张图片",
-                AllowMultiple = false,
+                Title = "选择图片",
+                AllowMultiple = true,
                 FileTypeFilter = [FilePickerFileTypes.ImageAll],
             });
-            var file = files.FirstOrDefault();
-            var source = file?.TryGetLocalPath();
-            if (string.IsNullOrWhiteSpace(source)) return;
-            var relative = _session.Todos.Attachments.ImportImage(source, id);
-            var todo = _session.Todos.Find(id);
-            if (todo == null) return;
-            _session.Todos.UpdateNotes(id, (todo.Notes ?? "") + "<img src=\"" + relative + "\">");
+            var added = new List<string>();
+            foreach (var file in files)
+            {
+                var source = file.TryGetLocalPath();
+                if (string.IsNullOrWhiteSpace(source)) continue;
+                added.Add(_session.Todos.Attachments.ImportImage(source, id));
+            }
+            if (added.Count == 0) return;
+            CommitNoteImages(id, currentText, imgs => imgs.Concat(added).ToList());
         }
         catch (Exception error)
         {
@@ -999,10 +1556,12 @@ public sealed class ShellView : UserControl
     }
 
     /// <summary>备注里的图片标签要保留，其余文字重新包成受控 &lt;p&gt;。</summary>
-    private static string RebuildTodoNotes(string original, string plain)
+    private static string RebuildTodoNotes(string original, string plain, IEnumerable<string>? imageRefs = null)
     {
         var images = "";
-        if (!string.IsNullOrEmpty(original))
+        if (imageRefs != null)
+            images = string.Concat(imageRefs.Select(r => "<img src=\"" + r + "\">"));
+        else if (!string.IsNullOrEmpty(original))
             images = string.Concat(Regex.Matches(original, "<img[^>]+src=\"attachments/[^\"]+\"[^>]*>")
                 .Select(match => match.Value));
         var text = plain.Trim();
@@ -1800,17 +2359,20 @@ public sealed class ShellView : UserControl
             labelBlock = Ui.Text(text, 12, selected ? FontWeight.SemiBold : null, fg);
             labelBlock.TextTrimming = TextTrimming.CharacterEllipsis;
             labelBlock.VerticalAlignment = VerticalAlignment.Center;
+            // 与右侧数字统一行高，让不同字号的文字基线对齐、视觉垂直居中。
+            labelBlock.LineHeight = 16;
             icon!.VerticalAlignment = VerticalAlignment.Center;
             var left = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 6,
+                Spacing = 4,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
                 Children = { icon, labelBlock },
             };
             var countBlock = Ui.Text(count.Value.ToString(), 11, null, Palette.TextQuaternary);
             countBlock.VerticalAlignment = VerticalAlignment.Center;
+            countBlock.LineHeight = 16;
             var grid = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -1830,7 +2392,7 @@ public sealed class ShellView : UserControl
             button.Content = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 6,
+                Spacing = 4,
                 VerticalAlignment = VerticalAlignment.Center,
                 Children = { icon, labelBlock },
             };
