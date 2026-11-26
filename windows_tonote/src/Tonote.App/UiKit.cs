@@ -51,6 +51,7 @@ public static class Glyphs
     public const string CalendarFilled = "calendar_filled";
     public const string StateTerminated = "state_terminated";
     public const string StateTodo = "state_todo";
+    public const string Chain = "chain";
     public const string StateDone = "state_done";
     public const string StateDoing = "state_doing";
 

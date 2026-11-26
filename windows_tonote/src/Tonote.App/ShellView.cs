@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -917,9 +917,8 @@ public sealed class ShellView : UserControl
                 todo.IsOverdue ? Palette.Panel : Palette.Pill,
                 todo.IsOverdue ? Palette.Red : Palette.TextTertiary, 11, 9));
         }
-        metaLine.Children.Add(Ui.Text("最近修改 " + todo.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-            10, null, Palette.TextQuaternary));
-        titleStack.Children.Add(metaLine);
+        // 「最近修改」只保留在备注面板里，任务行不再显示
+        if (metaLine.Children.Count > 0) titleStack.Children.Add(metaLine);
         Grid.SetColumn(titleStack, 1);
         head.Children.Add(titleStack);
         Grid.SetColumn(actions, 2);
@@ -1065,7 +1064,7 @@ public sealed class ShellView : UserControl
                 Orientation = Orientation.Horizontal, Spacing = 8,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            var saveBtn = Ui.Primary("保存", () => SaveNotes(false), 11);
+            var saveBtn = Ui.Primary("保存", () => SaveNotes(true), 11); // 保存后自动收起备注面板
             saveBtn.Width = 48; // 与「编辑」按钮同宽高
             saveBtn.Height = 25;
             saveBtn.Padding = new Thickness(0);
@@ -1302,16 +1301,32 @@ public sealed class ShellView : UserControl
         if (info.Count > 0)
             body.Children.Add(Ui.Text(string.Join(" · ", info), 11, null, Palette.TextQuaternary));
 
-        return new Border
+        var panel = new Border
         {
             Background = Palette.PanelSoft,
             BorderBrush = Palette.Alpha(0xCFE9D9, 166),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(14, 12),
-            Margin = new Thickness(0, 6, 0, 10),
             Child = body,
         };
+        // 吊绳：任务卡片下方两根细线垂直连到备注面板顶部，像把面板「吊」在任务下面
+        // 链条图标原本是斜 45° 的两节链环，旋转 45° 后变成竖直下垂的链
+        var strings = new Grid { Height = 24 };
+        foreach (var side in new[] { HorizontalAlignment.Left, HorizontalAlignment.Right })
+        {
+            var chain = Icons.Render(Glyphs.Chain, 20, Palette.Brush(0x9FD6B8));
+            chain.HorizontalAlignment = side;
+            chain.VerticalAlignment = VerticalAlignment.Center;
+            chain.Margin = side == HorizontalAlignment.Left ? new Thickness(120, 0, 0, 0) : new Thickness(0, 0, 120, 0);
+            chain.RenderTransform = new RotateTransform(47); // 按截图实测微调：49° 时底端偏左约 2°
+            strings.Children.Add(chain);
+        }
+        // 上边距 -6：抵消外层 StackPanel 在任务卡片与详情之间的 6px 间距，让链条真正接到卡片底边
+        var wrapper = new StackPanel { Margin = new Thickness(0, -6, 0, 10) };
+        wrapper.Children.Add(strings);
+        wrapper.Children.Add(panel);
+        return wrapper;
     }
 
     private void ChangeDate(Guid id, DateTime value)
