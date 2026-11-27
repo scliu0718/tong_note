@@ -137,11 +137,14 @@ fun NotesScreen(
                     it.plainBody.contains(query, true)
             }
             .sortedWith(
-                when (sort) {
-                    "created" -> compareByDescending<Note> { it.createdAt }
-                    "title" -> compareBy { it.title }
-                    else -> compareByDescending<Note> { it.updatedAt }
-                }
+                // 置顶笔记永远在最上面，同组内再按所选方式排序
+                compareByDescending<Note> { it.pinned }.then(
+                    when (sort) {
+                        "created" -> compareByDescending<Note> { it.createdAt }
+                        "title" -> compareBy<Note> { it.title }
+                        else -> compareByDescending<Note> { it.updatedAt }
+                    }
+                )
             )
             .toList()
     }

@@ -268,10 +268,6 @@ public sealed class ShellView : UserControl
         _session.Sync.StatusChanged += () => OnUi(UpdateSyncLabels);
         _session.Avatar.Changed += () => OnUi(RebuildSidebar);
 
-        // 快同步：编辑过程中每 15 秒把本地这一篇自动上传到远端（有改动才传）。
-        _quickAutoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
-        _quickAutoTimer.Tick += (_, _) => QuickAutoUpload();
-        _quickAutoTimer.Start();
 
         _loading = false;
         var first = _session.Notes.ActiveNotes.FirstOrDefault(note => !note.IsQuickSync);
@@ -286,18 +282,6 @@ public sealed class ShellView : UserControl
         else Dispatcher.UIThread.Post(action);
     }
 
-    private DispatcherTimer? _quickAutoTimer;
-    private DateTime _quickUploadedAt;
-
-    private void QuickAutoUpload()
-    {
-        if (_selected != Note.QuickSyncNoteId || !_session.IsSignedIn) return;
-        _richEditor.Flush();
-        var note = Current();
-        if (note == null || note.IsTrashed || note.UpdatedAt <= _quickUploadedAt) return;
-        _quickUploadedAt = note.UpdatedAt;
-        _ = _session.Sync.SyncSingleNoteAsync(note.Id);
-    }
 
     /// <summary>点击「同步本篇」：图标持续转圈给出可见反馈，同步结束后停下并复位。</summary>
     // 任务页同步图标的旋转：共享 transform + 计时器，页面重建后仍继续转
@@ -309,14 +293,11 @@ public sealed class ShellView : UserControl
     {
         if (_taskSyncing) return;
         _taskSyncing = true;
-        _taskSpinTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-        _taskSpinTimer.Tick -= OnTaskSpinTick;
-        _taskSpinTimer.Tick += OnTaskSpinTick;
-        _taskSpinTimer.Start();
+        UpdateTaskSyncSpin();
         var started = DateTime.UtcNow;
         try
         {
-            await _session.Sync.QuickSyncAsync();
+            await _session.Sync.SyncTodosOnlyAsync();
         }
         finally
         {
@@ -325,10 +306,26 @@ public sealed class ShellView : UserControl
             if (remaining > TimeSpan.Zero) await Task.Delay(remaining);
             OnUi(() =>
             {
-                _taskSpinTimer?.Stop();
-                _taskSpinTransform.Angle = 0;
                 _taskSyncing = false;
+                UpdateTaskSyncSpin();
             });
+        }
+    }
+
+    /// <summary>任务页同步图标转圈：手动点击（至少转 0.7 秒），或任务正在拉取 / 已排队（点开任务页时）。</summary>
+    private void UpdateTaskSyncSpin()
+    {
+        if (_taskSyncing || _session.Sync.IsTodosSyncActive)
+        {
+            _taskSpinTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+            _taskSpinTimer.Tick -= OnTaskSpinTick;
+            _taskSpinTimer.Tick += OnTaskSpinTick;
+            if (!_taskSpinTimer.IsEnabled) _taskSpinTimer.Start();
+        }
+        else
+        {
+            _taskSpinTimer?.Stop();
+            _taskSpinTransform.Angle = 0;
         }
     }
 
@@ -339,6 +336,9 @@ public sealed class ShellView : UserControl
     {
         if (_selected == null) return;
         var id = _selected.Value;
+        // 先把编辑器里还没落盘的改动存下来：先拉远端，本机有修改再上传，不能漏掉刚打的字。
+        _richEditor.Flush();
+        _syncClickHold = true;
         StartSyncSpin();
         var started = DateTime.UtcNow;
         try
@@ -351,8 +351,23 @@ public sealed class ShellView : UserControl
             var remaining = TimeSpan.FromMilliseconds(700) - (DateTime.UtcNow - started);
             if (remaining > TimeSpan.Zero)
                 await Task.Delay(remaining);
-            OnUi(StopSyncSpin);
+            OnUi(() =>
+            {
+                _syncClickHold = false;
+                UpdateNoteSyncSpin();
+            });
         }
+    }
+
+    private bool _syncClickHold;
+
+    /// <summary>图标转圈跟随「这一篇是否正在同步」：点开笔记时的拉取、手动点击都会转。</summary>
+    private void UpdateNoteSyncSpin()
+    {
+        var active = _syncClickHold
+                     || (_selected != null && _session.Sync.IsNoteSyncActive(_selected.Value));
+        if (active) StartSyncSpin();
+        else StopSyncSpin();
     }
 
     private void StartSyncSpin()
@@ -413,6 +428,8 @@ public sealed class ShellView : UserControl
             _ => "等待同步",
         };
         _syncSlot.Content = BuildSyncControl(status, shortText);
+        UpdateNoteSyncSpin();
+        UpdateTaskSyncSpin();
         // 同步完成后 LastSyncDate 会更新，编辑器状态文案的「上次同步」时间也要跟着刷新。
         if (ReferenceEquals(_right.Content, _editorCached)) UpdateMetaText();
         var note = Current();
@@ -426,7 +443,7 @@ public sealed class ShellView : UserControl
         var note = Current();
         if (note == null) return;
         var lastSync = _session.Sync.LastSyncDate;
-        _meta.Text = note.IsTrashed ? "回收站中的笔记"
+        _meta.Text = note.IsTrashed ? "回收站中的笔记 · 删除 30 天后将自动彻底删除"
             : lastSync == null ? "尚未同步"
             : "上次同步 " + lastSync.Value.ToString("MM-dd HH:mm");
         _meta.Foreground = Palette.TextTertiary;
@@ -456,24 +473,31 @@ public sealed class ShellView : UserControl
             VerticalContentAlignment = VerticalAlignment.Center,
             Cursor = new Cursor(StandardCursorType.Hand),
         };
-        button.Click += (_, _) => _ = _session.Sync.QuickSyncAsync();
+        // 笔记页的「一键同步」只同步笔记（含笔记本），不碰任务（对齐 Mac）。
+        button.Click += (_, _) => _ = _session.Sync.SyncNotesOnlyAsync();
         return button;
     }
 
     private void Select(Guid id)
     {
         _richEditor.Flush();
+        var leavingNote = _selected != null && _selected != id;
+        var leavingTodos = _showingTodos;
         _selected = id;
-        if (id == Note.QuickSyncNoteId)
+        // 离开上一篇：立刻上传改过的笔记；离开任务页：把没传的任务传上去（对齐 Mac）。
+        if (_session.IsSignedIn)
         {
-            _quickUploadedAt = _session.Notes.Find(id)?.UpdatedAt ?? DateTime.MinValue;
-            // 打开「快同步」时先拉取这一篇的云端最新版。
-            if (_session.IsSignedIn) _ = _session.Sync.SyncSingleNoteAsync(id);
+            if (leavingNote) _ = _session.Sync.FlushNotesAsync();
+            if (leavingTodos) _ = _session.Sync.FlushTodosAsync();
         }
+        // 点开任意一篇笔记（含快同步）：只拉这一篇的云端最新版，插队优先于定时轮（对齐 Mac）。
+        if (_session.IsSignedIn) _ = _session.Sync.SyncSingleNoteAsync(id);
         _showingTodos = false;
         if (_pane is Pane.Todos or Pane.Settings) _pane = Pane.Notes;
         LoadEditor();
         Refresh();
+        // 点开笔记时的拉取已入队 / 在跑：图标随之转圈，拉完自动停。
+        UpdateNoteSyncSpin();
     }
 
     private void LoadEditor()
@@ -518,7 +542,7 @@ public sealed class ShellView : UserControl
         _restoreButton.IsVisible = note.IsTrashed;
         _purgeButton.IsVisible = note.IsTrashed;
         _banner.Text = note.IsTrashed
-            ? "回收站里的笔记不能编辑。"
+            ? ""
             : note.IsQuickSync
                 ? "快同步：点「立即同步本篇」只把这一篇推到网盘，不阻塞其它笔记。"
                 : "正文自动保存到本机并同步到网盘。工具条支持标题、加粗、颜色、列表、链接、图片和表格。";
@@ -636,8 +660,19 @@ public sealed class ShellView : UserControl
         // 切换日期 / 状态等操作后列表会跳回顶部。这里先记下旧偏移，重建后再还原。
         var savedScrollY = entered || _todoScroll == null ? 0 : _todoScroll.Offset.Y;
         _showingTodos = true;
+        // 从笔记进入任务页 = 离开这篇笔记：立刻上传改过的笔记（对齐 Mac）。
+        if (entered && _selected != null)
+        {
+            _richEditor.Flush();
+            if (_session.IsSignedIn) _ = _session.Sync.FlushNotesAsync();
+        }
         _selected = null;
-        if (entered) _ = _session.Sync.QuickSyncAsync();
+        // 点开任务页：只拉任务，插队优先于定时轮（对齐 Mac）。
+        if (entered && _session.IsSignedIn)
+        {
+            _ = _session.Sync.SyncTodosOnlyAsync();
+            UpdateTaskSyncSpin();
+        }
 
         var header = new Grid
         {
@@ -913,8 +948,9 @@ public sealed class ShellView : UserControl
         ringButton.Click += (_, _) => _session.Todos.SetStatus(todo.Id,
             readOnly ? TodoStatus.todo : TodoStatus.done);
 
+        // 任务名称用纯黑，字重保持 Medium。
         var title = Ui.Text(todo.Title, 13, FontWeight.Medium,
-            todo.IsOverdue ? Palette.Red : Palette.TextPrimary);
+            todo.IsOverdue ? Palette.Red : Brushes.Black);
         title.TextWrapping = TextWrapping.Wrap;
         title.MaxLines = 2;
         title.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -2090,14 +2126,15 @@ public sealed class ShellView : UserControl
                 || note.VisibleBody.Contains(query, StringComparison.CurrentCultureIgnoreCase)
                 || note.Tags.Any(tag => tag.Contains(query, StringComparison.CurrentCultureIgnoreCase)));
         }
+        // 回收站按删除时间排序，不是更新时间；其余列表置顶笔记永远在最上面，同组内再按所选方式排序。
+        if (_pane == Pane.Trash)
+            return source.OrderByDescending(note => note.DeletedAt ?? note.UpdatedAt);
+        var pinnedFirst = source.OrderByDescending(note => note.Pinned);
         return _sort switch
         {
-            SortMode.Created => source.OrderByDescending(note => note.CreatedAt),
-            SortMode.Title => source.OrderBy(note => note.Title, StringComparer.CurrentCulture),
-            // W-42：回收站按删除时间排序，不是更新时间
-            _ => _pane == Pane.Trash
-                ? source.OrderByDescending(note => note.DeletedAt ?? note.UpdatedAt)
-                : source.OrderByDescending(note => note.UpdatedAt),
+            SortMode.Created => pinnedFirst.ThenByDescending(note => note.CreatedAt),
+            SortMode.Title => pinnedFirst.ThenBy(note => note.Title, StringComparer.CurrentCulture),
+            _ => pinnedFirst.ThenByDescending(note => note.UpdatedAt),
         };
     }
 

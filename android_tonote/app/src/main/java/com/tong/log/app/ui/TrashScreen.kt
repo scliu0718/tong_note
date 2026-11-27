@@ -60,7 +60,7 @@ fun TrashScreen(onBack: () -> Unit) {
                         Column(Modifier.weight(1f)) {
                             Text(note.title.ifBlank { "无标题" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(3.dp))
-                            Text(displayTime(note.deletedAt), fontSize = 11.sp, color = TextQuaternary)
+                            Text(displayTime(note.deletedAt) + " · 删除 30 天后将自动彻底删除", fontSize = 11.sp, color = TextQuaternary)
                         }
                         TextButton(onClick = { NoteStore.restore(note.id) }) {
                             Text("恢复", color = Green, fontSize = 12.sp)

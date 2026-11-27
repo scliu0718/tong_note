@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Tonote.Core;
@@ -26,14 +26,49 @@ public sealed class SyncStatus
         => new() { Kind = SyncStatusKind.Failed, Message = message };
 }
 
+public enum SyncScopeKind
+{
+    /// <summary>笔记 + 笔记本 + 任务。</summary>
+    All,
+    /// <summary>全部笔记 + 笔记本。</summary>
+    Notes,
+    /// <summary>单篇（含「快同步」）。</summary>
+    Note,
+    /// <summary>全部任务。</summary>
+    Todos,
+    /// <summary>只上传本机改过的笔记（及脏的笔记本），不拉别端内容。</summary>
+    DirtyNotes,
+    /// <summary>只上传本机改过的任务。</summary>
+    DirtyTodos,
+    /// <summary>只上传这一条任务。</summary>
+    Todo,
+}
+
+/// <summary>一次同步的范围（对应 Mac 的 SyncScope）。</summary>
+public readonly record struct SyncScope(SyncScopeKind Kind, Guid? Id = null)
+{
+    public static SyncScope All => new(SyncScopeKind.All);
+    public static SyncScope Notes => new(SyncScopeKind.Notes);
+    public static SyncScope Todos => new(SyncScopeKind.Todos);
+    public static SyncScope DirtyNotes => new(SyncScopeKind.DirtyNotes);
+    public static SyncScope DirtyTodos => new(SyncScopeKind.DirtyTodos);
+    public static SyncScope Note(Guid id) => new(SyncScopeKind.Note, id);
+    public static SyncScope Todo(Guid id) => new(SyncScopeKind.Todo, id);
+}
+
 /// <summary>
 /// 按篇同步：每篇笔记 / 每条任务一个云端文件。启动、保存后、手动触发都会跑同一轮。
-/// 与 Mac 版 SyncEngine 逐条对齐：1.5s 防抖、重入标记、三次发布重试、冲突副本、旧清单迁移。
-/// 失败只留到下一轮，不因此退出登录。
+/// 与 Mac 版 SyncEngine 逐条对齐：笔记 15 秒 / 快同步 5 秒节流上传、离开立刻传、任务保存即传、
+/// 请求队列插队、三次发布重试、冲突副本、旧清单迁移。失败只留到下一轮，不因此退出登录。
 /// </summary>
 public sealed class SyncEngine : IDisposable
 {
-    private const int DebounceMilliseconds = 1500;
+    /// <summary>普通笔记改完后最多等这么久上传一次（节流，不是防抖）。</summary>
+    public static readonly TimeSpan NotesUploadInterval = TimeSpan.FromSeconds(15);
+
+    /// <summary>「快同步」更勤：编辑中每 5 秒上传一次（仅当有改动）。</summary>
+    public static readonly TimeSpan QuickNoteUploadInterval = TimeSpan.FromSeconds(5);
+
     private const int PublishRetries = 3;
 
     private readonly NoteStore _notes;
@@ -43,7 +78,8 @@ public sealed class SyncEngine : IDisposable
     private readonly DeviceRegistry _registry;
     private readonly string _root;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private CancellationTokenSource? _debounce;
+    private CancellationTokenSource? _notesUploadTimer;
+    private DateTime _notesUploadDeadline = DateTime.MaxValue;
     private bool _needsAnotherRound;
     private bool _disposed;
 
@@ -78,10 +114,12 @@ public sealed class SyncEngine : IDisposable
 
     public DeviceRegistry Registry => _registry;
 
-    /// <summary>订阅本地数据变更，用户改一点就防抖同步。</summary>
+    /// <summary>订阅本地数据变更：笔记按节流上传，任务保存即传，笔记本跟随笔记上传。</summary>
     public void Start()
     {
-        SyncCursorStore.LocalDataChanged += OnLocalDataChanged;
+        _notes.LocalChanged += OnNoteLocalChanged;
+        _todos.LocalChanged += OnTodoLocalChanged;
+        SyncCursorStore.LocalDataChanged += OnNotebookLocalChanged;
         DeviceEvents.Kicked += OnDeviceKicked;
     }
 
@@ -89,10 +127,17 @@ public sealed class SyncEngine : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        SyncCursorStore.LocalDataChanged -= OnLocalDataChanged;
+        _notes.LocalChanged -= OnNoteLocalChanged;
+        _todos.LocalChanged -= OnTodoLocalChanged;
+        SyncCursorStore.LocalDataChanged -= OnNotebookLocalChanged;
         DeviceEvents.Kicked -= OnDeviceKicked;
-        _debounce?.Cancel();
-        _debounce?.Dispose();
+        lock (_pendingLock)
+        {
+            _notesUploadTimer?.Cancel();
+            _notesUploadTimer?.Dispose();
+            _notesUploadTimer = null;
+        }
+
         _gate.Dispose();
     }
 
@@ -102,7 +147,19 @@ public sealed class SyncEngine : IDisposable
         Kicked?.Invoke();
     }
 
-    private void OnLocalDataChanged() => Schedule();
+    private bool SignedIn => !_disposed && _client.CurrentToken != null;
+
+    private void OnNoteLocalChanged(Guid id)
+        => ScheduleNotesUpload(quick: id == Note.QuickSyncNoteId);
+
+    private void OnNotebookLocalChanged() => ScheduleNotesUpload(quick: false);
+
+    /// <summary>任务保存即传：只上传这一条，不拉别端内容。</summary>
+    private void OnTodoLocalChanged(Guid id)
+    {
+        if (!SignedIn) return;
+        _ = SyncRoundAsync(SyncScope.Todo(id), CancellationToken.None);
+    }
 
     private void SetStatus(SyncStatus status)
     {
@@ -147,116 +204,305 @@ public sealed class SyncEngine : IDisposable
         public DateTime? Date { get; set; }
     }
 
-    /// <summary>保存后一两秒再同步。连续保存只跑最后一轮。</summary>
-    public void Schedule()
+    /// <summary>
+    /// 笔记 / 快同步：改完后最多等 15 秒（快同步 5 秒）上传一次——节流，不是防抖，连续输入也不会一直推迟。
+    /// 已有计时时，只在新的截止时间更早时才改期（先改了普通笔记、又去改快同步，要按 5 秒来）。
+    /// 只上传改过的笔记，不拉别端内容；离开笔记时用 <see cref="FlushNotesAsync"/> 立刻传。
+    /// </summary>
+    public void ScheduleNotesUpload(bool quick)
     {
-        if (_disposed) return;
-        _debounce?.Cancel();
-        _debounce?.Dispose();
-        _debounce = new CancellationTokenSource();
-        var token = _debounce.Token;
+        if (!SignedIn) return;
+        var wait = quick ? QuickNoteUploadInterval : NotesUploadInterval;
+        var deadline = DateTime.UtcNow + wait;
+        CancellationTokenSource timer;
+        lock (_pendingLock)
+        {
+            if (_notesUploadTimer != null && _notesUploadDeadline <= deadline) return;
+            _notesUploadTimer?.Cancel();
+            _notesUploadTimer?.Dispose();
+            timer = _notesUploadTimer = new CancellationTokenSource();
+            _notesUploadDeadline = deadline;
+        }
+
+        var token = timer.Token;
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(DebounceMilliseconds, token).ConfigureAwait(false);
-                if (!token.IsCancellationRequested)
-                    await QuickSyncAsync(token).ConfigureAwait(false);
+                await Task.Delay(wait, token).ConfigureAwait(false);
+                lock (_pendingLock)
+                {
+                    if (!ReferenceEquals(_notesUploadTimer, timer)) return;
+                    _notesUploadTimer = null;
+                    _notesUploadDeadline = DateTime.MaxValue;
+                }
+
+                await SyncRoundAsync(SyncScope.DirtyNotes, CancellationToken.None).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // 被新的保存打断，正常
+                // 被提前 flush 或改期，正常
             }
-        }, token);
+        });
     }
 
-    public Task QuickSyncAsync(CancellationToken cancellationToken = default)
-        => SyncRoundAsync(null, cancellationToken);
-
-    public Task SyncSingleNoteAsync(Guid id, CancellationToken cancellationToken = default)
-        => SyncRoundAsync(id, cancellationToken);
-
-    private async Task SyncRoundAsync(Guid? onlyNoteId, CancellationToken cancellationToken)
+    /// <summary>离开笔记 / 退到后台 / 关窗口时：取消计时，立刻上传改过的笔记。</summary>
+    public Task FlushNotesAsync()
     {
-        if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        lock (_pendingLock)
         {
-            // 单篇请求不能丢：忙时记下来，当前轮结束后补跑（否则点开「快同步」拉不到云端内容）。
-            if (onlyNoteId != null) _pendingSingle = onlyNoteId;
-            else _needsAnotherRound = true;
-            return;
+            _notesUploadTimer?.Cancel();
+            _notesUploadTimer?.Dispose();
+            _notesUploadTimer = null;
+            _notesUploadDeadline = DateTime.MaxValue;
         }
 
+        return SignedIn ? SyncRoundAsync(SyncScope.DirtyNotes, CancellationToken.None) : Task.CompletedTask;
+    }
+
+    /// <summary>离开任务页 / 退到后台 / 关窗口时：上传本机改过的任务。</summary>
+    public Task FlushTodosAsync()
+        => SignedIn ? SyncRoundAsync(SyncScope.DirtyTodos, CancellationToken.None) : Task.CompletedTask;
+
+    /// <summary>全量：笔记 + 笔记本 + 任务（启动 / 45 秒轮询 / 回前台 / 设置里的「立即同步」）。</summary>
+    public Task QuickSyncAsync(CancellationToken cancellationToken = default)
+        => SyncRoundAsync(SyncScope.All, cancellationToken);
+
+    /// <summary>只同步这一篇（点开笔记先拉远端 / 快同步的「同步」）：拉远端、有改动再上传。</summary>
+    public Task SyncSingleNoteAsync(Guid id, CancellationToken cancellationToken = default)
+        => SyncRoundAsync(SyncScope.Note(id), cancellationToken);
+
+    /// <summary>笔记页的「一键同步」：只同步笔记和笔记本，不碰任务。</summary>
+    public Task SyncNotesOnlyAsync(CancellationToken cancellationToken = default)
+        => SyncRoundAsync(SyncScope.Notes, cancellationToken);
+
+    /// <summary>任务页（点开任务页 / 任务页的「同步」）：只同步任务，不碰笔记。</summary>
+    public Task SyncTodosOnlyAsync(CancellationToken cancellationToken = default)
+        => SyncRoundAsync(SyncScope.Todos, cancellationToken);
+
+    // MARK: - 请求队列（与 Mac SyncEngine.request / enqueue 一致）
+
+    private readonly object _pendingLock = new();
+    private readonly List<SyncScope> _pending = [];
+
+    /// <summary>
+    /// 空闲时立刻跑；正在同步时入队：非全量请求插到队首（比定时轮先跑），
+    /// 队列里已有全量时其余范围都被它覆盖，新来全量会清掉其余范围，同范围去重。
+    /// </summary>
+    private void Enqueue(SyncScope scope)
+    {
+        lock (_pendingLock)
+        {
+            if (_pending.Contains(SyncScope.All)) return;
+            if (scope.Kind == SyncScopeKind.All)
+            {
+                _pending.Clear();
+                _pending.Add(scope);
+                return;
+            }
+
+            _pending.Remove(scope);
+            _pending.Insert(0, scope);
+        }
+    }
+
+    private bool TryDequeue(out SyncScope scope)
+    {
+        lock (_pendingLock)
+        {
+            if (_pending.Count == 0)
+            {
+                scope = default;
+                return false;
+            }
+
+            scope = _pending[0];
+            _pending.RemoveAt(0);
+            return true;
+        }
+    }
+
+    private bool HasPending
+    {
+        get { lock (_pendingLock) return _pending.Count > 0; }
+    }
+
+    private async Task SyncRoundAsync(SyncScope scope, CancellationToken cancellationToken)
+    {
+        // 长时间开着时回收站也要到期清理；墓碑标脏后就在本轮或下一轮上传。
+        _notes.PurgeExpiredTrash();
+        Enqueue(scope);
+        while (true)
+        {
+            // 已有人在同步：请求留在队列里，由正在跑的那一轮结束后按顺序处理。
+            if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return;
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested && TryDequeue(out var next))
+                    await RunScopeAsync(next, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            // 释放闸门的瞬间若又有新请求入队，要接着处理，否则它会一直躺在队列里。
+            if (cancellationToken.IsCancellationRequested || !HasPending) return;
+        }
+    }
+
+    private SyncScope? _running;
+
+    /// <summary>这一篇正在被单篇同步，或已在队列里等着（界面据此让「同步本篇」图标转圈）。</summary>
+    public bool IsNoteSyncActive(Guid id)
+    {
+        var target = SyncScope.Note(id);
+        lock (_pendingLock)
+            return (Status.Kind == SyncStatusKind.Syncing && _running == target) || _pending.Contains(target);
+    }
+
+    /// <summary>任务正在被单独同步，或已在队列里等着（界面据此让任务页同步图标转圈）。</summary>
+    public bool IsTodosSyncActive
+    {
+        get
+        {
+            lock (_pendingLock)
+                return (Status.Kind == SyncStatusKind.Syncing && _running == SyncScope.Todos)
+                       || _pending.Contains(SyncScope.Todos);
+        }
+    }
+
+    private bool HasDirtyNotes()
+        => _notes.Notes.ToList().Any(note => _notes.Cursor(note.Id).Dirty) || _notebooks.IsDirty;
+
+    private bool HasDirtyTodos()
+        => _todos.Todos.ToList().Any(todo => _todos.Cursor(todo.Id).Dirty);
+
+    private async Task RunScopeAsync(SyncScope scope, CancellationToken cancellationToken)
+    {
+        // 只传「改过的」且当前没有可传内容时，不动状态、不发请求（与 Mac 一致）。
+        switch (scope.Kind)
+        {
+            case SyncScopeKind.DirtyNotes when !HasDirtyNotes():
+            case SyncScopeKind.DirtyTodos when !HasDirtyTodos():
+                return;
+            case SyncScopeKind.Todo:
+                var todo = scope.Id == null ? null : _todos.Find(scope.Id.Value);
+                if (todo == null || !_todos.Cursor(todo.Id).Dirty) return;
+                break;
+        }
+
+        lock (_pendingLock) _running = scope;
         try
         {
-            var round = 0;
-            while (true)
-            {
-                round++;
-                if (round > 4) break; // 防止异常情况下无限重入
-                var kicked = false;
-                SetStatus(SyncStatus.Syncing());
-                try
-                {
-                    var token = await _client.ValidTokenAsync(cancellationToken).ConfigureAwait(false);
-                    await _registry.EnsureNotKickedAsync(token.AccessToken, cancellationToken)
-                        .ConfigureAwait(false);
-                    var noteCount = await SyncNotesAsync(token.AccessToken, onlyNoteId, cancellationToken)
-                        .ConfigureAwait(false);
-                    var todoCount = 0;
-                    if (onlyNoteId == null)
-                    {
-                        await SyncNotebooksAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
-                        todoCount = await SyncTodosAsync(token.AccessToken, cancellationToken)
-                            .ConfigureAwait(false);
-                    }
-
-                    var now = DateTime.Now;
-                    LastSyncDate = now;
-                    SaveLastSync(now);
-                    SetStatus(SyncStatus.Succeeded(
-                        onlyNoteId == null
-                            ? noteCount == 0 && todoCount == 0
-                                ? "笔记 0 篇 · 任务 0 条（无变更，已与网盘一致）"
-                                : $"笔记 {noteCount} 篇 · 任务 {todoCount} 条变更"
-                            : "已同步本篇", now));
-                }
-                catch (DeviceKickedException error)
-                {
-                    kicked = true;
-                    DeviceEvents.RaiseKicked();
-                    SetStatus(SyncStatus.Failed(error.Message));
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    SetStatus(SyncStatus.Idle());
-                    break;
-                }
-                catch (Exception error)
-                {
-                    SetStatus(SyncStatus.Failed(error.Message));
-                    // 代理 502 / 连接重置 / 请求超时都是瞬态，自动再跑一轮；
-                    // while 循环本身有 4 轮上限，不会形成无限重试。
-                    if (round < 4 && IsTransient(error))
-                        _needsAnotherRound = true;
-                }
-
-                var again = _needsAnotherRound && !kicked;
-                _needsAnotherRound = false;
-                if (!again) break;
-            }
+            await RunScopeCoreAsync(scope, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            _gate.Release();
+            lock (_pendingLock) _running = null;
         }
-
-        var pending = _pendingSingle;
-        _pendingSingle = null;
-        if (pending != null && !cancellationToken.IsCancellationRequested)
-            await SyncRoundAsync(pending, cancellationToken).ConfigureAwait(false);
     }
 
-    private Guid? _pendingSingle;
+    private async Task RunScopeCoreAsync(SyncScope scope, CancellationToken cancellationToken)
+    {
+        var round = 0;
+        var wasKicked = false;
+        while (true)
+        {
+            round++;
+            if (round > 4) break; // 防止异常情况下无限重入
+            var kicked = false;
+            SetStatus(SyncStatus.Syncing());
+            try
+            {
+                var token = await _client.ValidTokenAsync(cancellationToken).ConfigureAwait(false);
+                await _registry.EnsureNotKickedAsync(token.AccessToken, cancellationToken)
+                    .ConfigureAwait(false);
+                var noteCount = 0;
+                var todoCount = 0;
+                string message;
+                switch (scope.Kind)
+                {
+                    case SyncScopeKind.Todos:
+                        todoCount = await SyncTodosAsync(token.AccessToken, cancellationToken)
+                            .ConfigureAwait(false);
+                        message = todoCount == 0 ? "任务无变更，已与网盘一致" : $"任务 {todoCount} 条变更";
+                        break;
+                    case SyncScopeKind.Note:
+                        await SyncNotesAsync(token.AccessToken, scope.Id, cancellationToken)
+                            .ConfigureAwait(false);
+                        message = "已同步本篇";
+                        break;
+                    case SyncScopeKind.DirtyNotes:
+                        await SyncNotesAsync(token.AccessToken, null, cancellationToken, dirtyOnly: true)
+                            .ConfigureAwait(false);
+                        if (_notebooks.IsDirty)
+                            await SyncNotebooksAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
+                        message = "已上传笔记";
+                        break;
+                    case SyncScopeKind.DirtyTodos:
+                        await SyncTodosAsync(token.AccessToken, cancellationToken, dirtyOnly: true)
+                            .ConfigureAwait(false);
+                        message = "已上传任务";
+                        break;
+                    case SyncScopeKind.Todo:
+                        await SyncTodosAsync(token.AccessToken, cancellationToken, onlyTodoId: scope.Id)
+                            .ConfigureAwait(false);
+                        message = "已上传任务";
+                        break;
+                    case SyncScopeKind.Notes:
+                        noteCount = await SyncNotesAsync(token.AccessToken, null, cancellationToken)
+                            .ConfigureAwait(false);
+                        await SyncNotebooksAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
+                        message = noteCount == 0 ? "笔记无变更，已与网盘一致" : $"笔记 {noteCount} 篇变更";
+                        break;
+                    default:
+                        noteCount = await SyncNotesAsync(token.AccessToken, null, cancellationToken)
+                            .ConfigureAwait(false);
+                        await SyncNotebooksAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);
+                        todoCount = await SyncTodosAsync(token.AccessToken, cancellationToken)
+                            .ConfigureAwait(false);
+                        message = noteCount == 0 && todoCount == 0
+                            ? "笔记 0 篇 · 任务 0 条（无变更，已与网盘一致）"
+                            : $"笔记 {noteCount} 篇 · 任务 {todoCount} 条变更";
+                        break;
+                }
+
+                var now = DateTime.Now;
+                LastSyncDate = now;
+                SaveLastSync(now);
+                SetStatus(SyncStatus.Succeeded(message, now));
+            }
+            catch (DeviceKickedException error)
+            {
+                kicked = true;
+                wasKicked = true;
+                DeviceEvents.RaiseKicked();
+                SetStatus(SyncStatus.Failed(error.Message));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                SetStatus(SyncStatus.Idle());
+                break;
+            }
+            catch (Exception error)
+            {
+                SetStatus(SyncStatus.Failed(error.Message));
+                // 代理 502 / 连接重置 / 请求超时都是瞬态，自动再跑一轮；
+                // while 循环本身有 4 轮上限，不会形成无限重试。
+                if (round < 4 && IsTransient(error))
+                    _needsAnotherRound = true;
+            }
+
+            var again = _needsAnotherRound && !kicked;
+            _needsAnotherRound = false;
+            if (!again) break;
+        }
+
+        // 被踢下线：队列里剩下的请求不再继续跑。
+        if (wasKicked)
+            lock (_pendingLock) _pending.Clear();
+    }
 
     /// <summary>网络类瞬态故障才自动重试；数据/契约错误立即暴露，不掩盖问题。按异常类型判断，不靠文案子串。</summary>
     private static bool IsTransient(Exception error)
@@ -266,15 +512,24 @@ public sealed class SyncEngine : IDisposable
     // MARK: - 笔记
 
     private async Task<int> SyncNotesAsync(string accessToken, Guid? onlyNoteId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool dirtyOnly = false)
     {
-        await MigrateNotesIfNeededAsync(accessToken, cancellationToken).ConfigureAwait(false);
+        if (!dirtyOnly)
+            await MigrateNotesIfNeededAsync(accessToken, cancellationToken).ConfigureAwait(false);
         var remoteFiles = await ListJsonAsync(NotesDirectory, accessToken, cancellationToken)
             .ConfigureAwait(false);
         var localIds = _notes.Notes
             .Where(note => !note.IsQuickSync || onlyNoteId == note.Id)
             .Select(note => note.Id).ToHashSet();
         var remoteIds = remoteFiles.Keys.ToHashSet();
+        if (dirtyOnly)
+        {
+            // 只处理本机改过、还没上传的笔记（含「快同步」）；别端变化留给打开笔记时的拉取和定时全量轮。
+            remoteIds = [];
+            localIds = _notes.Notes.ToList()
+                .Where(note => _notes.Cursor(note.Id).Dirty)
+                .Select(note => note.Id).ToHashSet();
+        }
         if (onlyNoteId != null)
         {
             remoteIds = remoteIds.Contains(onlyNoteId.Value) ? [onlyNoteId.Value] : [];
@@ -599,12 +854,22 @@ public sealed class SyncEngine : IDisposable
 
     // MARK: - 任务
 
-    private async Task<int> SyncTodosAsync(string accessToken, CancellationToken cancellationToken)
+    private async Task<int> SyncTodosAsync(string accessToken, CancellationToken cancellationToken,
+        bool dirtyOnly = false, Guid? onlyTodoId = null)
     {
-        await MigrateTodosIfNeededAsync(accessToken, cancellationToken).ConfigureAwait(false);
+        if (!dirtyOnly && onlyTodoId == null)
+            await MigrateTodosIfNeededAsync(accessToken, cancellationToken).ConfigureAwait(false);
         var remoteFiles = await ListJsonAsync(TodosDirectory, accessToken, cancellationToken)
             .ConfigureAwait(false);
         var ids = remoteFiles.Keys.Union(_todos.Todos.Select(todo => todo.Id)).ToList();
+        if (dirtyOnly)
+        {
+            // 只处理本机改过、还没上传的任务；别端的变化留给打开任务页时的拉取和定时全量轮。
+            ids = ids.Where(id => _todos.Find(id) != null && _todos.Cursor(id).Dirty).ToList();
+        }
+
+        if (onlyTodoId != null)
+            ids = ids.Contains(onlyTodoId.Value) ? [onlyTodoId.Value] : [];
         var changed = 0;
         Exception? firstError = null;
         foreach (var id in ids)

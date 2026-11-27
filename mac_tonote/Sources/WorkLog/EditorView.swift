@@ -295,7 +295,7 @@ struct EditorView: View {
                     HStack(spacing: 5) {
                         Circle().fill(showingTrash ? Theme.textQuaternary : Theme.accent)
                             .frame(width: 6, height: 6)
-                        Text(showingTrash ? "回收站中的笔记" : "已保存到本地")
+                        Text(showingTrash ? "回收站中的笔记 · 删除 30 天后将自动彻底删除" : "已保存到本地")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(showingTrash ? Theme.textTertiary : Theme.accent)
                     }

@@ -313,8 +313,13 @@ public static class RichTextHtmlCodec
                 segments[^1].Add(node);
         }
 
+        // 只含换行符的段落（如历史上写出的 <p>\n</p>）等同空段落，不能把换行当内容保留下来。
+        // 只认 \r \n：空格 / &nbsp; 是用户有意留下的占位行，仍按原样保留。
         return segments.Select(segment => new RichTextBlock(RichTextBlockStyle.paragraph,
-            InlineRuns(segment, new InlineContext()))).ToList();
+            InlineRuns(segment.All(node => node is HtmlNode.TextNode text
+                                           && text.Text.All(ch => ch is '\n' or '\r'))
+                ? []
+                : segment, new InlineContext()))).ToList();
     }
 
     private sealed class InlineContext

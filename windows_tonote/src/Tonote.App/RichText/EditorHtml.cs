@@ -127,9 +127,25 @@ public static class EditorHtml
     text-underline-offset: 2px; text-decoration-thickness: 1px;
   }
   hr { border: none; border-top: 1px solid #EFEFF2; margin: 18px 0; }
+  #tnLoading {
+    position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    background: rgba(255,255,255,0.94); box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    font-size: 12px; color: #8A8F98; z-index: 10; pointer-events: none;
+  }
+  #tnLoading.on { display: flex; }
+  #tnLoading i {
+    width: 6px; height: 6px; border-radius: 50%; background: #069F21;
+    animation: tnDot 1.2s infinite ease-in-out both;
+  }
+  #tnLoading i:nth-child(2) { animation-delay: 0.2s; }
+  #tnLoading i:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes tnDot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
 </style>
 </head>
 <body>
+<div id="tnLoading"><i></i><i></i><i></i></div>
 <div id="editor" contenteditable="true" spellcheck="false"></div>
 <script>
 (function () {
@@ -138,6 +154,9 @@ public static class EditorHtml
   // W-09：加载基线。只有内容真的变了才 post changed，
   // 否则打开旧 Markdown 笔记仅失焦 / 切换也会被 C# 升级为 richText 并改写原稿。
   var baseline = '';
+  var loadToken = 0;
+  var loadingBar = document.getElementById('tnLoading');
+  var loadingContent = false;
 
   var MAP = { div: 'p', b: 'strong', i: 'em', strike: 's', del: 's', article: 'p', section: 'p' };
   var UNWRAP = { tbody: 1, thead: 1, tfoot: 1, colgroup: 1 };
@@ -265,7 +284,11 @@ public static class EditorHtml
   function clean() {
     var holder = document.createElement('div');
     for (var i = 0; i < editor.childNodes.length; i++) {
-      var item = convert(editor.childNodes[i]);
+      // 块与块之间的换行（Encode 的块分隔符）是纯空白文本节点，不是内容：
+      // 若包成 <p>\n</p> 写回，每保存一次空段落就翻倍，笔记会越存越大。
+      var raw = editor.childNodes[i];
+      if (raw.nodeType === 3 && !/[^\r\n]/.test(raw.nodeValue)) continue;
+      var item = convert(raw);
       if (!item) continue;
       if (item.nodeType === 1 && BLOCK[item.tagName.toLowerCase()]) {
         holder.appendChild(item);
@@ -283,6 +306,7 @@ public static class EditorHtml
   }
 
   function changed() {
+    if (loadingContent) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(function () {
       var html = clean();
@@ -305,6 +329,7 @@ public static class EditorHtml
   // 点击编辑区获得焦点时通知宿主关闭工具条浮窗（浮窗 NOACTIVATE 后无失焦事件，靠这里补点外部关闭）
   editor.addEventListener('focus', function () { post({ type: 'editorFocus' }); });
   editor.addEventListener('blur', function () {
+    if (loadingContent) return;
     if (timer) clearTimeout(timer);
     var html = clean();
     if (html === baseline) return; // W-09：仅失焦不算编辑，不写盘
@@ -492,11 +517,57 @@ public static class EditorHtml
   }
 
   window.tn = {
-    setContent: function (html) {
-      editor.innerHTML = html || '<p><br></p>';
-      applyCellStyles();
-      baseline = clean(); // W-09：此后仅有真实内容差异才 post changed
-      post({ type: 'loaded', html: baseline });
+    setContent: function (html, readOnly) {
+      var token = ++loadToken;
+      loadingBar.classList.remove('on');
+      if (timer) clearTimeout(timer);
+      var FIRST = 30, BATCH = 60;
+      var tpl = document.createElement('template');
+      tpl.innerHTML = html || '<p><br></p>';
+      var nodes = Array.prototype.slice.call(tpl.content.childNodes);
+      function reveal() {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            if (token === loadToken) editor.style.visibility = 'visible';
+          });
+        });
+      }
+      function finish() {
+        applyCellStyles();
+        baseline = clean(); // W-09：此后仅有真实内容差异才 post changed
+        loadingContent = false;
+        loadingBar.classList.remove('on');
+        editor.contentEditable = readOnly ? 'false' : 'true';
+        reveal();
+        post({ type: 'loaded', html: baseline });
+      }
+      // 短笔记：一次写完。
+      if (nodes.length <= FIRST) {
+        editor.innerHTML = html || '<p><br></p>';
+        finish();
+        return;
+      }
+      // 长笔记：先写开头一部分并立刻显示，其余分批追加；追加期间只读且不触发保存。
+      loadingContent = true;
+      editor.contentEditable = 'false';
+      editor.scrollTop = 0;
+      editor.innerHTML = '';
+      var index = 0;
+      function append(count) {
+        var frag = document.createDocumentFragment();
+        for (var n = 0; n < count && index < nodes.length; n++, index++) frag.appendChild(nodes[index]);
+        editor.appendChild(frag);
+      }
+      append(FIRST);
+      loadingBar.classList.add('on');
+      reveal();
+      post({ type: 'partial' });
+      (function step() {
+        if (token !== loadToken) return;
+        if (index >= nodes.length) { finish(); return; }
+        append(BATCH);
+        setTimeout(step, 0);
+      })();
     },
     getHTML: clean,
     focus: function () { editor.focus(); },

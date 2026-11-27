@@ -51,8 +51,12 @@ object NoteStore {
 
     fun load() {
         _notes.value = AppStorage.readJson(AppStorage.notesFile, emptyList<Note>())
+        // 只有补建了「快同步」笔记才需要落盘；无条件 save() 会在启动时把整个 notes.json 再序列化一遍，
+        // 数据大时峰值内存翻倍（曾因此启动即 OOM 崩溃）。
+        val before = _notes.value.size
         ensureQuickSyncNote()
-        save()
+        if (_notes.value.size != before) save()
+        purgeExpiredTrash()
     }
 
     fun save() {
@@ -162,6 +166,36 @@ object NoteStore {
         save()
         AttachmentStore.removeAttachmentsIfUnreferenced(id)
         markChanged(listOf(id))
+    }
+
+    /** 回收站笔记保留天数，超过后自动彻底删除（三端统一为 30 天）。 */
+    const val TRASH_RETENTION_DAYS = 30
+
+    /**
+     * 彻底删除回收站里超过 [TRASH_RETENTION_DAYS] 天的笔记，返回删除篇数。
+     * 以 deletedAt（进回收站的时间）为准——updatedAt 会被同步合并刷新，会让 30 天一直往后推。
+     * 「快同步」不处理；没有 deletedAt（不在回收站）或时间解析失败的笔记不会被碰。
+     * 走与手动彻底删除相同的墓碑流程（purged + 标脏），所以会同步到其它设备。
+     */
+    @Synchronized
+    fun purgeExpiredTrash(now: java.time.Instant = java.time.Instant.now()): Int {
+        val cutoff = now.minus(java.time.Duration.ofDays(TRASH_RETENTION_DAYS.toLong()))
+        val expired = _notes.value.filter { n ->
+            if (!n.isTrashed || n.purged || n.id == QUICK_SYNC_NOTE_ID) return@filter false
+            val deleted = runCatching { Iso8601.parse(n.deletedAt!!) }.getOrNull() ?: return@filter false
+            !deleted.isAfter(cutoff)
+        }.map { it.id }
+        if (expired.isEmpty()) return 0
+        val ids = expired.toSet()
+        val stamp = Iso8601.now()
+        _notes.value = _notes.value.map {
+            if (it.id in ids) it.copy(purged = true, updatedAt = stamp) else it
+        }
+        save()
+        // 附件只在没有别的笔记引用时才删（与手动彻底删除同一规则）
+        expired.forEach { AttachmentStore.removeAttachmentsIfUnreferenced(it) }
+        markChanged(expired)
+        return expired.size
     }
 
     /**

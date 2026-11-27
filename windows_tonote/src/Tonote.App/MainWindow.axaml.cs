@@ -73,9 +73,16 @@ public partial class MainWindow : Window
         // Avalonia Window 没有 OnActivated/OnDeactivated 覆写，走事件
         Activated += (_, _) =>
         {
+            _session.WindowActive = true;
             if (_session.IsSignedIn) _ = _session.Sync.QuickSyncAsync();
         };
-        Deactivated += (_, _) => FlushForShutdown();
+        // 退到后台：把没传的笔记和任务都立刻传上去（对齐 Mac flushPendingUploads）
+        Deactivated += (_, _) =>
+        {
+            _session.WindowActive = false;
+            FlushForShutdown();
+            FlushPendingUploads();
+        };
         Opened += (_, _) =>
         {
             RestoreGeometry();
@@ -181,6 +188,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>W-22：关窗 / 失活 / 关机前把编辑器内容落盘（最多丢 1 秒输入）。</summary>
+    /// <summary>退到后台 / 关窗口前：笔记和任务里没传的立刻传（未登录时不打扰）。</summary>
+    private Task FlushPendingUploads()
+    {
+        if (!_session.IsSignedIn) return Task.CompletedTask;
+        return Task.WhenAll(_session.Sync.FlushNotesAsync(), _session.Sync.FlushTodosAsync());
+    }
+
     public void FlushForShutdown()
     {
         try { _shell?.Flush(); }
@@ -198,6 +212,9 @@ public partial class MainWindow : Window
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         FlushForShutdown();
+        // 关窗口前最多等 3 秒，让没传的笔记和任务先传上去
+        try { FlushPendingUploads().Wait(TimeSpan.FromSeconds(3)); }
+        catch (Exception error) { DiagnosticLog.Write("app", "关窗上传失败：" + error.Message); }
         SaveGeometry();
         _sessionGuard.Dispose();
         _session.StopPolling();

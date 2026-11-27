@@ -133,9 +133,9 @@ struct MainView: View {
                 flushPendingUploads()
             }
         }
-        // 笔记 / 快同步：改完最多等 30 秒上传一次；离开笔记时立刻传（见下面的 selectedID / showTodos）
+        // 笔记 / 快同步：改完最多等 15 秒上传一次；离开笔记时立刻传（见下面的 selectedID / showTodos）
         .onReceive(NotificationCenter.default.publisher(for: .tonoteLocalDataChanged)) { _ in
-            // 「快同步」15 秒，其它笔记 30 秒
+            // 「快同步」5 秒，其它笔记 15 秒
             sync.scheduleNotesUpload(store: store, todos: todos, quick: selectedID == NoteStore.quickSyncNoteID)
         }
         // 兜底：当前选中的笔记被删除/消失时，选中当前分类第一条，而不是「快同步」
@@ -196,10 +196,15 @@ struct MainView: View {
                 }
             }
         }
-        switch sortMode {
-        case .updated: list.sort { $0.updatedAt > $1.updatedAt }
-        case .created: list.sort { $0.createdAt > $1.createdAt }
-        case .title: list.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
+        // 回收站保持按删除时间；其余列表置顶笔记永远在最上面，同组内再按所选方式排序
+        if showingTrash { return list }
+        list.sort { lhs, rhs in
+            if lhs.pinned != rhs.pinned { return lhs.pinned }
+            switch sortMode {
+            case .updated: return lhs.updatedAt > rhs.updatedAt
+            case .created: return lhs.createdAt > rhs.createdAt
+            case .title: return lhs.title.localizedCompare(rhs.title) == .orderedAscending
+            }
         }
         return list
     }

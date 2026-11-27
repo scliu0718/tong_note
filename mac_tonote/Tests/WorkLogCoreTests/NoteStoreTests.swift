@@ -62,6 +62,27 @@ final class NoteStoreTests: XCTestCase {
         XCTAssertFalse(store.activeNotes.contains { $0.id == note.id })
     }
 
+    // 3b. 回收站超过 30 天自动彻底删除
+    func testPurgeExpiredTrashOnlyOlderThan30Days() {
+        let old = store.addNote()
+        let fresh = store.addNote()
+        let alive = store.addNote()
+        store.moveToTrash(old.id)
+        store.moveToTrash(fresh.id)
+        let now = Date()
+        // 直接改 deletedAt 模拟时间流逝：old 31 天前、fresh 29 天前
+        var notes = store.notes
+        notes[notes.firstIndex { $0.id == old.id }!].deletedAt = now.addingTimeInterval(-31 * 86_400)
+        notes[notes.firstIndex { $0.id == fresh.id }!].deletedAt = now.addingTimeInterval(-29 * 86_400)
+        store.setNotes(notes)
+
+        XCTAssertEqual(store.purgeExpiredTrash(now: now), 1)
+        XCTAssertEqual(store.note(with: old.id)?.purged, true)
+        XCTAssertEqual(store.note(with: fresh.id)?.purged, false)
+        XCTAssertEqual(store.note(with: alive.id)?.purged, false)
+        XCTAssertEqual(store.purgeExpiredTrash(now: now), 0)
+    }
+
     // 4. 恢复
     func testRestore() {
         let note = store.addNote()

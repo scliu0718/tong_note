@@ -49,6 +49,9 @@ public sealed class AppSession
     /// Mac MainView.swift:120-127 的 45 秒轮询：本地改动之外，定期拉取其它设备的变更。
     /// 单轮异常不影响后续轮次，状态由 SyncEngine 的状态机落盘。
     /// </summary>
+    /// <summary>主窗口是否在前台；45 秒轮询只在前台跑。</summary>
+    public volatile bool WindowActive = true;
+
     private void StartPolling()
     {
         _pollCancellation = new CancellationTokenSource();
@@ -60,6 +63,8 @@ public sealed class AppSession
             {
                 while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
                 {
+                    // 与 Mac 一致：窗口在后台时不轮询（退到后台时已把没传的立刻传完）。
+                    if (!WindowActive) continue;
                     try { await Sync.QuickSyncAsync().ConfigureAwait(false); }
                     catch
                     {

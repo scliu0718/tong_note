@@ -186,10 +186,10 @@ public sealed class SyncCursorStore
         Load();
     }
 
-    /// <summary>本机笔记、任务或笔记本被用户改过，供同步引擎做防抖；同步回写不发这则通知。</summary>
+    /// <summary>笔记本被用户改过（没有逐篇游标），供同步引擎安排上传；同步回写不发这则通知。</summary>
     public static event Action? LocalDataChanged;
 
-    /// <summary>笔记本等没有逐篇游标的改动，用这个方法触发防抖同步。</summary>
+    /// <summary>笔记本的改动，用这个方法通知同步引擎。</summary>
     public static void NotifyLocalDataChanged() => LocalDataChanged?.Invoke();
 
     public SyncCursor Cursor(Guid id)
@@ -204,7 +204,7 @@ public sealed class SyncCursorStore
         cursor.Dirty = true;
         _cursors[key] = cursor;
         Save();
-        LocalDataChanged?.Invoke();
+        // 笔记 / 任务的本地改动由各自 Store 的 LocalChanged 事件通知同步引擎，这里只管对照表。
     }
 
     public void Set(SyncCursor cursor, Guid id)

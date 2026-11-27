@@ -1,4 +1,4 @@
-namespace Tonote.Core;
+﻿namespace Tonote.Core;
 
 public sealed class NoteStore
 {
@@ -19,6 +19,7 @@ public sealed class NoteStore
         // 示例数据仍保留在 NoteSamples 中，仅在明确需要时由调用方显式写入。
 
         EnsureQuickSync();
+        PurgeExpiredTrash();
     }
 
     public string RootDirectory { get; }
@@ -28,6 +29,9 @@ public sealed class NoteStore
     public List<Note> Notes { get; private set; } = [];
 
     public event Action? Changed;
+
+    /// <summary>用户在本机改了某篇笔记（已标脏）；同步回写不发这则事件。</summary>
+    public event Action<Guid>? LocalChanged;
 
     public IReadOnlyList<Note> ActiveNotes => Notes
         .Where(note => !note.Purged && !note.IsTrashed)
@@ -208,7 +212,49 @@ public sealed class NoteStore
         Touch(id);
     }
 
+    /// <summary>回收站笔记保留天数，超过后自动彻底删除（三端统一为 30 天）。</summary>
+    public const int TrashRetentionDays = 30;
+
+    /// <summary>
+    /// 彻底删除回收站里超过 <see cref="TrashRetentionDays"/> 天的笔记，返回删除篇数。
+    /// 以 DeletedAt（进回收站的时间）为准——UpdatedAt 会被同步合并刷新，会让 30 天一直往后推。
+    /// 「快同步」笔记不处理；没有 DeletedAt（不在回收站）的笔记不会被碰。
+    /// 走与手动彻底删除相同的墓碑流程（Purged + 标脏），所以会同步到其它设备。
+    /// </summary>
+    public int PurgeExpiredTrash(DateTime? nowUtc = null)
+    {
+        var cutoff = (nowUtc ?? DateTime.UtcNow).AddDays(-TrashRetentionDays);
+        var expired = Notes
+            .Where(note => note.IsTrashed && !note.Purged && !note.IsQuickSync
+                           && ToUtc(note.DeletedAt!.Value) <= cutoff)
+            .Select(note => note.Id)
+            .ToList();
+        if (expired.Count == 0)
+            return 0;
+
+        foreach (var id in expired)
+            MarkPurged(id);
+        Save();
+        TouchMany(expired);
+        return expired.Count;
+    }
+
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
+
     public void PermanentlyDelete(Guid id)
+    {
+        if (Find(id) == null)
+            return;
+        MarkPurged(id);
+        Save();
+        Touch(id);
+    }
+
+    private void MarkPurged(Guid id)
     {
         var note = Find(id);
         if (note == null)
@@ -222,8 +268,6 @@ public sealed class NoteStore
         if (!Notes.Any(other => other.Id != id && !other.Purged
                                 && other.Body.Contains(prefix, StringComparison.Ordinal)))
             Attachments.RemoveAttachments(id);
-        Save();
-        Touch(id);
     }
 
     public void TogglePin(Guid id)
@@ -296,12 +340,15 @@ public sealed class NoteStore
     {
         _cursors.MarkDirty(id);
         Changed?.Invoke();
+        LocalChanged?.Invoke(id);
     }
 
     private void TouchMany(IEnumerable<Guid> ids)
     {
-        foreach (var id in ids) _cursors.MarkDirty(id);
+        var list = ids.ToList();
+        foreach (var id in list) _cursors.MarkDirty(id);
         Changed?.Invoke();
+        foreach (var id in list) LocalChanged?.Invoke(id);
     }
 
     private void Load()

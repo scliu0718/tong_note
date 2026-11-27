@@ -51,6 +51,7 @@ public final class NoteStore: ObservableObject {
             save()
         }
         ensureQuickSyncNote()
+        purgeExpiredTrash()
     }
 
     /// 确保「快同步」虚拟笔记存在（不存在则创建并保存）。
@@ -158,14 +159,46 @@ public final class NoteStore: ObservableObject {
         cursors.markDirty(id)
     }
 
+    /// 回收站笔记保留天数，超过后自动彻底删除（三端统一为 30 天）。
+    public static let trashRetentionDays = 30
+
+    /// 彻底删除回收站里超过 `trashRetentionDays` 天的笔记，返回删除篇数。
+    /// 以 deletedAt（进回收站的时间）为准——updatedAt 会被同步合并刷新，会让 30 天一直往后推。
+    /// 「快同步」不处理；没有 deletedAt（不在回收站）的笔记不会被碰。
+    /// 走与手动彻底删除相同的墓碑流程（purged + 标脏），所以会同步到其它设备。
+    @discardableResult
+    public func purgeExpiredTrash(now: Date = Date()) -> Int {
+        let cutoff = now.addingTimeInterval(-Double(NoteStore.trashRetentionDays) * 86_400)
+        let expired = notes.filter { note in
+            guard note.isTrashed, !note.purged, note.id != NoteStore.quickSyncNoteID,
+                  let deletedAt = note.deletedAt else { return false }
+            return deletedAt <= cutoff
+        }.map(\.id)
+        guard !expired.isEmpty else { return 0 }
+        for id in expired { markPurged(id) }
+        save()
+        for id in expired { cursors.markDirty(id) }
+        return expired.count
+    }
+
     public func permanentlyDelete(_ id: UUID) {
+        guard notes.contains(where: { $0.id == id }) else { return }
+        markPurged(id)
+        save()
+        cursors.markDirty(id)
+    }
+
+    private func markPurged(_ id: UUID) {
         guard let i = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[i].purged = true
         notes[i].updatedAt = Date()
         notes[i].pinned = false
-        attachments.removeAttachments(for: id)
-        save()
-        cursors.markDirty(id)
+        // 两篇笔记共用 attachments/<id>/ 时，删其中一篇不能误删另一篇的图（与 Windows / 同步引擎同一规则）。
+        let prefix = "attachments/\(id.uuidString)/"
+        let stillUsed = notes.contains { other in
+            other.id != id && !other.purged && other.body.contains(prefix)
+        }
+        if !stillUsed { attachments.removeAttachments(for: id) }
     }
 
     public func togglePin(_ id: UUID) {

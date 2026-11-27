@@ -20,6 +20,9 @@ public sealed class TodoStore
 
     public event Action? Changed;
 
+    /// <summary>用户在本机改了某条任务（已标脏）；同步回写不发这则事件。</summary>
+    public event Action<Guid>? LocalChanged;
+
     public int PendingCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.todo);
     public int DoingCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.doing);
     public int DoneCount => Todos.Count(todo => !todo.Purged && todo.Status == TodoStatus.done);
@@ -169,6 +172,7 @@ public sealed class TodoStore
     {
         _cursors.MarkDirty(id);
         Changed?.Invoke();
+        LocalChanged?.Invoke(id);
     }
 
     private void Load()

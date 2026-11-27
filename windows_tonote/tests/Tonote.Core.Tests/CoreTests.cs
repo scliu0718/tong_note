@@ -1,4 +1,4 @@
-using Tonote.Core;
+﻿using Tonote.Core;
 using Xunit;
 
 namespace Tonote.Core.Tests;
@@ -49,6 +49,29 @@ public class CoreTests
         Assert.Contains(store.Notes, note => note.IsQuickSync);
     }
 
+    [Fact]
+    public void PurgesTrashOlderThan30DaysOnly()
+    {
+        var store = new NoteStore(Temp());
+        var old = store.AddNote();
+        var fresh = store.AddNote();
+        var alive = store.AddNote();
+        store.MoveToTrash(old.Id);
+        store.MoveToTrash(fresh.Id);
+        // 回收站时间：old 31 天前，fresh 29 天前；alive 不在回收站
+        store.Find(old.Id)!.DeletedAt = DateTime.UtcNow.AddDays(-31);
+        store.Find(fresh.Id)!.DeletedAt = DateTime.UtcNow.AddDays(-29);
+        // UpdatedAt 很新（模拟同步合并刷新）不能让 old 免于清理
+        store.Find(old.Id)!.UpdatedAt = DateTime.UtcNow;
+
+        var purged = store.PurgeExpiredTrash();
+
+        Assert.Equal(1, purged);
+        Assert.True(store.Find(old.Id)!.Purged);
+        Assert.False(store.Find(fresh.Id)!.Purged);
+        Assert.False(store.Find(alive.Id)!.Purged);
+        Assert.Equal(0, store.PurgeExpiredTrash());
+    }
     [Fact]
     public void SavesIso8601WithoutFractionalSeconds()
     {

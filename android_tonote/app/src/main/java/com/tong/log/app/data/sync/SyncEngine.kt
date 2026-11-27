@@ -125,6 +125,8 @@ object SyncEngine {
     }
 
     private suspend fun dispatch(target: SyncScope, priority: Boolean) {
+        // 长时间开着时回收站也要到期清理；墓碑标脏后就在本轮或下一轮上传。
+        runCatching { NoteStore.purgeExpiredTrash() }
         if (_status.value.isSyncing) {
             enqueue(target, priority)
             return
